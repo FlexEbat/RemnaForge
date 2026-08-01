@@ -18,6 +18,14 @@
 //     point, it silently expands to "". We reproduce that actual runtime
 //     behavior (message ends with "not found in ") rather than the
 //     apparently-intended-but-never-working "$dir" placeholder.
+//  3. LANG[ERROR_OS] (both languages) was hand-edited after generation:
+//     the original text ("Supported only Debian 11/12 and Ubuntu
+//     22.04/24.04") was already stale in the bash source itself - Debian
+//     13 ("trixie") was accepted by check_os()'s codename list but never
+//     mentioned in the message. Since internal/oscheck now checks version
+//     numbers instead of a fixed codename list (Debian >= 11, Ubuntu >=
+//     22.04, no upper bound), the message was updated to say "11+"/"22.04+"
+//     to match reality instead of perpetuating the stale range.
 //
 // Keys are ported module-by-module as we go (see internal/<module>
 //
@@ -190,7 +198,7 @@ var english = map[string]string{
 	"ERROR_INSTALL_GCORE_PLUGIN":              "Failed to install certbot-dns-gcore plugin",
 	"ERROR_INSTALL_PACKAGES":                  "Failed to install required packages",
 	"ERROR_NO_CONFIGS":                        "No config profiles found",
-	"ERROR_OS":                                "Supported only Debian 11/12 and Ubuntu 22.04/24.04",
+	"ERROR_OS":                                "Supported only Debian 11+ and Ubuntu 22.04+",
 	"ERROR_PARSING_CERT":                      "Error parsing certificate expiry date.",
 	"ERROR_PUBLIC_KEY":                        "Failed to get public key.",
 	"ERROR_REGISTER":                          "Registration error",
@@ -588,7 +596,7 @@ var russian = map[string]string{
 	"ERROR_INSTALL_GCORE_PLUGIN":              "Не удалось установить плагин certbot-dns-gcore",
 	"ERROR_INSTALL_PACKAGES":                  "Ошибка: Не удалось установить необходимые пакеты",
 	"ERROR_NO_CONFIGS":                        "Не найдены профили конфигураций",
-	"ERROR_OS":                                "Поддержка только Debian 11/12 и Ubuntu 22.04/24.04",
+	"ERROR_OS":                                "Поддержка только Debian 11+ и Ubuntu 22.04+",
 	"ERROR_PARSING_CERT":                      "Ошибка при разборе даты истечения сертификата.",
 	"ERROR_PUBLIC_KEY":                        "Не удалось получить публичный ключ.",
 	"ERROR_REGISTER":                          "Ошибка регистрации",
