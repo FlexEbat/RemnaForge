@@ -160,28 +160,21 @@ func InstallationNode() error {
 		return err
 	}
 
-	// Lines 90-93: handle_certificates(). Per the original bash, CERT_METHOD
-	// is passed by value (not nameref) into handle_certificates(), so its
-	// return/selection is never actually written back to the caller's
-	// CERT_METHOD variable - meaning the "if CERT_METHOD is empty" branch
-	// right after it always runs for a standalone node install. Preserved
-	// here: certResult is intentionally not used to set certMethod below.
-	certResult, certErr := certs.HandleCertificates([]string{state.selfstealDomain}, "", "")
+	// Lines 90-93: handle_certificates(). NOTE on a bash quirk we're NOT
+	// replicating: the original passes CERT_METHOD by value (not nameref)
+	// into handle_certificates(), so the method it actually picked/used was
+	// never written back to the caller - the "if CERT_METHOD is empty"
+	// fallback right after it (lines 95-102, re-deriving the method from
+	// whether an existing wildcard cert happens to be on disk) always ran
+	// as dead-reckoning instead. That's a bash scoping bug, not an
+	// intentional design choice, so here we just use the real method
+	// HandleCertificates reports it used - more accurate than re-deriving
+	// it from a filesystem side-effect.
+	certResult, certErr := certs.HandleCertificates([]string{state.selfstealDomain}, "", "", nodeDir)
 	if certErr != nil {
 		return certErr
 	}
-	_ = certResult
-
-	// Lines 95-102.
-	var certMethod string
-	if certMethod == "" {
-		if _, statErr := os.Stat("/etc/letsencrypt/live/" + state.selfstealBaseDomain); statErr == nil &&
-			domain.IsWildcardCert(state.selfstealBaseDomain) {
-			certMethod = "1"
-		} else {
-			certMethod = "2"
-		}
-	}
+	certMethod := certResult.Method
 
 	// Lines 104-109.
 	var nodeCertDomain string

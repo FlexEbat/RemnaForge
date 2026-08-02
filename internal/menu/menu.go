@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/addnode"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ipv6"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/nginxnode"
@@ -73,7 +74,7 @@ var mainMenuItems = []menuItem{
 		ipv6.ManageIPv6(ipv6.MenuNav{ReturnToMainMenu: func() {}})
 		return false
 	}},
-	{label: label("MENU_9"), action: stubAction("manage_certificates")},
+	{label: label("MENU_9"), action: func() bool { certs.ManageCertificates(); return false }},
 	{label: label("MENU_10"), newGroup: true, action: stubAction("update_remnawave_reverse")},
 	{label: label("MENU_11"), action: func() bool { stub("remove_script"); return true }},
 }
