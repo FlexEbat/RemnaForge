@@ -33,6 +33,7 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ipv6"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/nginxnode"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelnode"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/selfsteal"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
@@ -158,7 +159,9 @@ func manageInstall() {
 			}
 			switch showWebserverSelect() {
 			case "1":
-				stub("nginx install_panel_node") // src/nginx/install_panel_node.sh (538 lines) - not ported yet
+				if err := panelnode.InstallationPanel(); err != nil {
+					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
+				}
 			case "2":
 				stub("caddy install_panel_node") // Caddy: out of scope
 			case "0":
