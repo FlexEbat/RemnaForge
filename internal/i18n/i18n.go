@@ -12,12 +12,15 @@
 //     string is consumed via `printf`/`echo -e`. Go's fmt does not
 //     reinterpret escape sequences found inside data, so we resolve `\n`
 //     to a real newline once, here, at data-definition time.
-//  2. LANG[CONFIG_NOT_FOUND] / LANG[NGINX_CONF_NOT_FOUND] reference
-//     "$dir" inside a *double*-quoted bash string, so bash expands it at
-//     `source` time - and since $dir is not a global variable at that
-//     point, it silently expands to "". We reproduce that actual runtime
-//     behavior (message ends with "not found in ") rather than the
-//     apparently-intended-but-never-working "$dir" placeholder.
+//  2. LANG[CONFIG_NOT_FOUND] / LANG[NGINX_CONF_NOT_FOUND] originally
+//     referenced "$dir" inside a *double*-quoted bash string, so bash
+//     expanded it at `source` time - and since $dir is not a global
+//     variable at that point, it silently expanded to "" (message ended
+//     with "not found in " and nothing after). BUG FIX (not a 1:1 port):
+//     both strings were changed to a proper Go %s placeholder, with call
+//     sites (internal/managepanel) now passing the real directory in via
+//     fmt.Sprintf - restoring the obviously-intended behavior instead of
+//     perpetuating the broken one.
 //  3. LANG[ERROR_OS] (both languages) was hand-edited after generation:
 //     the original text ("Supported only Debian 11/12 and Ubuntu
 //     22.04/24.04") was already stale in the bash source itself - Debian
@@ -114,7 +117,7 @@ var english = map[string]string{
 	"CHOOSE_TEMPLATE_SOURCE":                  "Select template source:",
 	"CLI_FAILED":                              "Failed to execute Remnawave CLI. Ensure the 'remnawave' container is running.",
 	"CLI_SUCCESS":                             "Remnawave CLI executed successfully!",
-	"CONFIG_NOT_FOUND":                        "Configuration file (nginx.conf or Caddyfile) not found in ",
+	"CONFIG_NOT_FOUND":                        "Configuration file (nginx.conf or Caddyfile) not found in %s",
 	"CONFIG_PROFILE_CREATED":                  "Config profile successfully created",
 	"CONFIRM_CHANGE":                          "Confirm change? (y/n):",
 	"CONFIRM_CONTINUE":                        "Continue?",
@@ -282,7 +285,7 @@ var english = map[string]string{
 	"MENU_TITLE":                              "REMNAWAVE REVERSE-PROXY by eGames",
 	"NGINX_CONF_ERROR":                        "Failed to extract necessary parameters from nginx.conf",
 	"NGINX_CONF_MODIFY_FAILED":                "Failed to modify nginx.conf",
-	"NGINX_CONF_NOT_FOUND":                    "File nginx.conf not found in ",
+	"NGINX_CONF_NOT_FOUND":                    "File nginx.conf not found in %s",
 	"NODE_ADDED_SUCCESS":                      "Node successfully added!",
 	"NODE_ATTEMPT":                            "Attempt %d of %d...",
 	"NODE_CHECK":                              "Checking node connection for %s...",
@@ -512,7 +515,7 @@ var russian = map[string]string{
 	"CHOOSE_TEMPLATE_SOURCE":                  "Выберите источник шаблонов:",
 	"CLI_FAILED":                              "Не удалось выполнить Remnawave CLI. Убедитесь, что контейнер 'remnawave' запущен.",
 	"CLI_SUCCESS":                             "Remnawave CLI успешно выполнен!",
-	"CONFIG_NOT_FOUND":                        "Файл конфигурации (nginx.conf или Caddyfile) не найден в ",
+	"CONFIG_NOT_FOUND":                        "Файл конфигурации (nginx.conf или Caddyfile) не найден в %s",
 	"CONFIG_PROFILE_CREATED":                  "Конфигурационный профиль успешно создан",
 	"CONFIRM_CHANGE":                          "Подтвердить изменение? (y/n):",
 	"CONFIRM_CONTINUE":                        "Продолжить?",
@@ -680,7 +683,7 @@ var russian = map[string]string{
 	"MENU_TITLE":                              "REMNAWAVE REVERSE-PROXY by eGames",
 	"NGINX_CONF_ERROR":                        "Не удалось извлечь необходимые параметры из nginx.conf",
 	"NGINX_CONF_MODIFY_FAILED":                "Не удалось изменить конфигурацию Nginx.",
-	"NGINX_CONF_NOT_FOUND":                    "Файл nginx.conf не найден в ",
+	"NGINX_CONF_NOT_FOUND":                    "Файл nginx.conf не найден в %s",
 	"NODE_ADDED_SUCCESS":                      "Нода успешно добавлена!",
 	"NODE_ATTEMPT":                            "Попытка %d из %d...",
 	"NODE_CHECK":                              "Проверка подключения ноды для %s...",

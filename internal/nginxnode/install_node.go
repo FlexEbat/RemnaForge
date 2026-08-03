@@ -17,6 +17,7 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/domain"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/preflight"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/selfsteal"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
@@ -152,6 +153,13 @@ func readCertificate() string {
 
 // Original bash (src/nginx/install_node.sh:83-203): installation_node().
 func InstallationNode() error {
+	if err := preflight.CheckDocker(); err != nil {
+		return err
+	}
+	if err := preflight.CheckCertbot(); err != nil {
+		return err
+	}
+
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("INSTALLING_NODE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 
