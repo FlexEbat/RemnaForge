@@ -32,6 +32,7 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ipv6"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/managepanel"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/nginxnode"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelfull"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelonly"
@@ -67,7 +68,7 @@ func stubAction(label string) func() bool {
 var mainMenuItems = []menuItem{
 	{label: label("MENU_1"), action: func() bool { manageInstall(); return false }},
 	{label: label("MENU_2"), action: stubAction("choose_reinstall_type")},
-	{label: label("MENU_3"), action: stubAction("manage_panel")},
+	{label: label("MENU_3"), action: func() bool { managepanel.ManagePanel(); return false }},
 	{label: label("MENU_4"), newGroup: true, action: func() bool { selfsteal.ManageSelfstealTemplates(); return false }},
 	// MENU_5 ("Custom extensions by legiz") intentionally dropped from this fork.
 	{label: label("MENU_6"), action: stubAction("warp")}, // WARP: out of scope
