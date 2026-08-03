@@ -438,10 +438,14 @@ server {
 
 // Original bash (src/nginx/install_panel.sh:258-610): installation().
 func InstallationPanelNode() error {
-	if err := preflight.CheckDocker(); err != nil {
-		return err
-	}
-	if err := preflight.CheckCertbot(); err != nil {
+	// Original bash guard, e.g. install_remnawave.sh:500-501:
+	//   if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker ... ; then
+	//       install_packages || { ...; return; }
+	//   fi
+	// EnsureInstalled bootstraps docker/certbot/ufw/etc. if missing,
+	// instead of just erroring out - matching the original's
+	// auto-install behavior rather than a preflight-only check.
+	if err := preflight.EnsureInstalled(); err != nil {
 		return err
 	}
 
