@@ -5,9 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/preflight"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
 
@@ -16,13 +18,10 @@ import (
 // (install_remnawave.sh:1637-1643, 1648-1654). install_packages() itself
 // (the apt bootstrap routine) isn't ported yet, so if certbot is missing
 // we report the same error the original would show if that install failed,
-// rather than silently doing nothing.
+// rather than silently doing nothing. Delegates to internal/preflight so
+// install flows can run the identical check before they even get here.
 func ensureCertbot() error {
-	if _, err := exec.LookPath("certbot"); err == nil {
-		return nil
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_INSTALL_CERTBOT"), ui.ColorReset)
-	return fmt.Errorf("certbot not installed")
+	return preflight.CheckCertbot()
 }
 
 // Original bash (install_remnawave.sh:1621-1630): show_manage_certificates().
@@ -97,7 +96,19 @@ func updateCurrentCertificates() {
 
 	certStatus := map[string]string{}
 
-	for certDomain, domainDir := range uniqueDomains {
+	// BUG FIX (not in the original): Go map iteration order is randomized
+	// per-run by design, unlike bash's associative arrays which iterate in
+	// insertion order. Sorting the keys here makes both the processing
+	// order and (more importantly) the final results summary below
+	// reproducible between runs, instead of shuffling every time.
+	domainsInOrder := make([]string, 0, len(uniqueDomains))
+	for certDomain := range uniqueDomains {
+		domainsInOrder = append(domainsInOrder, certDomain)
+	}
+	sort.Strings(domainsInOrder)
+
+	for _, certDomain := range domainsInOrder {
+		domainDir := uniqueDomains[certDomain]
 		domainName := filepath.Base(domainDir)
 
 		certMethod := "2" // default: ACME HTTP-01
@@ -174,7 +185,8 @@ func updateCurrentCertificates() {
 	}
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("RESULTS_CERTIFICATE_UPDATES"), ui.ColorReset)
-	for certDomain, status := range certStatus {
+	for _, certDomain := range domainsInOrder {
+		status := certStatus[certDomain]
 		switch {
 		case status == i18n.T("UPDATED"):
 			fmt.Printf("%s%s%s %s%s\n", ui.ColorGreen, i18n.T("CERTIFICATE_FOR"), certDomain, i18n.T("SUCCESSFULLY_UPDATED"), ui.ColorReset)
