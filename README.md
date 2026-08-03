@@ -53,7 +53,7 @@ Go даёт статическую типизацию, единый бинарн
 | Установка только панели (Nginx) | `src/nginx/install_panel_node.sh`¹ | `internal/panelonly` | Установка панели без совмещённой ноды |
 | Установка панели + ноды (Nginx) | `src/nginx/install_panel.sh`¹ | `internal/panelfull` | Полная установка на одном сервере: панель + совмещённая нода |
 | Управление панелью/нодой | `src/modules/manage_panel.sh` | `internal/managepanel` | Старт/стоп/обновление, логи, `remnawave` CLI, временный доступ к панели на порту 8443 |
-| Preflight-проверки | — (см. раздел про баги) | `internal/preflight` | Проверка `docker`/`docker compose`/`certbot` перед установкой |
+| Preflight + автоустановка зависимостей | `install_packages` | `internal/preflight` | Проверка docker/certbot перед установкой; при отсутствии — автоматическая установка docker/certbot/ufw/cron/unattended-upgrades/BBR на чистом сервере (как в оригинале) |
 | Генераторы | части `install_remnawave.sh` | `internal/genutil` | Логины, пароли, JWT-секреты |
 | Локализация | `src/lang/en.sh`, `src/lang/ru.sh` | `internal/i18n` | Полный словарь EN/RU (~400 строк переводов) |
 | Главное меню | `install_remnawave.sh` (диспетчер) | `internal/menu` | Навигация, редизайн под data-driven структуру |
@@ -83,7 +83,7 @@ Go даёт статическую типизацию, единый бинарн
 
 ### Внешние зависимости на сервере
 
-Сам бинарник не тянет рантайм-зависимостей, но для реальной работы функциональности нужны:
+Сам бинарник не тянет рантайм-зависимостей. Для функциональности нужны `docker`+`compose`, `certbot`, `ufw` — но их **не нужно ставить заранее**: перед каждой установкой (панель/нода) инструмент сам проверяет их наличие и, если чего-то не хватает, автоматически ставит (apt: `certbot`, `python3-certbot-dns-cloudflare`, `ufw`, `cron`, `unattended-upgrades` и т.д.; Docker — через официальный `get.docker.com`), настраивает `ufw` (22/443), BBR и unattended-upgrades — как и в оригинальном скрипте. Работает на чистом только что созданном VPS без ручной подготовки.
 
 - `docker` + плагин `docker compose`
 - `certbot` (+ `certbot-dns-cloudflare`, при использовании метода Gcore — `certbot-dns-gcore` ставится автоматически через `pip`)
@@ -171,6 +171,7 @@ internal/
   - `dig`/`curl ifconfig.me`/битовая арифметика для Cloudflare CIDR → `net.LookupIP`/`net/http`/`net.ParseCIDR` (пакет `domain`)
   - `openssl x509 -enddate` + `date -d` → `crypto/x509` напрямую (пакет `certs`) — единственное, что осталось на внешнем вызове — сам `certbot`, поскольку переизобретать ACME-протокол не имеет смысла.
   - `openssl rand -hex`/`/dev/urandom`+`tr`+`fold`+`shuf` → `crypto/rand` (пакеты `api`, `selfsteal`, `genutil`)
+  - `curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && sh /tmp/get-docker.sh` → скрипт стримится из `net/http` напрямую в stdin `sh`, без временного файла на диске (пакет `preflight`)
 - **Числовая проверка версии ОС** вместо списка кодовых имён (см. [«Поддерживаемые системы»](#поддерживаемые-системы)) — не требует патчей при каждом новом релизе.
 - **Данные словаря переводов сгенерированы напрямую из `src/lang/en.sh`/`ru.sh`** оригинального проекта — гарантия того, что тексты не разошлись при переносе, вместо ручного перепечатывания ~400 строк.
 - **Правильные имена пакетов** `panelonly`/`panelfull` вместо копирования путаницы оригинальных `install_panel_node.sh`/`install_panel.sh` (см. сноску в таблице выше).
