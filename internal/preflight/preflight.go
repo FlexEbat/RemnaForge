@@ -1,21 +1,22 @@
-// Package preflight holds environment checks that install flows should
-// run *before* doing real work, so a missing dependency fails fast with a
-// clear, localized message instead of surfacing much later as a confusing
-// symptom (e.g. "containers not ready" after a multi-minute retry loop,
-// or a raw Go `exec: "certbot": executable file not found in $PATH`
-// error).
+// Package preflight holds environment checks - and, via
+// EnsureInstalled/InstallPackages, the actual dependency bootstrap - that
+// install flows run before doing real work.
 //
-// This isn't a port of any single original bash function - the original
-// script's install flows didn't preflight-check docker at all (they just
-// ran `docker compose up -d` and let it silently fail), and only checked
-// for certbot reactively inside the "Manage Certificates" menu
-// (manage_certificates(), install_remnawave.sh:1637-1654), not before the
-// install flows that also end up needing it (get_certificates() is called
-// from install_node/install_panel/install_panel_node too). Both gaps are
-// fixed here, using LANG keys the original already defines
-// (ERROR_DOCKER_NOT_INSTALLED/ERROR_DOCKER_NOT_WORKING - originally meant
-// for install_packages(), which isn't ported - and
-// ERROR_INSTALL_CERTBOT) rather than inventing new ones.
+// CheckDocker/CheckCertbot below started out as preflight-only checks (see
+// git history) for a gap the original bash script had: its install flows
+// didn't check docker at all (they just ran `docker compose up -d` and
+// let it silently fail ~5 minutes later as a confusing "containers not
+// ready" timeout), and only checked for certbot reactively inside the
+// "Manage Certificates" menu, not before the install flows that also need
+// it. install_packages.go (a full port of install_packages(),
+// install_remnawave.sh:1229-1326) closes that gap properly: install flows
+// now call EnsureInstalled(), which auto-bootstraps docker/certbot/ufw/
+// cron/unattended-upgrades/BBR when missing - matching the original's
+// actual behavior (it always auto-installs on a missing dependency,
+// rather than just erroring) instead of merely reporting the problem.
+// CheckDocker/CheckCertbot remain as standalone checks for callers that
+// only want to *verify* (e.g. the "Manage Certificates" menu, which
+// shouldn't reinstall the world just to check a certificate).
 package preflight
 
 import (
