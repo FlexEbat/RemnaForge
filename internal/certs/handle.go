@@ -3,17 +3,17 @@
 // get_certificates(), check_cert_expiry(), fix_letsencrypt_structure(),
 // handle_certificates(), and the "Manage certificates" menu
 // (show_manage_certificates/manage_certificates/update_current_certificates/
-// generate_new_certificates). All actual issuance is delegated to the
-// `certbot` binary via os/exec - same as the original - since
-// reimplementing ACME/ECDSA cert issuance ourselves would be a much bigger
-// (and riskier) undertaking than shelling out to a well-tested tool that's
-// already expected to be installed.
+// generate_new_certificates). All actual issuance goes through the
+// `certbot` binary via os/exec, matching the original. Reimplementing
+// ACME/ECDSA cert issuance would be a bigger and riskier undertaking than
+// shelling out to a well-tested tool that a Remnawave server already
+// needs installed.
 //
 // Deliberate improvement over a literal port: handle_certificates()
 // hardcodes target_dir="/opt/remnawave" (install_remnawave.sh:1970), which
 // means every caller's SSL docker-compose volume-mount lines get appended
-// to the *panel's* compose file regardless of what actually invoked it -
-// harmless for install_panel/install_panel_node (which do use
+// to the *panel's* compose file regardless of which flow invoked it.
+// This is harmless for install_panel/install_panel_node (which do use
 // /opt/remnawave), but wrong for a standalone install_node
 // (/opt/remnanode). HandleCertificates here takes targetDir as an
 // explicit parameter instead of hardcoding it, so each caller points at
@@ -32,11 +32,10 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
 
-// Result is returned by HandleCertificates. NodeCertDomain isn't part of
-// the original's return value (it doesn't have one - CERT_METHOD stays a
-// global), but callers like nginxnode need to know which domain's
-// certificate to reference, so we surface it here instead of making every
-// caller re-derive it.
+// Result is returned by HandleCertificates. The original has no
+// equivalent return value; CERT_METHOD stays a global there. Callers
+// like nginxnode need to know which domain's certificate to reference,
+// so this type surfaces it instead of making every caller re-derive it.
 type Result struct {
 	Method string // "1" Cloudflare, "2" ACME HTTP-01, "3" Gcore
 }
