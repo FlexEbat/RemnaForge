@@ -44,8 +44,8 @@ func GenerateUser() string {
 
 // Original bash (install_remnawave.sh:342-360): generate_password().
 // Guarantees at least 1 upper, 1 lower, 1 digit, 3 special chars, fills
-// the rest from the full charset, then shuffles - same recipe as the
-// bash version's `password+=...; ...; fold -w1 | shuf | tr -d '\n'`.
+// the rest from the full charset, then shuffles. Matches the bash
+// version's `password+=...; ...; fold -w1 | shuf | tr -d '\n'` recipe.
 func GeneratePassword() string {
 	const length = 24
 
@@ -79,9 +79,8 @@ var alnumFilter = func(r rune) bool {
 //
 // (src/nginx/install_panel_node.sh:45-46, used for JWT_AUTH_SECRET and
 // JWT_API_TOKENS_SECRET). Filtering base64 output to alnum-only can come up
-// short of the requested length in bash (no retry) - here we keep
-// generating additional random bytes until we actually have enough
-// characters, which is a small, deliberate improvement.
+// short of the requested length in bash, which has no retry. This function
+// generates additional random bytes until it has enough characters.
 func GenerateAlnumSecret(length int) string {
 	var sb strings.Builder
 	for sb.Len() < length {

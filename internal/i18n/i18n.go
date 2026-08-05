@@ -14,21 +14,32 @@
 //     to a real newline once, here, at data-definition time.
 //  2. LANG[CONFIG_NOT_FOUND] / LANG[NGINX_CONF_NOT_FOUND] originally
 //     referenced "$dir" inside a *double*-quoted bash string, so bash
-//     expanded it at `source` time - and since $dir is not a global
-//     variable at that point, it silently expanded to "" (message ended
-//     with "not found in " and nothing after). BUG FIX (not a 1:1 port):
-//     both strings were changed to a proper Go %s placeholder, with call
-//     sites (internal/managepanel) now passing the real directory in via
-//     fmt.Sprintf - restoring the obviously-intended behavior instead of
-//     perpetuating the broken one.
+//     expanded it at `source` time. $dir is not a global variable at
+//     that point, so it silently expanded to "" and the message ended
+//     with "not found in " and nothing after. BUG FIX (not a 1:1 port):
+//     both strings now use a proper Go %s placeholder. Call sites
+//     (internal/managepanel) pass the real directory in via
+//     fmt.Sprintf, restoring the obviously-intended behavior.
 //  3. LANG[ERROR_OS] (both languages) was hand-edited after generation:
 //     the original text ("Supported only Debian 11/12 and Ubuntu
-//     22.04/24.04") was already stale in the bash source itself - Debian
+//     22.04/24.04") was already stale in the bash source itself. Debian
 //     13 ("trixie") was accepted by check_os()'s codename list but never
 //     mentioned in the message. Since internal/oscheck now checks version
 //     numbers instead of a fixed codename list (Debian >= 11, Ubuntu >=
 //     22.04, no upper bound), the message was updated to say "11+"/"22.04+"
 //     to match reality instead of perpetuating the stale range.
+//  4. LANG[INVALID_CHOICE] said "Please select 0-11" in the original,
+//     baked into a string shared by menus of different sizes (the main
+//     menu and the selfsteal-template menu). No fixed range is correct
+//     for both. BUG FIX (not a 1:1 port): the range dropped from the
+//     message entirely, leaving "Invalid choice." The main menu still
+//     tells the user the current range through mainMenuPrompt() in
+//     internal/menu, which computes it from the live item count.
+//  5. LANG[INSTALL_PROMPT] and LANG[INSTALL_INVALID_CHOICE] said
+//     "0-5" in the original, but show_install_menu() lists exactly 4
+//     options (panel+node, panel only, add node, node only) plus 0 to
+//     exit: a valid range of 0-4. BUG FIX (not a 1:1 port): both strings
+//     now say "0-4".
 //
 // Keys are ported module-by-module as we go (see internal/<module>
 //
@@ -237,15 +248,15 @@ var english = map[string]string{
 	"INSTALL_ADD_NODE":                        "Add node to panel",
 	"INSTALL_CADDY":                           "Install with Caddy (Panel + Node)",
 	"INSTALL_COMPLETE":                        "               INSTALLATION COMPLETE!",
-	"INSTALL_INVALID_CHOICE":                  "Invalid choice. Please select 0-5.",
+	"INSTALL_INVALID_CHOICE":                  "Invalid choice. Please select 0-4.",
 	"INSTALL_MENU_TITLE":                      "Install Remnawave Components",
 	"INSTALL_NODE":                            "Install only the node",
 	"INSTALL_PACKAGES":                        "Installing required packages...",
 	"INSTALL_PANEL":                           "Install only the panel",
 	"INSTALL_PANEL_NODE":                      "Install panel and node on one server",
-	"INSTALL_PROMPT":                          "Select action (0-5):",
+	"INSTALL_PROMPT":                          "Select action (0-4):",
 	"INVALID_CERT_METHOD":                     "Invalid certificate method",
-	"INVALID_CHOICE":                          "Invalid choice. Please select 0-11",
+	"INVALID_CHOICE":                          "Invalid choice.",
 	"INVALID_INBOUND_UUID":                    "Invalid inbound UUID",
 	"INVALID_REINSTALL_CHOICE":                "Invalid choice. Please select 0-3.",
 	"INVALID_SAVED_TOKEN":                     "Saved token is invalid. Requesting a new one...",
@@ -635,15 +646,15 @@ var russian = map[string]string{
 	"INSTALL_ADD_NODE":                        "Добавить ноду в панель",
 	"INSTALL_CADDY":                           "Установить с Caddy (Панель + Нода)",
 	"INSTALL_COMPLETE":                        "               УСТАНОВКА ЗАВЕРШЕНА!",
-	"INSTALL_INVALID_CHOICE":                  "Неверный выбор. Выберите 0-5.",
+	"INSTALL_INVALID_CHOICE":                  "Неверный выбор. Выберите 0-4.",
 	"INSTALL_MENU_TITLE":                      "Установка компонентов Remnawave",
 	"INSTALL_NODE":                            "Установить только ноду",
 	"INSTALL_PACKAGES":                        "Установка необходимых пакетов...",
 	"INSTALL_PANEL":                           "Установить только панель",
 	"INSTALL_PANEL_NODE":                      "Установить панель и ноду на один сервер",
-	"INSTALL_PROMPT":                          "Выберите действие (0-5):",
+	"INSTALL_PROMPT":                          "Выберите действие (0-4):",
 	"INVALID_CERT_METHOD":                     "Неверный метод получения сертификата",
-	"INVALID_CHOICE":                          "Неверный выбор. Выберите 0-11.",
+	"INVALID_CHOICE":                          "Неверный выбор.",
 	"INVALID_INBOUND_UUID":                    "Неверный UUID входа",
 	"INVALID_REINSTALL_CHOICE":                "Неверный выбор. Выберите 0-3.",
 	"INVALID_SAVED_TOKEN":                     "Сохранённый токен недействителен. Запрашиваем новый...",
@@ -836,12 +847,11 @@ var russian = map[string]string{
 	"YQ_SUCCESSFULLY_INSTALLED":               "yq успешно установлен!",
 }
 
-// IN_DEVELOPMENT is NOT from the original en.sh/ru.sh - it's a stub message
-// used by this Go port for menu paths that haven't been translated from
-// bash yet (or, for Caddy/WARP, have been deliberately excluded from this
-// port per project scope). Kept in its own map, separate from the
-// generated english/russian ones above, so it's obvious this text has no
-// bash source of truth.
+// IN_DEVELOPMENT is not from the original en.sh/ru.sh. It is a stub
+// message this Go port uses for menu paths not yet translated from bash,
+// or for Caddy/WARP, which the project excludes by scope. It lives in
+// its own map, separate from the generated english/russian ones above,
+// to make clear this text has no bash source of truth.
 var inDevelopment = map[string]string{
 	"en": "🚧 Not implemented yet in this Go port.",
 	"ru": "🚧 Пока не реализовано в Go-версии.",
@@ -856,7 +866,7 @@ func InDevelopment() string {
 }
 
 // Current tracks which language key ("en"/"ru") is active, since Lang
-// itself is just a flat string map with no language tag.
+// is a flat string map with no language tag.
 var Current = "en"
 
 // SetLanguage corresponds to set_language() in install_remnawave.sh:47-75,

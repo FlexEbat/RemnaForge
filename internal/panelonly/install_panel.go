@@ -1,15 +1,16 @@
 // Package panelonly is a port of src/nginx/install_panel_node.sh
 // (538 lines). Despite the filename, this file's own header comment says
-// "Module: Install Panel Only" and its function is install_panel_nginx() -
-// it installs the Remnawave panel alone (registering a node config profile/
-// host for a selfsteal domain that's expected to run on a *separate*
-// server via the standalone install_node flow), not a co-located node.
+// "Module: Install Panel Only" and its function is install_panel_nginx().
+// It installs the Remnawave panel alone: it registers a node config
+// profile and host for a selfsteal domain that runs on a separate server
+// via the standalone install_node flow, not a co-located node.
 // The real "panel + node on one server" installer lives in
 // src/nginx/install_panel.sh (function install_panel_node_nginx(),
-// header comment "Module: Install Panel + Node") - ported separately as
-// internal/panelfull, since the original project's filenames and their
-// header comments/contents are swapped relative to each other. We use
-// accurate Go package names here rather than perpetuating that mislabeling.
+// header comment "Module: Install Panel + Node"), ported separately as
+// internal/panelfull. The original project's filenames and their header
+// comments and contents are swapped relative to each other. Go package
+// names here describe what each package does instead of repeating that
+// mislabeling.
 package panelonly
 
 import (
@@ -411,9 +412,9 @@ func InstallationPanelOnly() error {
 	//   if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker ... ; then
 	//       install_packages || { ...; return; }
 	//   fi
-	// EnsureInstalled bootstraps docker/certbot/ufw/etc. if missing,
-	// instead of just erroring out - matching the original's
-	// auto-install behavior rather than a preflight-only check.
+	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
+	// if missing, matching the original's auto-install behavior instead
+	// of only reporting the problem.
 	if err := preflight.EnsureInstalled(); err != nil {
 		return err
 	}
@@ -426,11 +427,12 @@ func InstallationPanelOnly() error {
 		return err
 	}
 
-	// Lines 254-267: handle_certificates() + method resolution. As with
-	// nginxnode, we use the real method HandleCertificates reports instead
-	// of the original's dead "if CERT_METHOD is empty" re-derivation (a
-	// bash-scoping quirk, not intentional design - see nginxnode for the
-	// full explanation).
+	// Lines 254-267: handle_certificates() and method resolution. As with
+	// nginxnode, this uses the real method HandleCertificates reports
+	// instead of the original's dead "if CERT_METHOD is empty"
+	// re-derivation, which compensates for a bash-scoping quirk rather
+	// than an intentional design choice (see nginxnode for the full
+	// explanation).
 	certResult, certErr := certs.HandleCertificates(
 		[]string{state.panelDomain, state.subDomain}, "", "", panelDir)
 	if certErr != nil {

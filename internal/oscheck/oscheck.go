@@ -8,15 +8,14 @@
 //	    fi
 //	}
 //
-// Deliberate improvement over a literal port (per project decision to not
-// force 1:1 where there's a better option): the original hardcodes five
+// Deliberate improvement over a literal port: the original hardcodes five
 // specific codenames (Debian 11 "bullseye", 12 "bookworm", 13 "trixie";
-// Ubuntu 22.04 "jammy", 24.04 "noble") and has to be hand-edited every time
-// a new Debian/Ubuntu release ships - which is exactly the bug being fixed
-// here (the bundled LANG[ERROR_OS] message still said "Debian 11/12 and
-// Ubuntu 22.04/24.04", already stale since "trixie" - Debian 13 - was in
-// the check but not the message, and neither covered Ubuntu 26.04
-// "resolute"/Debian 13.x point releases).
+// Ubuntu 22.04 "jammy", 24.04 "noble") and needs a hand-edit every time a
+// new Debian/Ubuntu release ships. That is the bug this port fixes: the
+// bundled LANG[ERROR_OS] message still said "Debian 11/12 and Ubuntu
+// 22.04/24.04", already stale since "trixie" (Debian 13) was in the check
+// but not the message, and neither covered Ubuntu 26.04 "resolute" or
+// Debian 13.x point releases.
 //
 // Instead of matching codenames, this parses /etc/os-release's ID and
 // VERSION_ID and compares version numbers: Debian >= 11, Ubuntu >= 22.04.
@@ -109,9 +108,9 @@ func supported(id, versionID string) bool {
 }
 
 // parseVersion turns "24.04" into (24, 4, true), "13" into (13, 0, true).
-// Extra segments beyond major.minor (e.g. a hypothetical "13.6.0") are
-// ignored rather than causing a parse failure - only major.minor matters
-// for the comparisons in supported().
+// It ignores extra segments beyond major.minor (a hypothetical "13.6.0")
+// instead of failing to parse them, since supported() only compares
+// major.minor.
 func parseVersion(versionID string) (major, minor int, ok bool) {
 	parts := strings.Split(versionID, ".")
 	major, err := strconv.Atoi(parts[0])

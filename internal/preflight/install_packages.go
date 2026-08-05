@@ -38,11 +38,10 @@ var aptPackages = []string{
 //
 // The original has several slightly different variants of this guard
 // (some check certbot, some don't, depending on which install flow calls
-// it). We use one unified, slightly more inclusive check - marker file
-// present AND docker actually working AND certbot present - since every
-// real install flow in this port ends up needing certbot anyway (see
-// internal/certs), so there's no real flow where skipping that check would
-// help and every flow benefits from the stronger guarantee.
+// it). This port uses one unified check that requires the marker file,
+// working docker, and certbot together, since every real install flow
+// in this port ends up needing certbot anyway (see internal/certs).
+// Every flow benefits from the stronger guarantee.
 func EnsureInstalled() error {
 	if packagesAlreadySatisfied() {
 		return nil
@@ -174,8 +173,8 @@ func systemdEnabled(unit string) bool {
 // ensureDocker is the Go equivalent of install_remnawave.sh:1262-1298.
 // BUG FIX (not a 1:1 port): the original downloads get.docker.com's
 // install script to /tmp/get-docker.sh with curl, then runs `sh` on that
-// file - here the script is streamed directly into `sh`'s stdin via
-// net/http instead, so nothing touches disk and there's no leftover
+// file. Here the script streams from net/http directly into `sh`'s
+// stdin, so nothing touches disk and there's no leftover
 // /tmp/get-docker.sh file to clean up.
 func ensureDocker() error {
 	dockerOK := func() bool {

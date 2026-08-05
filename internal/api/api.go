@@ -2,9 +2,8 @@
 // functions that talk to the Remnawave panel's HTTP API. The bash version
 // shells out to curl for requests and jq for JSON parsing; here that
 // becomes net/http + encoding/json. Function names, parameter order, and
-// control flow (including places where the original prints an error but
-// keeps going instead of returning early - kept as-is for fidelity) are
-// preserved one-for-one.
+// control flow stay one-for-one with the original, including places
+// where it prints an error but keeps going instead of returning early.
 package api
 
 import (
@@ -54,9 +53,9 @@ var httpClient = &http.Client{}
 //	    fi
 //	}
 //
-// Returns the raw response body, exactly like the bash version's stdout
-// capture - callers still do their own JSON parsing on the result, mirroring
-// how bash callers pipe into jq.
+// Returns the raw response body, matching the bash version's stdout
+// capture. Callers parse the JSON themselves, mirroring how bash callers
+// pipe the result into jq.
 func MakeAPIRequest(method, url, token, data string) []byte {
 	var body io.Reader
 	if data != "" {
@@ -263,8 +262,8 @@ func isUnauthorizedMessage(resp []byte) bool {
 //	    echo -e "${COLOR_GREEN}${LANG[PUBLIC_KEY_SUCCESS]}${COLOR_RESET}"
 //	}
 //
-// NOTE: like the original, this does not stop on error - it prints and
-// falls through to attempt the sed/file edit regardless.
+// NOTE: like the original, this does not stop on error. It prints the
+// error and falls through to attempt the sed/file edit regardless.
 func GetPublicKey(domainURL, token, targetDir string) {
 	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/keygen", token, "")
 	if len(resp) == 0 {
