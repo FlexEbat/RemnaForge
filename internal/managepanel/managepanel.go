@@ -3,8 +3,8 @@
 // remnawave CLI, and temporarily open/close the panel on port 8443.
 //
 // Caddy branches throughout the original (open_panel_access/
-// close_panel_access) are stubbed - out of scope per project decision;
-// only the Nginx paths are fully ported.
+// close_panel_access) are stubbed, out of scope per project decision.
+// Only the Nginx paths are fully ported.
 package managepanel
 
 import (
@@ -102,9 +102,9 @@ func ManagePanel() {
 
 // Original bash (install_remnawave.sh:67-86): run_remnawave_cli().
 // Go doesn't need the fd-juggling (`exec 3>&1 4>&2; exec > /dev/tty`) bash
-// uses to get an interactive TTY through a subshell - just wiring the
-// child's stdio directly to our own os.Std{in,out,err} gives the same
-// interactive `docker exec -it` session.
+// uses to get an interactive TTY through a subshell. Wiring the child's
+// stdio directly to our own os.Std{in,out,err} gives the same interactive
+// `docker exec -it` session.
 func runRemnawaveCLI() {
 	if !dockerContainerRunning("remnawave") {
 		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CONTAINER_NOT_RUNNING"), ui.ColorReset)

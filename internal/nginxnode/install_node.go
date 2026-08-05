@@ -130,9 +130,9 @@ func isValidIPv4(s string) bool {
 
 // readCertificate is the Go equivalent of src/nginx/install_node.sh:31-41:
 // read pasted multi-line certificate/key content until a blank line
-// following non-blank content. Lines are joined with real newlines - the
-// original joins with literal "\n" (backslash-n) and later resolves that
-// via `echo -e`, which is the same net effect.
+// following non-blank content. Lines join with real newlines here. The
+// original joins with the literal two characters "\n" and resolves them
+// to real newlines later via `echo -e`, producing the same result.
 func readCertificate() string {
 	fmt.Print(ui.Question(i18n.T("CERT_PROMPT")))
 	scanner := bufio.NewScanner(os.Stdin)
@@ -157,9 +157,9 @@ func InstallationNode() error {
 	//   if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker ... ; then
 	//       install_packages || { ...; return; }
 	//   fi
-	// EnsureInstalled bootstraps docker/certbot/ufw/etc. if missing,
-	// instead of just erroring out - matching the original's
-	// auto-install behavior rather than a preflight-only check.
+	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
+	// if missing, matching the original's auto-install behavior instead
+	// of only reporting the problem.
 	if err := preflight.EnsureInstalled(); err != nil {
 		return err
 	}
@@ -172,16 +172,14 @@ func InstallationNode() error {
 		return err
 	}
 
-	// Lines 90-93: handle_certificates(). NOTE on a bash quirk we're NOT
-	// replicating: the original passes CERT_METHOD by value (not nameref)
-	// into handle_certificates(), so the method it actually picked/used was
-	// never written back to the caller - the "if CERT_METHOD is empty"
-	// fallback right after it (lines 95-102, re-deriving the method from
-	// whether an existing wildcard cert happens to be on disk) always ran
-	// as dead-reckoning instead. That's a bash scoping bug, not an
-	// intentional design choice, so here we just use the real method
-	// HandleCertificates reports it used - more accurate than re-deriving
-	// it from a filesystem side-effect.
+	// Lines 90-93: handle_certificates(). The original passes CERT_METHOD
+	// by value, not by nameref, into handle_certificates(), so the method
+	// it picked never makes it back to the caller. The "if CERT_METHOD is
+	// empty" fallback right after it (lines 95-102) always runs instead,
+	// re-deriving the method from whether an existing wildcard cert
+	// happens to be on disk. That fallback compensates for a bash scoping
+	// bug, not an intentional design choice. This port skips the
+	// fallback and uses the real method HandleCertificates reports.
 	certResult, certErr := certs.HandleCertificates([]string{state.selfstealDomain}, "", "", nodeDir)
 	if certErr != nil {
 		return certErr

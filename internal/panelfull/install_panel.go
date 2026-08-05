@@ -1,13 +1,13 @@
 // Package panelfull is a port of src/nginx/install_panel.sh (610 lines).
 // Despite the filename, this file's own header comment says "Module:
-// Install Panel + Node" and its functions are install_panel_node_nginx()/
-// installation() - it installs the Remnawave panel AND a co-located
-// selfsteal node (real remnanode container, unix-socket Nginx with
-// proxy_protocol, a random selfsteal template) on one single server. See
-// internal/panelonly for the actual "panel alone" installer, which
+// Install Panel + Node" and its functions are install_panel_node_nginx()
+// and installation(). It installs the Remnawave panel and a co-located
+// selfsteal node together: a real remnanode container, unix-socket Nginx
+// with proxy_protocol, and a random selfsteal template on one server.
+// internal/panelonly is the actual "panel alone" installer, which
 // (confusingly) lives in the file named install_panel_node.sh in the
-// original project. We use accurate Go package names instead of
-// perpetuating that mislabeling.
+// original project. Go package names here describe what each package
+// does instead of repeating that mislabeling.
 package panelfull
 
 import (
@@ -275,9 +275,9 @@ func installPanelNodeNginx() (*state, error) {
 	return st, nil
 }
 
-// nginxConfTemplate mirrors install_panel.sh:349-505 - the unix-socket +
-// proxy_protocol variant (this server also terminates TLS for the
-// co-located node, unlike panelonly's plain `listen 443 ssl`).
+// nginxConfTemplate mirrors install_panel.sh:349-505, the unix-socket
+// and proxy_protocol variant. This server also terminates TLS for the
+// co-located node, unlike panelonly's plain `listen 443 ssl`.
 const nginxConfTemplate = `server_names_hash_bucket_size 64;
 
 upstream remnawave {
@@ -442,9 +442,9 @@ func InstallationPanelNode() error {
 	//   if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker ... ; then
 	//       install_packages || { ...; return; }
 	//   fi
-	// EnsureInstalled bootstraps docker/certbot/ufw/etc. if missing,
-	// instead of just erroring out - matching the original's
-	// auto-install behavior rather than a preflight-only check.
+	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
+	// if missing, matching the original's auto-install behavior instead
+	// of only reporting the problem.
 	if err := preflight.EnsureInstalled(); err != nil {
 		return err
 	}
@@ -601,9 +601,9 @@ volumes:
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("REGISTRATION_SUCCESS"), ui.ColorReset)
 
 	// Lines 544-546: fetch the real public key and patch it into
-	// docker-compose.yml's remnanode SECRET_KEY (this is the key
-	// difference from panelonly - the node is co-located, so we need its
-	// real key, not just a config-profile record).
+	// docker-compose.yml's remnanode SECRET_KEY. This is the key
+	// difference from panelonly: the node is co-located here, so it
+	// needs its real key, not just a config-profile record.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_PUBLIC_KEY"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	api.GetPublicKey(domainURL, token, targetDir)
@@ -622,11 +622,11 @@ volumes:
 	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, "")
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
-	// Lines 563-564: create the node. Note the original calls create_node
-	// here WITHOUT node_address/node_name overrides (unlike panelonly,
-	// which passes SELFSTEAL_DOMAIN as the name) - so it gets create_node's
-	// own defaults (172.30.0.1 / "Steal"), matching the co-located node's
-	// actual docker-network address.
+	// Lines 563-564: create the node. The original calls create_node
+	// here without node_address/node_name overrides, unlike panelonly
+	// (which passes SELFSTEAL_DOMAIN as the name), so it gets
+	// create_node's own defaults (172.30.0.1 / "Steal"). Those defaults
+	// match the co-located node's actual docker-network address.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_NODE"), ui.ColorReset)
 	api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, "", "")
 

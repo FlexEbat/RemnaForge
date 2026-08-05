@@ -22,11 +22,11 @@ func isWordByte(c byte) bool {
 // findTopLevelBlocks scans conf for every top-level (brace-depth 0)
 // occurrence of `keyword` immediately followed (after optional whitespace)
 // by `{`, and returns each one's full extent using brace-depth-aware
-// matching for the closing `}` - correctly handling nested blocks (like
-// `location {}` inside `server {}`) and any indentation/whitespace style,
-// unlike a literal `strings.Split(conf, "server {")` or a search for a
-// bare "\n}" (which breaks the moment someone hand-indents the closing
-// brace, or writes "server{" / "server  {").
+// matching for the closing `}`. This correctly handles nested blocks
+// (like `location {}` inside `server {}`) and any indentation or
+// whitespace style, unlike a literal `strings.Split(conf, "server {")`
+// or a search for a bare "\n}" (which breaks the moment someone
+// hand-indents the closing brace, or writes "server{" / "server  {").
 //
 // This isn't a full nginx config parser (no comment/string-literal
 // awareness), but it's a meaningful robustness improvement over the

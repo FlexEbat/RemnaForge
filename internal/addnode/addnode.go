@@ -73,7 +73,7 @@ func AddNodeToPanel() {
 		nameTaken, checkErr := configProfileNameExists(domainURL, token, entityName)
 		if checkErr != nil {
 			// Original bash has no explicit handling for a failed lookup here;
-			// it just falls through to the jq -e check evaluating to false,
+			// it falls through to the jq -e check evaluating to false,
 			// i.e. behaves the same as "name not taken". Mirrored here.
 			break
 		}
@@ -95,7 +95,7 @@ func AddNodeToPanel() {
 	fmt.Printf("%s%s: %s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), entityName, ui.ColorReset)
 
 	// Lines 68-69: create the node.
-	fmt.Printf("%s%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_NEW_NODE"), selfstealDomain, ui.ColorReset)
+	fmt.Printf("%s%s%s\n", ui.ColorYellow, fmt.Sprintf(i18n.T("CREATE_NEW_NODE"), selfstealDomain), ui.ColorReset)
 	api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, selfstealDomain, entityName)
 
 	// Lines 71-72: create the host.

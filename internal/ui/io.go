@@ -17,8 +17,8 @@ var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 // long-lived scanner (instead of a fresh one per call) is important:
 // bufio.Scanner reads stdin in chunks, so a new scanner per call would
 // silently swallow whatever line was buffered but unread by the previous
-// scanner - losing input, unlike bash's `read`, which re-reads stdin
-// line-by-line with no such buffering surprise.
+// scanner, losing input. bash's `read` re-reads stdin line-by-line with
+// no such buffering surprise.
 var stdinScanner = bufio.NewScanner(os.Stdin)
 
 // Original bash (install_remnawave.sh:77-79):

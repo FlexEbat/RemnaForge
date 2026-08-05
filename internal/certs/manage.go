@@ -25,6 +25,11 @@ func ensureCertbot() error {
 }
 
 // Original bash (install_remnawave.sh:1621-1630): show_manage_certificates().
+//
+// BUG FIX (not a 1:1 port): the original prints LANG[MENU_8] ("Manage
+// IPv6") as this submenu's title, wrong for a certificates menu. This
+// port uses LANG[MENU_9] ("Manage certificates domain") instead, this
+// feature's actual label in the parent menu.
 func showManageCertificates() {
 	fmt.Println()
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("MENU_9"), ui.ColorReset)
@@ -276,7 +281,7 @@ func generateNewCertificates() {
 			return
 		}
 	case "2":
-		fmt.Printf("%s%s %s...%s\n", ui.ColorYellow, i18n.T("GENERATING_CERTS"), newDomain, ui.ColorReset)
+		fmt.Printf("%s%s...%s\n", ui.ColorYellow, fmt.Sprintf(i18n.T("GENERATING_CERTS"), newDomain), ui.ColorReset)
 		if err := GetCertificates(newDomain, "2", letsencryptEmail); err != nil {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CERT_GENERATION_FAILED"), ui.ColorReset)
 			return

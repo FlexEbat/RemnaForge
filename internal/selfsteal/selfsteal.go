@@ -57,12 +57,12 @@ func showTemplateSourceOptions() {
 	fmt.Println()
 }
 
-// ManageSelfstealTemplates is the menu-facing entry point (this menu loop
-// itself isn't a separate named function in the bash version - callers
-// there just read the option once from wherever they invoke
-// show_template_source_options/randomhtml - but wiring it up as its own
-// small loop here keeps it self-contained the way the ipv6/addnode modules
-// are).
+// ManageSelfstealTemplates is the menu-facing entry point. The bash
+// version has no separate named function for this menu loop; callers
+// there read the option once from wherever they invoke
+// show_template_source_options/randomhtml. Wiring it up as its own small
+// loop here keeps it self-contained, the way the ipv6/addnode modules
+// are.
 func ManageSelfstealTemplates() {
 	showTemplateSourceOptions()
 	option := ui.Reading(i18n.T("SELECT_TEMPLATE"))
@@ -365,10 +365,10 @@ func obfuscateCSSFiles(root, comment, class string) {
 }
 
 // walkFiles applies fn to every file under root with the given extension.
-// If root itself is a file (not a directory) matching ext, fn is applied to
-// it directly - mirroring how `find "./$RandomHTML" -type f -name "*.ext"`
-// behaves whether $RandomHTML is a directory or a single file (the
-// nothing-sni "N.html" case).
+// If root itself is a file (not a directory) matching ext, fn runs on it
+// directly. This mirrors how `find "./$RandomHTML" -type f -name "*.ext"`
+// behaves whether $RandomHTML is a directory or a single file, the
+// nothing-sni "N.html" case.
 func walkFiles(root, ext string, fn func(path string) error) error {
 	info, err := os.Stat(root)
 	if err != nil {
