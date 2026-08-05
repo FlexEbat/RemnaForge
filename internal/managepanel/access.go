@@ -13,9 +13,15 @@ import (
 )
 
 // Original bash (install_remnawave.sh:208-218): show_panel_access().
+//
+// BUG FIX (not a 1:1 port): the original prints LANG[MENU_9] ("Manage
+// certificates domain") as this submenu's title. This menu covers
+// temporary panel access on port 8443, unrelated to certificates.
+// Using LANG[ACCESS_PANEL] instead, the actual label this feature has
+// everywhere else (the parent menu's item 6).
 func showPanelAccess() {
 	fmt.Println()
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("MENU_9"), ui.ColorReset)
+	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("ACCESS_PANEL"), ui.ColorReset)
 	fmt.Println()
 	fmt.Printf("%s1. %s%s\n", ui.ColorYellow, i18n.T("PORT_8443_OPEN"), ui.ColorReset)
 	fmt.Printf("%s2. %s%s\n", ui.ColorYellow, i18n.T("PORT_8443_CLOSE"), ui.ColorReset)
@@ -117,7 +123,7 @@ func findAuthCookies(conf string) (string, string) {
 }
 
 // Original bash (install_remnawave.sh:245-371): open_panel_access().
-// The Caddy branch is stubbed - out of scope per project decision.
+// The Caddy branch is stubbed, out of scope per project decision.
 func openPanelAccess() {
 	dir, ok := findInstallDir()
 	if !ok {
@@ -190,25 +196,23 @@ func openPanelAccess() {
 // this is idempotent, then insert a fresh one).
 //
 // BUG FIX (not a 1:1 port): the previous implementation found the block's
-// end via `strings.Index(conf[idx:], "\n}")` - which assumes the closing
-// brace sits alone at the start of a line with zero indentation. Any
+// end via `strings.Index(conf[idx:], "\n}")`, which assumes the closing
+// brace sits alone at the start of a line with zero indentation. A
 // hand-edited nginx.conf that indents its closing braces (e.g. "    }")
-// would make this either fail to find the block end, or - worse - match
-// some other block's closing brace entirely, corrupting the file. Now
-// uses findServerBlockForDomain's brace-depth-aware boundaries instead.
+// makes this fail to find the block end, or match some other block's
+// closing brace and corrupt the file. Now uses
+// findServerBlockForDomain's brace-depth-aware boundaries instead.
 func addListen8443(conf, panelDomain string) (string, error) {
 	block, found := findServerBlockForDomain(conf, panelDomain)
 	if !found {
 		return "", fmt.Errorf("server block for %q not found", panelDomain)
 	}
 
-	marker := "server_name " + panelDomain + ";"
 	body := block.Body(conf)
 	nameIdx := serverNameRE.FindStringIndex(body)
 	if nameIdx == nil {
 		return "", fmt.Errorf("server_name not found in block for %q", panelDomain)
 	}
-	_ = marker // kept only for the doc comment's sed-equivalence reference
 
 	insertAt := block.BodyStart + 1 + nameIdx[1]
 	blockEnd := block.BodyEnd - 1 // position of the block's own closing '}'
@@ -221,7 +225,7 @@ func addListen8443(conf, panelDomain string) (string, error) {
 }
 
 // Original bash (install_remnawave.sh:373-467): close_panel_access().
-// The Caddy branch is stubbed - out of scope per project decision.
+// The Caddy branch is stubbed, out of scope per project decision.
 func closePanelAccess() {
 	dir, ok := findInstallDir()
 	if !ok {
@@ -255,10 +259,10 @@ func closePanelAccess() {
 	}
 
 	// BUG FIX (not a 1:1 port): previously searched only a fixed 300-byte
-	// window after the server_name line for "listen 8443 ssl;" - fragile
-	// against differently-formatted/re-indented configs (too small a
-	// window misses it; a block containing enough other directives could
-	// spill past it and match the next block's line instead). Now uses
+	// window after the server_name line for "listen 8443 ssl;". A
+	// differently-formatted or re-indented config breaks this: too small
+	// a window misses the line, and a block with enough other directives
+	// spills past it and matches the next block's line instead. Now uses
 	// the same brace-depth-aware block lookup as addListen8443, so removal
 	// is scoped to exactly the right block regardless of formatting.
 	block, found := findServerBlockForDomain(conf, panelDomain)

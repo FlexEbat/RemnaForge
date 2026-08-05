@@ -38,9 +38,9 @@ import (
 //	}
 //
 // BUG FIX (not a 1:1 port): the original always takes the last two
-// dot-separated labels, which is wrong for any domain under a multi-label
-// public suffix - e.g. "sub.example.co.uk" would reduce to "co.uk" instead
-// of "example.co.uk". This breaks wildcard-certificate base-domain
+// dot-separated labels, wrong for any domain under a multi-label public
+// suffix. "sub.example.co.uk" reduces to "co.uk" instead of
+// "example.co.uk". This breaks wildcard-certificate base-domain
 // detection for such domains, in both the original bash and (until now)
 // this port. Fixed here using the real Public Suffix List algorithm
 // (see internal/publicsuffix) instead of perpetuating the bug.
@@ -49,7 +49,7 @@ func ExtractDomain(subdomain string) string {
 		return etld1
 	}
 	// Fall back to the original's naive behavior only if the PSL lookup
-	// itself fails (e.g. a single-label or otherwise malformed input) -
+	// itself fails, e.g. for a single-label or otherwise malformed input.
 	// EffectiveTLDPlusOne errors on those rather than silently guessing.
 	parts := strings.Split(subdomain, ".")
 	if len(parts) > 2 {

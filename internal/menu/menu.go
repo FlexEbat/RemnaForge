@@ -36,8 +36,10 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/nginxnode"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelfull"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelonly"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/reinstall"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/selfsteal"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/uninstall"
 )
 
 // UpdateAvailable mirrors UPDATE_AVAILABLE=false (install_remnawave.sh:4).
@@ -67,7 +69,7 @@ func stubAction(label string) func() bool {
 
 var mainMenuItems = []menuItem{
 	{label: label("MENU_1"), action: func() bool { manageInstall(); return false }},
-	{label: label("MENU_2"), action: stubAction("choose_reinstall_type")},
+	{label: label("MENU_2"), action: func() bool { reinstall.ChooseReinstallType(); return false }},
 	{label: label("MENU_3"), action: func() bool { managepanel.ManagePanel(); return false }},
 	{label: label("MENU_4"), newGroup: true, action: func() bool { selfsteal.ManageSelfstealTemplates(); return false }},
 	// MENU_5 ("Custom extensions by legiz") intentionally dropped from this fork.
@@ -79,7 +81,7 @@ var mainMenuItems = []menuItem{
 	}},
 	{label: label("MENU_9"), action: func() bool { certs.ManageCertificates(); return false }},
 	{label: label("MENU_10"), newGroup: true, action: stubAction("update_remnawave_reverse")},
-	{label: label("MENU_11"), action: func() bool { stub("remove_script"); return true }},
+	{label: label("MENU_11"), action: func() bool { uninstall.RemoveScript(); return true }},
 }
 
 // Original bash (install_remnawave.sh:418-445): show_menu(), rebranded and
@@ -200,7 +202,7 @@ func manageInstall() {
 			time.Sleep(2 * time.Second)
 			_ = ui.LogClear()
 
-		case "3": // add node to panel — fully ported (internal/addnode + internal/api)
+		case "3": // add node to panel, fully ported (internal/addnode + internal/api)
 			addnode.AddNodeToPanel()
 			_ = ui.LogClear()
 			return
