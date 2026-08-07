@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build, vet, fmt, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: gofmt
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "gofmt found unformatted files:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: go test (unit)
+        run: go test ./...
+
+  # preflight talks to docker, apt, systemd, and ufw: none of that is
+  # available in the sandbox this project was developed in. This job runs
+  # the same code on a real, disposable Ubuntu VM (a GitHub-hosted
+  # runner), where those things genuinely exist, instead of leaving that
+  # code unverified.
+  preflight-integration:
+    name: Integration - preflight on a real VM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Confirm docker is already usable on this runner
+        run: docker info
+
+      - name: Run preflight integration tests
+        run: sudo -E env "PATH=$PATH" go test -tags=integration -v ./internal/preflight/...
+
+      - name: Confirm install_packages left docker and certbot working
+        run: |
+          docker info
+          certbot --version
+
+  # oscheck's version comparison logic runs on whatever Debian/Ubuntu
+  # this runner happens to be, exercising CheckOS against a real
+  # /etc/os-release instead of only a synthetic one in a unit test.
+  oscheck-integration:
+    name: Integration - oscheck against the runner's real OS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Run oscheck integration test
+        run: go test -tags=integration -v ./internal/oscheck/...
