@@ -57,15 +57,14 @@ func showTemplateSourceOptions() {
 	fmt.Println()
 }
 
-// ManageSelfstealTemplates is the menu-facing entry point. The bash
-// version has no separate named function for this menu loop; callers
-// there read the option once from wherever they invoke
-// show_template_source_options/randomhtml. Wiring it up as its own small
-// loop here keeps it self-contained, the way the ipv6/addnode modules
-// are.
+// ManageSelfstealTemplates is the menu-facing entry point for "Install
+// random template for node". Despite the menu label (LANG[MENU_4],
+// unchanged from the original's "random"), this now lets the user pick a
+// specific page within the chosen source instead of always picking one
+// at random. See InteractiveInstall.
 func ManageSelfstealTemplates() {
 	showTemplateSourceOptions()
-	option := ui.Reading(i18n.T("SELECT_TEMPLATE"))
+	option := ui.Reading(i18n.T("CHOOSE_TEMPLATE_OPTION"))
 
 	var source string
 	switch option {
@@ -83,14 +82,28 @@ func ManageSelfstealTemplates() {
 		return
 	}
 
-	if err := RandomHTML(source); err != nil {
+	if err := InteractiveInstall(source); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 	}
 }
 
+// templateSet is a downloaded, extracted template repo with its list of
+// installable pages, not yet narrowed down to one.
+type templateSet struct {
+	selectedURL string
+	templateDir string
+	names       []string
+}
+
+func (ts *templateSet) randomName() string {
+	return ts.names[rand.Intn(len(ts.names))]
+}
+
 // Original bash (src/modules/selfsteal_templates.sh:16-150): randomhtml().
-// Inline comments mark the corresponding original line ranges.
-func RandomHTML(templateSource string) error {
+// prepareTemplateSet covers its setup half, lines 21-77: clean up
+// leftovers, download, extract, and list the pages available to choose
+// from, without picking one yet. installTemplate (below) covers the rest.
+func prepareTemplateSet(templateSource string) (*templateSet, error) {
 	// Lines 21-22: clean up any leftovers from a previous run.
 	_ = os.RemoveAll(filepath.Join(optDir, "main.zip"))
 	_ = os.RemoveAll(filepath.Join(optDir, "simple-web-templates-main"))
@@ -120,16 +133,16 @@ func RandomHTML(templateSource string) error {
 	// Lines 49-55: download with retry (in-memory instead of wget->disk).
 	zipData, err := downloadWithRetry(selectedURL)
 	if err != nil {
-		return fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
+		return nil, fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
 	}
 
 	// Line 54: unzip main.zip (in-memory instead of the `unzip` binary).
 	zr, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
 	if err != nil {
-		return fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
+		return nil, fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
 	}
 	if err := extractZip(zr, optDir); err != nil {
-		return fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
+		return nil, fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
 	}
 
 	// Lines 57-66: cd into the extracted folder + drop unwanted files.
@@ -146,35 +159,43 @@ func RandomHTML(templateSource string) error {
 		removeAll(templateDir, "assets", "README.md", "index.html")
 	}
 
-	// Lines 68-77: pick which page/file within the repo to use.
-	var randomHTML string
+	// Lines 68-77: list the pages/files available within the repo.
+	var names []string
 	if strings.Contains(selectedURL, "nothing-sni") {
-		randomHTML = strconv.Itoa(rand.Intn(8)+1) + ".html"
+		for i := 1; i <= 8; i++ {
+			names = append(names, strconv.Itoa(i)+".html")
+		}
 	} else {
 		entries, err := os.ReadDir(templateDir)
 		if err != nil {
-			return fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
+			return nil, fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
 		}
-		var dirs []string
 		for _, e := range entries {
 			if e.IsDir() {
-				dirs = append(dirs, e.Name())
+				names = append(names, e.Name())
 			}
 		}
-		if len(dirs) == 0 {
-			return fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
+		if len(names) == 0 {
+			return nil, fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
 		}
-		randomHTML = dirs[rand.Intn(len(dirs))]
 	}
 
+	return &templateSet{selectedURL: selectedURL, templateDir: templateDir, names: names}, nil
+}
+
+// installTemplate covers randomhtml()'s remaining lines, 79-149: resolve
+// the distillium "503 error pages" v1/v2 variant, obfuscate, copy into
+// /var/www/html, verify the obfuscation took, and clean up. pickVariant
+// supplies the v1/v2 choice for that one template: RandomHTML rolls it
+// randomly, InteractiveInstall asks the user.
+func installTemplate(ts *templateSet, chosen string, pickVariant func(options []string) string) error {
 	// Lines 79-85: special-case the distillium "503 error pages" template,
 	// which itself has v1/v2 sub-variants.
-	if strings.Contains(selectedURL, "distillium") && randomHTML == "503 error pages" {
-		versions := []string{"v1", "v2"}
-		randomHTML = filepath.Join(randomHTML, versions[rand.Intn(len(versions))])
+	if strings.Contains(ts.selectedURL, "distillium") && chosen == "503 error pages" {
+		chosen = filepath.Join(chosen, pickVariant([]string{"v1", "v2"}))
 	}
 
-	selectedPath := filepath.Join(templateDir, randomHTML)
+	selectedPath := filepath.Join(ts.templateDir, chosen)
 
 	// Lines 87-103: generate randomized tokens used to obfuscate the page.
 	randomMetaID := randHex(16)
@@ -210,7 +231,7 @@ func RandomHTML(templateSource string) error {
 	obfuscateCSSFiles(selectedPath, randomComment, randomClass)
 
 	// Line 127.
-	fmt.Printf("%s %s\n", i18n.T("SELECT_TEMPLATE"), randomHTML)
+	fmt.Printf("%s %s\n", i18n.T("SELECT_TEMPLATE"), chosen)
 
 	// Lines 129-141: install into /var/www/html.
 	info, statErr := os.Stat(selectedPath)
@@ -247,6 +268,65 @@ func RandomHTML(templateSource string) error {
 	_ = os.RemoveAll(filepath.Join(optDir, "nothing-sni-main"))
 
 	return nil
+}
+
+// randomVariant picks a v1/v2-style variant without asking, used by
+// RandomHTML and by InteractiveInstall's own fallback when the user asks
+// for a random page.
+func randomVariant(options []string) string {
+	return options[rand.Intn(len(options))]
+}
+
+// RandomHTML installs a fully-random page from a fully-random (or, if
+// templateSource is set, a specific) repo, with no interactive prompts.
+// Install flows (nginxnode, panelonly, panelfull) call this mid-install,
+// where stopping to ask the user which decoy page to use would not fit.
+func RandomHTML(templateSource string) error {
+	ts, err := prepareTemplateSet(templateSource)
+	if err != nil {
+		return err
+	}
+	return installTemplate(ts, ts.randomName(), randomVariant)
+}
+
+// InteractiveInstall is the Go equivalent of randomhtml(), extended to
+// let the user pick which page to install instead of always rolling one
+// at random. This is not in the original bash, which never offers this
+// choice. ManageSelfstealTemplates is the only caller.
+func InteractiveInstall(templateSource string) error {
+	ts, err := prepareTemplateSet(templateSource)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.AvailableTemplates(), ui.ColorReset)
+	fmt.Println()
+	for i, name := range ts.names {
+		fmt.Printf("%s%d. %s%s\n", ui.ColorYellow, i+1, name, ui.ColorReset)
+	}
+	fmt.Println()
+	fmt.Printf("%s0. Random%s\n", ui.ColorYellow, ui.ColorReset)
+	fmt.Println()
+
+	choice := ui.Reading(fmt.Sprintf("Select action (0-%d):", len(ts.names)))
+
+	chosen := ts.randomName()
+	if idx, convErr := strconv.Atoi(choice); convErr == nil && idx >= 1 && idx <= len(ts.names) {
+		chosen = ts.names[idx-1]
+	}
+
+	pickVariant := func(options []string) string {
+		fmt.Println()
+		fmt.Printf("%s%s: %s vs %s%s\n", ui.ColorYellow, chosen, options[0], options[1], ui.ColorReset)
+		reply := ui.Reading(fmt.Sprintf("Select action (1-%d):", len(options)))
+		if idx, convErr := strconv.Atoi(reply); convErr == nil && idx >= 1 && idx <= len(options) {
+			return options[idx-1]
+		}
+		return randomVariant(options)
+	}
+
+	return installTemplate(ts, chosen, pickVariant)
 }
 
 // downloadWithRetry is the Go equivalent of:

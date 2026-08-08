@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/addnode"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/backuprestore"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ipv6"
@@ -74,7 +75,12 @@ var mainMenuItems = []menuItem{
 	{label: label("MENU_4"), newGroup: true, action: func() bool { selfsteal.ManageSelfstealTemplates(); return false }},
 	// MENU_5 ("Custom extensions by legiz") intentionally dropped from this fork.
 	{label: label("MENU_6"), action: stubAction("warp")}, // WARP: out of scope
-	{label: label("MENU_7"), action: stubAction("backup-restore")},
+	{label: label("MENU_7"), action: func() bool {
+		if err := backuprestore.Run(); err != nil {
+			fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
+		}
+		return false
+	}},
 	{label: label("MENU_8"), newGroup: true, action: func() bool {
 		ipv6.ManageIPv6(ipv6.MenuNav{ReturnToMainMenu: func() {}})
 		return false

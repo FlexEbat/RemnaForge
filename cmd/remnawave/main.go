@@ -10,11 +10,15 @@ import (
 // Entry point for the Go port of remnawave-reverse-proxy
 // (originally install_remnawave.sh + src/**, Nginx-only scope).
 //
-// Original bash (install_remnawave.sh:2202-2206): the script runs
-// check_os and check_root before ever showing the menu; ported here as
-// the same two checks, first thing in main().
+// Original bash (install_remnawave.sh:2189-2206): log_entry, then
+// language selection, then check_root/check_os, then the main menu.
+// main() follows the same order.
 func main() {
-	i18n.SetLanguage("en")
+	if cleanup, err := ui.EnableFileLogging(); err == nil {
+		defer cleanup()
+	}
+
+	i18n.EnsureLanguageSelected()
 
 	if err := oscheck.CheckOS(); err != nil {
 		ui.ErrorExit(err.Error())
