@@ -865,6 +865,40 @@ func InDevelopment() string {
 	return inDevelopment["en"]
 }
 
+// availableTemplates, like inDevelopment above, is not from the original
+// en.sh/ru.sh. internal/selfsteal.InteractiveInstall uses it as the
+// header for the per-page picker menu, a feature the original bash never
+// had (it always picked a page at random, with no such prompt to label).
+var availableTemplates = map[string]string{
+	"en": "Available templates:",
+	"ru": "Доступные шаблоны:",
+}
+
+// AvailableTemplates returns that header in the current UI language.
+func AvailableTemplates() string {
+	if Current == "ru" {
+		return availableTemplates["ru"]
+	}
+	return availableTemplates["en"]
+}
+
+// downloadingBackupRestore, like inDevelopment and availableTemplates
+// above, is not from the original en.sh/ru.sh. internal/backuprestore
+// prints it while fetching distillium/remnawave-backup-restore for the
+// first time.
+var downloadingBackupRestore = map[string]string{
+	"en": "Downloading backup-restore tool (distillium/remnawave-backup-restore)...",
+	"ru": "Загрузка инструмента резервного копирования (distillium/remnawave-backup-restore)...",
+}
+
+// DownloadingBackupRestore returns that message in the current UI language.
+func DownloadingBackupRestore() string {
+	if Current == "ru" {
+		return downloadingBackupRestore["ru"]
+	}
+	return downloadingBackupRestore["en"]
+}
+
 // Current tracks which language key ("en"/"ru") is active, since Lang
 // is a flat string map with no language tag.
 var Current = "en"

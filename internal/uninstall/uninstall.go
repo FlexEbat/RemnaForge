@@ -78,7 +78,7 @@ func removeScriptOnly() {
 	_ = os.Remove(conventionalBinPath)
 
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("SCRIPT_REMOVED"), ui.ColorReset)
-	os.Exit(0)
+	ui.Exit(0)
 }
 
 // Original bash (install_remnawave.sh:268-295).
@@ -110,5 +110,5 @@ func removeScriptAndPanel() {
 	_ = os.Remove(conventionalBinPath)
 
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("ALL_REMOVED"), ui.ColorReset)
-	os.Exit(0)
+	ui.Exit(0)
 }

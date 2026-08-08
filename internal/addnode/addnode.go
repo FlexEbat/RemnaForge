@@ -5,7 +5,6 @@ package addnode
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"regexp"
 	"time"
 
@@ -33,7 +32,7 @@ func AddNodeToPanel() {
 	// Lines 17-20: bail out unless the user confirmed with y/Y.
 	if confirm != "y" && confirm != "Y" {
 		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
-		os.Exit(0)
+		ui.Exit(0)
 	}
 
 	// Lines 22-23.
