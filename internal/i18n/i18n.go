@@ -882,6 +882,23 @@ func AvailableTemplates() string {
 	return availableTemplates["en"]
 }
 
+// downloadingBackupRestore, like inDevelopment and availableTemplates
+// above, is not from the original en.sh/ru.sh. internal/backuprestore
+// prints it while fetching distillium/remnawave-backup-restore for the
+// first time.
+var downloadingBackupRestore = map[string]string{
+	"en": "Downloading backup-restore tool (distillium/remnawave-backup-restore)...",
+	"ru": "Загрузка инструмента резервного копирования (distillium/remnawave-backup-restore)...",
+}
+
+// DownloadingBackupRestore returns that message in the current UI language.
+func DownloadingBackupRestore() string {
+	if Current == "ru" {
+		return downloadingBackupRestore["ru"]
+	}
+	return downloadingBackupRestore["en"]
+}
+
 // Current tracks which language key ("en"/"ru") is active, since Lang
 // is a flat string map with no language tag.
 var Current = "en"

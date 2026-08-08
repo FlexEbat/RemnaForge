@@ -57,6 +57,7 @@ Go-инструмент для установки и администриров�
 | Переустановка панели или ноды | `choose_reinstall_type` | `internal/reinstall` |
 | Установка зависимостей | `install_packages` | `internal/preflight` |
 | Удаление | `remove_script` | `internal/uninstall` |
+| Backup и Restore | делегирует стороннему `distillium/remnawave-backup-restore` (MIT), как и оригинал | `internal/backuprestore` |
 | Генераторы паролей и секретов | части `install_remnawave.sh` | `internal/genutil` |
 | Локализация | `src/lang/en.sh`, `src/lang/ru.sh` | `internal/i18n` |
 | Главное меню | `install_remnawave.sh` | `internal/menu` |
@@ -69,7 +70,6 @@ Go-инструмент для установки и администриров�
 
 - **Caddy.** Инструмент поддерживает только Nginx.
 - **WARP Native** (`src/modules/warp.sh`).
-- Backup и Restore.
 - Автообновление скрипта (`update_remnawave_reverse`). В оригинале это скачивание новой версии bash-файла и замена себя. Для скомпилированного бинарника такая логика имеет смысл только после появления GitHub Releases с готовыми сборками. Релизов пока нет.
 
 Пункт «Custom extensions by legiz» убран из меню полностью, не как заглушка: это расширение сторонних тем, не часть Remnawave.
@@ -140,6 +140,7 @@ cmd/remnawave/          точка входа: логирование, выбо�
 internal/
   ├── addnode/           добавление ноды к панели
   ├── api/                HTTP-клиент Remnawave API
+  ├── backuprestore/       загрузка и запуск стороннего backup-restore
   ├── certs/              выпуск и обновление TLS-сертификатов
   ├── domain/             извлечение базового домена, проверка DNS
   ├── genutil/             пароли, логины, JWT-секреты
