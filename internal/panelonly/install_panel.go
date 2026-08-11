@@ -46,8 +46,7 @@ type panelState struct {
 	cookiesRandom2  string
 	metricsUser     string
 	metricsPass     string
-	jwtAuthSecret   string
-	jwtAPITokens    string
+	appSecret       string
 }
 
 // dockerComposeHead is the first heredoc from install_panel_nginx()
@@ -96,7 +95,7 @@ services:
       retries: 3
 
   remnawave:
-    image: remnawave/backend:2
+    image: remnawave/backend:3
     container_name: remnawave
     hostname: remnawave
     <<: [*common, *logging, *env, *networks]
@@ -165,9 +164,8 @@ DATABASE_URL="postgresql://postgres:postgres@remnawave-db:5432/postgres"
 ### REDIS ###
 REDIS_SOCKET=/var/run/valkey/valkey.sock
 
-### JWT ###
-JWT_AUTH_SECRET=%s
-JWT_API_TOKENS_SECRET=%s
+### SECURITY ###
+APP_SECRET=%s
 JWT_AUTH_LIFETIME=168
 
 ### TELEGRAM NOTIFICATIONS ###
@@ -184,11 +182,6 @@ FRONT_END_DOMAIN=%s
 
 ### SUBSCRIPTION PUBLIC DOMAIN ###
 SUB_PUBLIC_DOMAIN=%s
-
-### SWAGGER ###
-SWAGGER_PATH=/docs
-SCALAR_PATH=/scalar
-IS_DOCS_ENABLED=false
 
 ### PROMETHEUS ###
 METRICS_USER=%s
@@ -253,12 +246,11 @@ func installPanelNginx() (*panelState, error) {
 		cookiesRandom2:  genutil.GenerateUser(),
 		metricsUser:     genutil.GenerateUser(),
 		metricsPass:     genutil.GenerateUser(),
-		jwtAuthSecret:   genutil.GenerateAlnumSecret(64),
-		jwtAPITokens:    genutil.GenerateAlnumSecret(64),
+		appSecret:       genutil.GenerateAlnumSecret(64),
 	}
 
 	dotEnv := fmt.Sprintf(dotEnvTemplate,
-		state.jwtAuthSecret, state.jwtAPITokens,
+		state.appSecret,
 		state.panelDomain, state.subDomain,
 		state.metricsUser, state.metricsPass,
 	)

@@ -57,6 +57,18 @@ var httpClient = &http.Client{}
 // capture. Callers parse the JSON themselves, mirroring how bash callers
 // pipe the result into jq.
 func MakeAPIRequest(method, url, token, data string) []byte {
+	_, body := makeAPIRequestWithStatus(method, url, token, data)
+	return body
+}
+
+// makeAPIRequestWithStatus is MakeAPIRequest plus the HTTP status code.
+// DeleteConfigProfile needs this: as of Remnawave Panel v3.2.0, a
+// successful DELETE returns 204 No Content with an empty body, so success
+// can no longer be inferred from body content the way every other
+// endpoint here still allows (see DeleteConfigProfile's comment for the
+// bug this fixes). statusCode is 0 if the request never reached the
+// server.
+func makeAPIRequestWithStatus(method, url, token, data string) (statusCode int, respBody []byte) {
 	var body io.Reader
 	if data != "" {
 		body = strings.NewReader(data)
@@ -64,7 +76,7 @@ func MakeAPIRequest(method, url, token, data string) []byte {
 
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return nil
+		return 0, nil
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -75,15 +87,15 @@ func MakeAPIRequest(method, url, token, data string) []byte {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil
+		return 0, nil
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return nil
+		return resp.StatusCode, nil
 	}
-	return respBody
+	return resp.StatusCode, respBody
 }
 
 // Original bash (src/api/remnawave_api.sh:26-42):
@@ -264,6 +276,10 @@ func isUnauthorizedMessage(resp []byte) bool {
 //
 // NOTE: like the original, this does not stop on error. It prints the
 // error and falls through to attempt the sed/file edit regardless.
+//
+// BUG FIX (not in the original bash, introduced by a panel update, not
+// this port): Remnawave Panel v3.2.0 renamed the /api/keygen response
+// field from response.pubKey to response.secretKey.
 func GetPublicKey(domainURL, token, targetDir string) {
 	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/keygen", token, "")
 	if len(resp) == 0 {
@@ -272,11 +288,11 @@ func GetPublicKey(domainURL, token, targetDir string) {
 
 	var parsed struct {
 		Response struct {
-			PubKey string `json:"pubKey"`
+			SecretKey string `json:"secretKey"`
 		} `json:"response"`
 	}
 	_ = json.Unmarshal(resp, &parsed)
-	pubkey := parsed.Response.PubKey
+	pubkey := parsed.Response.SecretKey
 	if pubkey == "" {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_EXTRACT_PUBLIC_KEY"), ui.ColorReset)
 	}
@@ -432,6 +448,14 @@ func GetConfigProfiles(domainURL, token string) (string, error) {
 }
 
 // Original bash (src/api/remnawave_api.sh:254-273): delete_config_profile().
+//
+// BUG FIX (not in the original bash, introduced by a panel update, not
+// this port): before Remnawave Panel v3.2.0, a successful DELETE
+// returned 200 with a JSON body, and an empty response body reliably
+// meant failure. Since v3.2.0, a successful DELETE returns 204 No
+// Content with an empty body instead, so checking len(resp) == 0 for
+// failure now misreports every successful deletion as an error. This
+// checks the actual HTTP status code instead.
 func DeleteConfigProfile(domainURL, token, profileUUID string) error {
 	if profileUUID == "" {
 		uuid, err := GetConfigProfiles(domainURL, token)
@@ -441,10 +465,10 @@ func DeleteConfigProfile(domainURL, token, profileUUID string) error {
 		profileUUID = uuid
 	}
 
-	resp := MakeAPIRequest("DELETE", "http://"+domainURL+"/api/config-profiles/"+profileUUID, token, "")
-	if len(resp) == 0 || !json.Valid(resp) {
+	status, resp := makeAPIRequestWithStatus("DELETE", "http://"+domainURL+"/api/config-profiles/"+profileUUID, token, "")
+	if status < 200 || status >= 300 {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DELETE_PROFILE"), ui.ColorReset)
-		return fmt.Errorf("delete failed")
+		return fmt.Errorf("delete failed with status %d: %s", status, resp)
 	}
 	return nil
 }
