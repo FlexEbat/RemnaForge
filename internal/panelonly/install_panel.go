@@ -269,6 +269,28 @@ func installPanelNginx() (*panelState, error) {
 // (src/nginx/install_panel_node.sh:313-443).
 const nginxConfTemplate = `server_names_hash_bucket_size 64;
 
+# Gzip Compression
+gzip on;
+gzip_vary on;
+gzip_proxied any;
+gzip_comp_level 6;
+gzip_min_length 1024;
+gzip_types
+    application/javascript
+    application/json
+    application/manifest+json
+    application/xml
+    application/wasm
+    font/opentype
+    font/eot
+    font/otf
+    font/ttf
+    image/svg+xml
+    text/css
+    text/javascript
+    text/plain
+    text/xml;
+
 upstream remnawave {
     server 127.0.0.1:3000;
 }
