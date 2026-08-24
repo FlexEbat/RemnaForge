@@ -7,6 +7,6 @@ package menu
 // (not tied to the upstream bash project's versioning at all anymore).
 const (
 	AppName    = "Remnawave Easy-Install (fork eGames)"
-	AppVersion = "1.1.1"
+	AppVersion = "1.1.2"
 	WikiURL    = "https://github.com/FlexEbat/Remnwave-Easy-Install"
 )
