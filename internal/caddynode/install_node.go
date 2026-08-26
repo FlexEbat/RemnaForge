@@ -1,4 +1,4 @@
-// Package caddynode is a port of src/caddy/install_node.sh (180 lines):
+// Package caddynode is a port of src/caddy/install_node.sh (179 lines):
 // installs a standalone Remnawave node behind Caddy (selfsteal reverse
 // proxy on a Unix socket, remnanode container alongside it).
 //
