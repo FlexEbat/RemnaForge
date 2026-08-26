@@ -34,7 +34,7 @@
 - **`internal/preflight.EnsureInstalled()`**: точка входа для установки зависимостей (docker/certbot/ufw/cron/unattended-upgrades/BBR). Все install-флоу (`nginxnode`, `panelonly`, `panelfull`, и теперь `caddynode`) обязаны вызывать её первой, до первого интерактивного вопроса пользователю.
 - **`ui.Exit()`: единственная точка вызова `os.Exit`.** После `ui.EnableFileLogging()` голый `os.Exit()` теряет буфер pipe. Не добавляйте новые `os.Exit()` вызовы напрямую, только `ui.Exit()`.
 
-## Статус (на момент версии 1.1.2 + WIP)
+## Статус (на момент версии 1.1.4)
 
 Актуальная версия хранится в `internal/menu/version.go`. Бампайте при каждом пуше в `dev`.
 
@@ -52,31 +52,38 @@
 | Установка ноды за Nginx | `src/nginx/install_node.sh` | `internal/nginxnode` |
 | Установка панели без ноды (Nginx) | `src/nginx/install_panel_node.sh`¹ | `internal/panelonly` |
 | Установка панели с нодой (Nginx) | `src/nginx/install_panel.sh`¹ | `internal/panelfull` |
-| Управление панелью/нодой | `src/modules/manage_panel.sh` | `internal/managepanel` |
+| Установка ноды за Caddy | `src/caddy/install_node.sh` | `internal/caddynode` |
+| Установка панели без ноды (Caddy) | `src/caddy/install_panel.sh`² | `internal/caddypanelonly` |
+| Установка панели с нодой (Caddy) | `src/caddy/install_panel_node.sh`² | `internal/caddypanelfull` |
+| Управление панелью/нодой (Nginx) | `src/modules/manage_panel.sh` | `internal/managepanel` |
 | Установка зависимостей | `install_packages` | `internal/preflight` |
 | Удаление | `remove_script` | `internal/uninstall` |
-| Переустановка | `choose_reinstall_type` | `internal/reinstall` |
+| Переустановка (Nginx) | `choose_reinstall_type` | `internal/reinstall` |
 | Backup/Restore (делегирует стороннему `distillium/remnawave-backup-restore`, MIT, как и оригинал) | `install_remnawave.sh:2272-2277` | `internal/backuprestore` |
 | Выбор языка при запуске + сохранение | `load_language`/`show_language`/`set_language` | `internal/i18n/language_select.go` |
 | Логирование в файл (tee stdout/stderr, включая дочерние процессы) | `log_entry` | `internal/ui/io.go` (`EnableFileLogging`) |
 | Генераторы паролей/секретов | части `install_remnawave.sh` | `internal/genutil` |
 | Локализация | `src/lang/en.sh`, `src/lang/ru.sh` | `internal/i18n` |
-| Главное меню | `install_remnawave.sh` | `internal/menu` |
+| Главное меню (все установочные пункты для Nginx и Caddy подключены) | `install_remnawave.sh` | `internal/menu` |
 | CI (build/vet/fmt + integration-тесты на реальной Ubuntu VM) | нет прямого аналога | `.github/workflows/ci.yml` |
 
-¹ Имена файлов не совпадают с содержимым в оригинале: `install_panel_node.sh` = только панель, `install_panel.sh` = панель+нода. Наши пакеты названы по содержимому.
+¹ Имена файлов не совпадают с содержимым в оригинале для Nginx: `install_panel_node.sh` = только панель, `install_panel.sh` = панель+нода. Наши пакеты названы по содержимому.
 
-### В работе прямо сейчас (не запушено или частично)
+² Для Caddy путаница обратная и куда менее коварная: имена файлов совпадают с содержимым (`install_panel.sh` = только панель, `install_panel_node.sh` = панель+нода) — ровно как подсказывает здравый смысл по названию. Это выяснилось только после скачивания и построчного чтения обоих файлов в этой сессии; предыдущая запись в очереди (см. историю правок этого файла) ошибочно предполагала, что Caddy повторяет ту же путаницу, что и Nginx, по аналогии, не проверив. Несмотря на то что для Caddy имена файлов сами по себе не вводят в заблуждение, Go-пакеты всё равно называются по содержимому (`caddypanelonly`/`caddypanelfull`), а не `install_panel_node`-подобно, чтобы схема именования пакетов была одной и той же независимо от того, какой оригинал куда портируется — на неё можно полагаться, не проверяя каждый раз, не перепутан ли конкретный апстрим.
 
-- **`internal/caddynode`**: порт `src/caddy/install_node.sh` (179 строк в реальности, не 180 — предыдущая оценка была на глаз; реально node-only, без путаницы в имени). **Проверено полностью в этой сессии**: `go build ./...`, `go vet ./...`, `gofmt -l .`, `go test ./...` — все чисто. Оригинал скачан заново с `raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/main/src/caddy/install_node.sh` (доступ появился, в отличие от прошлой сессии) и построчно сверен через `diff` с нормализацией плейсхолдеров: `docker-compose.yml` и `Caddyfile` совпадают с оригиналом дословно, единственная разница — синтаксис обрамления (bash heredoc `<<EOL`/`\$`-экранирование против Go raw-string), что не меняет итоговое содержимое файлов на диске. Также сверены: сигнатура `domain.CheckDomain` и её аргументы, все 15 использованных ключей i18n (присутствуют в en/ru), команды `ufw`, путь `/opt/remnanode`, паттерн HTTP-опроса ноды и `WAITING`-сообщение без анимации спиннера — оба паттерна идентичны уже принятому `internal/nginxnode`, то есть не отклонение специфичное для caddynode, а сквозной для кодовой базы выбор.
-  - **Не подключено в меню** (это осознанно пункт 4 очереди, не забыто): в `internal/menu/menu.go` для `install node only` → `Caddy` всё ещё стоит `stub("caddy install_node")`. Модуль готов к подключению, но по плану ждёт, пока допишутся `install_panel_node`/`install_panel` для Caddy, чтобы менять заглушки одним пуском, а не по одной.
-  - **Замечена нестыковка в документации**: шапка-комментарий `internal/menu/menu.go` (строки 17-22) утверждает «Scope for this port: Nginx only... Caddy replaced with stub, per project decision» — это устарело, Caddy уже не вне скоупа, просто ещё не готов. Комментарий нужно поправить, когда дойдём до пункта 4 очереди (заодно с заменой самих заглушек), чтобы не редактировать этот файл дважды.
-- **Caddy: `install_panel_node.sh`** (466 строк, оригинал ошибочно называет "Install Panel", по факту то же самое что и nginx `install_panel_node.sh`: только панель). Не начато.
-- **Caddy: `install_panel.sh`** (526 строк, оригинал называет "Install Panel + Node": панель+нода). Не начато.
-- Заглушки Caddy в `internal/menu`, `internal/managepanel/access.go`, `internal/reinstall` нужно заменить на реальные вызовы после портирования трёх модулей выше (сейчас там `stub("caddy ...")`).
+### Caddy: 1.1.3, детали портирования панельных установщиков
+
+- **`internal/caddypanelonly`** (порт `src/caddy/install_panel.sh`, 465 строк) и **`internal/caddypanelfull`** (порт `src/caddy/install_panel_node.sh`, 525 строк) написаны, собраны и сверены построчно с оригиналом в этой сессии, по той же методике, что и `caddynode` (скачивание с `raw.githubusercontent.com`, `diff` с нормализацией плейсхолдеров для `.env`, `docker-compose.yml`, `Caddyfile`). Оба используют уже существующие `internal/api`, `internal/domain`, `internal/genutil`, `internal/selfsteal` без изменений — ни одна функция API не потребовала правок для поддержки Caddy-флоу.
+- **BUG FIX (not a 1:1 port), намеренно и до того, как это стало живым багом**: оба `.env`-шаблона используют `APP_SECRET` вместо `JWT_AUTH_SECRET`+`JWT_API_TOKENS_SECRET`, без `SWAGGER_PATH`/`SCALAR_PATH`/`IS_DOCS_ENABLED`, и `docker-compose.yml` пинит `remnawave/backend:3`, а не `:2` — хотя оба реальных Caddy-файла в апстриме на момент скачивания всё ещё писали старые поля и `:2`. Это тот же набор правок, что `internal/panelfull`/`internal/panelonly` (Nginx) уже получили в релизе 1.1.1 из-за обновления панели до v3.2.0 (см. changelog `1.1.1` ниже) — апстримный Caddy-код просто не успели обновить вслед за Nginx-кодом в том же репозитории. Ставить новый Caddy-флоу, дословно копирующий поля, которые текущий образ панели игнорирует (и не писать то единственное поле, которое ему теперь нужно), означало бы сразу выпустить заведомо нерабочую установку. Обе версии считают строку `pg_isready` в healthcheck `remnawave-db` тоже consистентно: апстрим (и Nginx, и Caddy) экранирует её как `\$\${POSTGRES_USER}` (буквальный `${POSTGRES_USER}` для шелла внутри контейнера), но уже принятый и работающий `internal/panelfull`/`internal/panelonly` упрощает это до одинарного `${POSTGRES_USER}` (интерполяция самим docker-compose из `.env`, что даёт тот же результат, так как значение в `.env` и в рантайме контейнера совпадает) — новые Caddy-пакеты сделаны так же, для консистентности со сложившимся прецедентом, а не как отдельное новое решение.
+- Домен-валидация: в отличие от `internal/panelonly` (Nginx), которая не вызывает `domain.CheckDomain` для selfsteal-домена (только читает без проверки), оба Caddy-файла (и panel-only, и panel+node) реально вызывают `check_domain "$SELFSTEAL_DOMAIN" true false` — проверено чтением конкретно этих файлов, не скопировано с nginx-аналога по шаблону. `caddypanelonly`/`caddypanelfull` эту проверку вызывают.
+- Оба Caddy-пакета, как и `caddynode`, не используют `internal/certs`/`certbot` — Caddy сам обслуживает TLS через встроенный ACME.
+- **Подключено в `internal/menu`**: все три заглушки `stub("caddy ...")` (`install node only`, `install panel only`, `install panel+node`, ветка `Caddy`) заменены на реальные вызовы `caddynode.InstallationNode()`, `caddypanelonly.InstallationPanelOnly()`, `caddypanelfull.InstallationPanelNode()`. Шапка-комментарий `menu.go`, утверждавшая «Nginx only, Caddy stubbed per project decision», исправлена.
+- **Не подключено, осознанно, другая задача**: `internal/managepanel/access.go` (временный доступ к панели) и `internal/reinstall` всё ещё стабят Caddy-ветку (`fmt.Printf(... i18n.InDevelopment() ...)`, не `stub()` из `menu.go` — другой механизм, тоже помечен `🚧`). Это не то же самое, что порт `install_panel*`/`install_node`: это управление уже установленным Caddy-стеком (правка существующего `Caddyfile` для включения/выключения авторизации по cookie, определение вебсервера для переустановки) — отдельная, ещё не начатая работа, не блокировавшаяся и не решённая портированием трёх install-модулей выше.
+- README обновлён: Caddy перенесён из «Не реализовано» в таблицу «Готово» (установка), с уточнением, что управление/переустановка для Caddy пока частичны.
 
 ### Не реализовано (осознанно, не забыто)
 
+- **Управление уже установленной панелью/нодой за Caddy** (временный доступ на 8443, переустановка) — см. пункт выше. Естественное продолжение этой сессии, но отдельная задача с собственным набором файлов для чтения/правки (`Caddyfile` вместо `nginx.conf`).
 - **WARP Native** (`src/modules/warp.sh`, 300 строк) не начато, вне текущего фокуса.
 - **Автообновление скрипта** (`update_remnawave_reverse`): для bash это скачать новую версию и заменить себя. Для Go-бинарника это имеет смысл только при наличии GitHub Releases с готовыми сборками, которых пока нет.
 - **Механизм самоустановки** (`install_script_if_missing`): нет `install.sh`/готового бинарника для установки, только сборка из исходников. Добавлять его стоит только после появления GitHub Releases (см. пункт про автообновление, они логически связаны: сначала self-install, потом autoupdate может по-настоящему что-то обновлять).
@@ -99,6 +106,9 @@
 ## Changelog
 
 Обратный хронологический порядок, самое новое сверху. Один пункт соответствует одной пушнутой единице работы. Синхронизировано с `git log` на ветке `dev`.
+
+### 1.1.4: Caddy panel-only и panel+node установщики, подключены в меню
+Добавлены `internal/caddypanelonly` (порт `install_panel.sh`, 465 строк) и `internal/caddypanelfull` (порт `install_panel_node.sh`, 525 строк). Обнаружено и задокументировано: для Caddy имена файлов совпадают с содержимым (в отличие от Nginx, где они перепутаны), это выяснилось только после чтения обоих файлов, а не по аналогии с nginx. Применены те же v3.2.0-совместимые правки .env/docker-compose (`APP_SECRET`, `backend:3`), что уже были в `panelfull`/`panelonly` — апстримные Caddy-файлы их ещё не получили. Все три Caddy-заглушки в `internal/menu` заменены на реальные вызовы; шапка-комментарий `menu.go` про «Nginx only» исправлена. `go build`/`vet`/`fmt`/`test` чистые, шаблоны сверены `diff`'ом построчно с оригиналом. Не затронуто: Caddy-ветки в `internal/managepanel/access.go` и `internal/reinstall` — это отдельная задача (управление уже установленным стеком), не блокировавшаяся этой работой. README обновлён.
 
 ### 1.1.3: caddynode протестирован и сверен с оригиналом
 Код `internal/caddynode` не менялся (изменений по сути не потребовалось): `go build`/`go vet`/`gofmt`/`go test` чистые. Оригинал `src/caddy/install_node.sh` скачан заново и построчно сверен через `diff` (нормализация bash-плейсхолдеров ↔ Go `%s`): `docker-compose.yml` и `Caddyfile` идентичны оригиналу, кроме синтаксиса heredoc-обрамления, не влияющего на итоговый файл. Проверены отдельно: аргументы `domain.CheckDomain`, все 15 i18n-ключей, `ufw`-команды, паттерны HTTP-опроса и `WAITING`-сообщения (совпадают с уже принятым `internal/nginxnode`). Модуль по-прежнему не подключён в меню, это следующий пункт очереди (после Caddy `install_panel_node`/`install_panel`), не текущего пуша.
