@@ -1,10 +1,8 @@
 // Package managepanel is a port of src/modules/manage_panel.sh (467
 // lines): start/stop/update the panel or node stack, tail logs, run the
-// remnawave CLI, and temporarily open/close the panel on port 8443.
-//
-// Caddy branches throughout the original (open_panel_access/
-// close_panel_access) are stubbed, out of scope per project decision.
-// Only the Nginx paths are fully ported.
+// remnawave CLI, and temporarily open/close the panel on port 8443. The
+// open/close_panel_access Caddy branches are ported alongside their
+// Nginx counterparts, in internal/managepanel/access.go.
 package managepanel
 
 import (

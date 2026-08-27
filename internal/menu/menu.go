@@ -14,12 +14,14 @@
 //     printed menu the way the bash version's parallel show_menu()/
 //     case-statement could.
 //
-// Scope for this port (per project decision): Nginx only. Every place the
-// original offers a Caddy path, or the WARP module, is replaced with an
-// "in development" stub rather than a real implementation. Everything else
-// not yet ported (nginx installers, manage_panel, selfsteal_templates,
-// certificates, updater, uninstaller, backup) is likewise stubbed and
-// clearly marked, so it's obvious what's real.
+// Scope for this port: as of 1.1.3 all three Caddy install flows
+// (node-only via internal/caddynode, panel-only via
+// internal/caddypanelonly, panel+node via internal/caddypanelfull) are
+// wired in below, alongside their Nginx counterparts. The WARP module is
+// still out of scope and stubbed. Everything else not yet ported
+// (manage_panel Caddy paths, selfsteal_templates, certificates, updater,
+// uninstaller, backup Caddy paths) is likewise stubbed and clearly
+// marked, so it's obvious what's real.
 package menu
 
 import (
@@ -30,6 +32,9 @@ import (
 
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/addnode"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/backuprestore"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/caddynode"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/caddypanelfull"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/caddypanelonly"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ipv6"
@@ -146,8 +151,6 @@ func stub(label string) {
 }
 
 // Original bash (install_remnawave.sh:474-642): manage_install().
-// Nginx paths call into (currently stubbed) installers; Caddy paths are
-// always stubbed regardless of scope, per project decision.
 func manageInstall() {
 	for {
 		showInstallMenu()
@@ -173,7 +176,9 @@ func manageInstall() {
 					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 				}
 			case "2":
-				stub("caddy install_panel_node") // Caddy: out of scope
+				if err := caddypanelfull.InstallationPanelNode(); err != nil {
+					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
+				}
 			case "0":
 				fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
 				_ = ui.LogClear()
@@ -194,7 +199,9 @@ func manageInstall() {
 					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 				}
 			case "2":
-				stub("caddy install_panel") // Caddy: out of scope
+				if err := caddypanelonly.InstallationPanelOnly(); err != nil {
+					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
+				}
 			case "0":
 				fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
 				_ = ui.LogClear()
@@ -220,7 +227,9 @@ func manageInstall() {
 					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 				}
 			case "2":
-				stub("caddy install_node") // Caddy: out of scope
+				if err := caddynode.InstallationNode(); err != nil {
+					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
+				}
 			case "0":
 				fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
 				_ = ui.LogClear()
