@@ -1,11 +1,8 @@
 // Package reinstall is a port of show_reinstall_options(),
 // choose_reinstall_type(), and reinstall_remnawave()
-// (install_remnawave.sh:646-727). It wipes any existing panel or node
+// (install_remnawave.sh:786-867). It wipes any existing panel or node
 // install, then hands off to the same install flows internal/menu uses
-// for a fresh install.
-//
-// Caddy branches from the original's REINSTALL_OPTION/WEBSERVER_OPTION
-// matrix are stubbed. The project supports Nginx only.
+// for a fresh install, for both Nginx and Caddy.
 package reinstall
 
 import (
@@ -13,6 +10,9 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/caddynode"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/caddypanelfull"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/caddypanelonly"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/nginxnode"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelfull"
@@ -70,7 +70,7 @@ func ChooseReinstallType() {
 		case "1":
 			runInstall(option)
 		case "2":
-			fmt.Printf("%s[caddy reinstall] %s%s\n", ui.ColorGray, i18n.InDevelopment(), ui.ColorReset)
+			runInstallCaddy(option)
 		case "0":
 			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
 		default:
@@ -94,6 +94,26 @@ func runInstall(reinstallOption string) {
 		err = panelonly.InstallationPanelOnly()
 	case "3":
 		err = nginxnode.InstallationNode()
+	}
+	if err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
+	}
+}
+
+// runInstallCaddy is the Caddy leg of choose_reinstall_type()'s
+// REINSTALL_OPTION/WEBSERVER_OPTION matrix (install_remnawave.sh:811-824,
+// WEBSERVER_OPTION=2 branch): same REINSTALL_OPTION numbering as
+// runInstall (1=panel+node, 2=panel only, 3=node only), routed to the
+// Caddy install packages instead of the Nginx ones.
+func runInstallCaddy(reinstallOption string) {
+	var err error
+	switch reinstallOption {
+	case "1":
+		err = caddypanelfull.InstallationPanelNode()
+	case "2":
+		err = caddypanelonly.InstallationPanelOnly()
+	case "3":
+		err = caddynode.InstallationNode()
 	}
 	if err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
