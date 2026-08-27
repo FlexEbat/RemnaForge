@@ -26,8 +26,8 @@ import (
 	"time"
 
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/publicsuffix"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"golang.org/x/net/publicsuffix"
 )
 
 // Original bash (install_remnawave.sh:1328-1331):
@@ -43,7 +43,7 @@ import (
 // "example.co.uk". This breaks wildcard-certificate base-domain
 // detection for such domains, in both the original bash and (until now)
 // this port. Fixed here using the real Public Suffix List algorithm
-// (see internal/publicsuffix) instead of perpetuating the bug.
+// (golang.org/x/net/publicsuffix) instead of perpetuating the bug.
 func ExtractDomain(subdomain string) string {
 	if etld1, err := publicsuffix.EffectiveTLDPlusOne(subdomain); err == nil {
 		return etld1
