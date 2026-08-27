@@ -56,8 +56,8 @@ Go-инструмент для установки и администриров�
 | Установка ноды за Caddy | `src/caddy/install_node.sh` | `internal/caddynode` |
 | Установка панели без ноды (Caddy) | `src/caddy/install_panel.sh` | `internal/caddypanelonly` |
 | Установка панели с нодой (Caddy) | `src/caddy/install_panel_node.sh` | `internal/caddypanelfull` |
-| Управление панелью и нодой (Nginx) | `src/modules/manage_panel.sh` | `internal/managepanel` |
-| Переустановка панели или ноды (Nginx) | `choose_reinstall_type` | `internal/reinstall` |
+| Управление панелью и нодой (Nginx и Caddy) | `src/modules/manage_panel.sh` | `internal/managepanel` |
+| Переустановка панели или ноды (Nginx и Caddy) | `choose_reinstall_type` | `internal/reinstall` |
 | Установка зависимостей | `install_packages` | `internal/preflight` |
 | Удаление | `remove_script` | `internal/uninstall` |
 | Backup и Restore | делегирует стороннему `distillium/remnawave-backup-restore` (MIT), как и оригинал | `internal/backuprestore` |
@@ -73,7 +73,6 @@ Caddy сам выпускает и продлевает свои TLS-серти�
 
 Меню показывает эти пункты с пометкой `🚧`:
 
-- **Управление уже установленной панелью/нодой за Caddy** (включение/выключение временного доступа к панели, переустановка) — `internal/managepanel` и `internal/reinstall` пока умеют это только для Nginx. Сама установка панели/ноды за Caddy уже работает, это отдельная, ещё не начатая задача.
 - **WARP Native** (`src/modules/warp.sh`).
 - Автообновление скрипта (`update_remnawave_reverse`). В оригинале это скачивание новой версии bash-файла и замена себя. Для скомпилированного бинарника такая логика имеет смысл только после появления GitHub Releases с готовыми сборками. Релизов пока нет.
 
