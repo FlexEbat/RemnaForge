@@ -216,6 +216,11 @@ func addCronRule(existing, cronCommand string) {
 
 // fixRenewHook is the Go equivalent of install_remnawave.sh:2113-2123: make
 // sure each domain's renewal.conf has the panel-restart renew_hook.
+//
+// BUG FIX (not a 1:1 port): now shares renewHookCommand (check.go) with
+// FixLetsencryptStructure instead of hardcoding its own, older text
+// missing the trailing nginx reload step; see the comment on
+// renewHookCommand for why.
 func fixRenewHook(domainName string) {
 	renewalConf := filepath.Join(letsencryptRenewal, domainName+".conf")
 	data, err := os.ReadFile(renewalConf)
@@ -223,7 +228,7 @@ func fixRenewHook(domainName string) {
 		return
 	}
 	conf := string(data)
-	desiredHook := `renew_hook = sh -c 'cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx'`
+	desiredHook := renewHookCommand
 
 	if !strings.Contains(conf, "renew_hook") {
 		conf = strings.TrimRight(conf, "\n") + "\n" + desiredHook + "\n"
