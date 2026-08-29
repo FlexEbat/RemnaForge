@@ -19,6 +19,25 @@ const letsencryptLive = "/etc/letsencrypt/live"
 const letsencryptArchive = "/etc/letsencrypt/archive"
 const letsencryptRenewal = "/etc/letsencrypt/renewal"
 
+// renewHookCommand is the certbot renew_hook line this project writes into
+// every domain's renewal.conf, shared by FixLetsencryptStructure (this
+// file) and fixRenewHook (handle.go).
+//
+// BUG FIX (not a 1:1 port): the original bash hardcodes two *different*
+// renew_hook strings in two different functions for this exact same
+// purpose - fix_letsencrypt_structure() (install_remnawave.sh:1894-1963)
+// includes a trailing "docker compose exec remnawave-nginx nginx -s
+// reload", handle_certificates() (install_remnawave.sh:2113-2123) does
+// not. Depending on which of the two ran last, a server could end up
+// with either hook, silently. As of this project's policy going forward
+// (see TECH.md section 9), upstream bugs are fixed rather than
+// reproduced regardless of how small; this one is fixed by having both
+// call sites share this single constant, using the more complete
+// variant (the extra reload is a harmless no-op immediately after
+// `docker compose up -d`, and a real safety net if that ever changes to
+// not force a full container restart).
+const renewHookCommand = `renew_hook = sh -c 'cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx && docker compose exec remnawave-nginx nginx -s reload'`
+
 // latestMatchingDir is the Go equivalent of the repeated:
 //
 //	find "$cert_dir" -maxdepth 1 -type d -name "${DOMAIN}*" | sort -V | tail -n 1
@@ -190,7 +209,7 @@ func FixLetsencryptStructure(domainName string) error {
 	conf = setRenewalConfLine(conf, "fullchain", fullchainPath)
 	conf = setRenewalConfLine(conf, "privkey", privkeyPath)
 
-	expectedHook := `renew_hook = sh -c 'cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx && docker compose exec remnawave-nginx nginx -s reload'`
+	expectedHook := renewHookCommand
 	conf = removeLinesWithPrefix(conf, "renew_hook")
 	conf = strings.TrimRight(conf, "\n") + "\n" + expectedHook + "\n"
 
