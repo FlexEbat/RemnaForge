@@ -97,8 +97,19 @@ func removeScriptAndPanel() {
 		fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 		downCmd := exec.Command("docker", "compose", "down", "-v", "--rmi", "all", "--remove-orphans")
 		downCmd.Dir = dir
+		// BUG FIX (not a 1:1 port): this used to report a failed `docker
+		// compose down` with LANG[CHANGE_DIR_FAILED] ("Failed to change to
+		// directory %s"), copy-pasted from the original's `cd dir || {
+		// error CHANGE_DIR_FAILED; exit 1 }` guard. This port never does a
+		// literal `cd` (downCmd.Dir is used instead), so that message
+		// named the wrong failure. Also, unlike the original (and unlike
+		// this port's own internal/reinstall.reinstallRemnawave, which
+		// intentionally discards this error to match upstream's
+		// fire-and-forget `docker compose down &`), this path already
+		// checks the error, so it now reports it under its real name
+		// instead of silently keeping a misleading message.
 		if err := downCmd.Run(); err != nil {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, fmt.Sprintf(i18n.T("CHANGE_DIR_FAILED"), dir), ui.ColorReset)
+			fmt.Printf("%s%s%s\n", ui.ColorRed, fmt.Sprintf(i18n.T("DOCKER_COMPOSE_DOWN_FAILED"), dir), ui.ColorReset)
 		}
 		_ = os.RemoveAll(dir)
 	}

@@ -354,9 +354,21 @@ func downloadWithRetry(url string) ([]byte, error) {
 	}
 }
 
+// BUG FIX (not a 1:1 port): the original shells out to `unzip`, which
+// refuses by default to write a path that escapes the extraction
+// directory ("Zip Slip"). filepath.Join alone doesn't reject a
+// malicious f.Name like "../../etc/cron.d/x", so this checks the
+// cleaned, joined path stays under dest before writing anything.
+// templateURLs are fixed, trusted GitHub archives, so this is
+// defense-in-depth against a compromised upstream repo or a
+// tampered-with download, not a fix for a currently-reachable exploit.
 func extractZip(zr *zip.Reader, dest string) error {
+	destClean := filepath.Clean(dest) + string(filepath.Separator)
 	for _, f := range zr.File {
 		path := filepath.Join(dest, f.Name)
+		if !strings.HasPrefix(filepath.Clean(path)+string(filepath.Separator), destClean) {
+			return fmt.Errorf("%s: illegal file path outside extraction directory", f.Name)
+		}
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(path, f.Mode()); err != nil {
 				return err
