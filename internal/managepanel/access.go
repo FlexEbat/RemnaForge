@@ -472,20 +472,18 @@ func closePort8443UFW() {
 // Caddyfile edits match the literal "{$PANEL_DOMAIN}" placeholder text,
 // not the real domain.
 //
-// The reinserted "bind unix/{$CADDY_SOCKET_PATH}" line is unconditional
-// in the original (sed's "/pattern/a text" always appends, regardless of
-// whether that line existed before "open" removed it), reproduced as-is
-// here. This means running open then close on an internal/caddypanelonly
-// install (whose Caddyfile never had that line, and whose
-// remnawave-caddy container never defines CADDY_SOCKET_PATH in its
-// environment) leaves behind a reference to an undefined Caddy env var
-// in the panel domain's block. This is a real quirk in the upstream
-// bash, not something introduced by this port, and not fixed here:
-// unlike the v3.2.0 API field mismatch (internal/caddypanelonly's and
-// internal/caddypanelfull's dotEnvTemplate comments), it doesn't break
-// every install from day one, only this specific open+close sequence on
-// a panel-only Caddy install, matching exactly what a user of the
-// original bash script would experience today.
+// BUG FIX (not a 1:1 port): the original always reinserts "bind
+// unix/{$CADDY_SOCKET_PATH}" (sed's "/pattern/a text" always appends,
+// regardless of whether that line existed before "open" removed it).
+// On an internal/caddypanelonly install, whose Caddyfile never had that
+// line and whose remnawave-caddy container never defines
+// CADDY_SOCKET_PATH in its environment, running open then close leaves
+// behind a reference to an undefined Caddy env var in the panel domain's
+// block. internal/caddypanelfull's docker-compose.yml does define
+// CADDY_SOCKET_PATH (it shares a unix socket with the co-located node),
+// so the line belongs there. The line is now only reinserted when this
+// install's docker-compose.yml actually defines CADDY_SOCKET_PATH,
+// matching whichever of the two install flows produced this directory.
 func closePanelAccessCaddy(dir string) {
 	composeData, err := os.ReadFile(filepath.Join(dir, "docker-compose.yml"))
 	if err != nil {
@@ -497,6 +495,7 @@ func closePanelAccessCaddy(dir string) {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CADDY_CONF_ERROR"), ui.ColorReset)
 		return
 	}
+	hasCaddySocketPath := strings.Contains(string(composeData), "CADDY_SOCKET_PATH")
 
 	caddyfilePath := filepath.Join(dir, "Caddyfile")
 	data, err := os.ReadFile(caddyfilePath)
@@ -510,9 +509,11 @@ func closePanelAccessCaddy(dir string) {
 		caddyfile = strings.ReplaceAll(caddyfile,
 			"https://{$PANEL_DOMAIN}:8443 {",
 			"https://{$PANEL_DOMAIN} {")
-		caddyfile = addLineAfter(caddyfile,
-			"https://{$PANEL_DOMAIN} {",
-			"    bind unix/{$CADDY_SOCKET_PATH}")
+		if hasCaddySocketPath {
+			caddyfile = addLineAfter(caddyfile,
+				"https://{$PANEL_DOMAIN} {",
+				"    bind unix/{$CADDY_SOCKET_PATH}")
+		}
 		caddyfile = strings.ReplaceAll(caddyfile,
 			"redir https://{$PANEL_DOMAIN}:8443{uri} permanent",
 			"redir https://{$PANEL_DOMAIN}{uri} permanent")

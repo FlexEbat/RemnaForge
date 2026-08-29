@@ -1,11 +1,15 @@
 # TECH.md
 
-**Версия: v1.1.6** (2026-08-28)
+**Версия: v1.1.7** (2026-08-29)
 
 Changelog (новое сверху, один пункт на одну пушнутую единицу работы):
 
+- **v1.1.7**: три точечных бага, найденных ревью (не 1:1-порт баги оригинала, кроме одного, помеченного отдельно):
+  - `internal/uninstall.removeScriptAndPanel()`: ошибка `docker compose down` репортилась под чужим именем — `LANG[CHANGE_DIR_FAILED]` ("Failed to change to directory %s"), скопированным из оригинального `cd dir || { ... }` guard'а, которого в Go-порте нет (используется `cmd.Dir`, не `cd`). Заведён новый ключ `DOCKER_COMPOSE_DOWN_FAILED` (en+ru), используется вместо него.
+  - `internal/selfsteal.extractZip()`: добавлена защита от Zip Slip — путь каждой записи архива проверяется на выход за пределы каталога распаковки перед записью. Оригинал шеллился в `unzip`, который по умолчанию такое отклоняет; `filepath.Join` в Go — нет.
+  - `internal/managepanel.closePanelAccessCaddy()`: **исправлен баг апстрима**, задокументированный как неисправленный в v1.1.5 — строка `bind unix/{$CADDY_SOCKET_PATH}` возвращалась в Caddyfile безусловно при `close`, даже на `internal/caddypanelonly`-инсталляции, где `CADDY_SOCKET_PATH` нигде не определена. Теперь строка возвращается только если `docker-compose.yml` этой инсталляции реально определяет `CADDY_SOCKET_PATH` (т.е. только на `internal/caddypanelfull`).
 - **v1.1.6**: `internal/publicsuffix` (вендоренная копия) удалён. `internal/domain` импортирует `golang.org/x/net/publicsuffix` напрямую как зависимость `go.mod`, через `replace` на `github.com/golang/net` (см. раздел 2). README переписан: без бейджей, без раздела статуса портирования, без абзаца про происхождение из bash.
-- **v1.1.5**: Caddy: `openPanelAccessCaddy`/`closePanelAccessCaddy` (`internal/managepanel`), `runInstallCaddy` (`internal/reinstall`). Задокументирован неисправленный баг апстрима: `close` после `open` на panel-only Caddy-инсталляции оставляет ссылку на неопределённую `CADDY_SOCKET_PATH`.
+- **v1.1.5**: Caddy: `openPanelAccessCaddy`/`closePanelAccessCaddy` (`internal/managepanel`), `runInstallCaddy` (`internal/reinstall`). Задокументирован неисправленный баг апстрима: `close` после `open` на panel-only Caddy-инсталляции оставляет ссылку на неопределённую `CADDY_SOCKET_PATH`. **Исправлено в v1.1.7.**
 - **v1.1.4**: `internal/caddypanelonly`/`internal/caddypanelfull` (установка панели без ноды / с нодой за Caddy), подключены в `internal/menu`. Для Caddy имена файлов совпадают с содержимым, для Nginx нет (см. раздел 4).
 - **v1.1.3**: `internal/caddynode` протестирован и сверен построчно с оригиналом `src/caddy/install_node.sh`.
 - **v1.1.2**: gzip-блок в `nginx.conf` во всех трёх nginx install-флоу (`nginxnode`, `panelonly`, `panelfull`).
