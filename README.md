@@ -71,8 +71,8 @@ Docker, `docker compose`, `certbot` и `ufw` ставить заранее не 
 Готовых бинарников и пакетов пока нет.
 
 ```bash
-git clone -b dev https://github.com/FlexEbat/Remnwave-Easy-Install.git
-cd Remnwave-Easy-Install
+git clone https://github.com/FlexEbat/RemnaForge.git
+cd RemnaForge
 go build -o remnaforge ./cmd/remnawave
 sudo mv remnaforge /usr/local/bin/
 ```
