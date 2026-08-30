@@ -8,22 +8,17 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
 
-// langFilePath mirrors LANG_FILE="${DIR_REMNAWAVE}selected_language"
-// (install_remnawave.sh:6). Duplicated as a local constant, the same
-// pattern internal/preflight and internal/uninstall use for
-// DIR_REMNAWAVE, to avoid a needless cross-package import for one path.
+// langFilePath is where the chosen interface language is persisted
+// across runs.
 const langFilePath = "/usr/local/remnawave_reverse/selected_language"
 
-// EnsureLanguageSelected is the Go equivalent of the top-level startup
-// sequence at install_remnawave.sh:2191-2200: load the saved language
-// choice, or ask for one and save it if none exists yet. Call this once
-// from main(), before showing the main menu.
+// EnsureLanguageSelected loads the saved language choice, or asks for
+// one and saves it if none exists yet. Call this once from main(),
+// before showing the main menu. An invalid saved value is treated as
+// corrupt: the file is removed and the user is prompted again.
 //
-// BUG FIX (not a 1:1 port): the original's interactive prompt calls
-// error() on an invalid choice, which exits the entire program over a
-// single mistyped key on first run. This re-prompts instead until it
-// gets a valid choice, matching how every other menu in this port
-// handles bad input.
+// An invalid interactive choice re-prompts instead of exiting the
+// program, so a single mistyped key on first run doesn't abort setup.
 func EnsureLanguageSelected() {
 	if lang, ok := loadSavedLanguage(); ok {
 		SetLanguage(lang)
@@ -32,11 +27,8 @@ func EnsureLanguageSelected() {
 	SetLanguage(promptLanguage())
 }
 
-// Original bash (install_remnawave.sh:17-30): load_language().
-// The original stores "1" or "2"; this port stores "en" or "ru" directly,
-// self-documenting instead of a magic digit. Any other content is
-// treated as corrupt, matching the original's self-healing behavior:
-// delete the file and fall through to prompting again.
+// loadSavedLanguage stores "en" or "ru" directly, self-documenting
+// instead of a magic digit.
 func loadSavedLanguage() (string, bool) {
 	data, err := os.ReadFile(langFilePath)
 	if err != nil {
@@ -52,9 +44,7 @@ func loadSavedLanguage() (string, bool) {
 	return "", false
 }
 
-// Original bash (install_remnawave.sh:39-45, 2192-2199): show_language()
-// plus the top-level prompt/case block that reads LANG_OPTION and saves
-// LANG_FILE.
+// promptLanguage shows the language picker and persists the choice.
 func promptLanguage() string {
 	for {
 		SetLanguage("en") // menu itself always renders in English until chosen

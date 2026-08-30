@@ -1,27 +1,18 @@
-// Package menu is a port of the top-level menu and dispatch logic in
-// install_remnawave.sh: show_menu() (lines 418-445), show_webserver_select()
-// (448-458), show_install_menu()/manage_install() (461-642), and the
-// top-level `case $OPTION in` block (2208-2313).
+// Package menu is the top-level menu and dispatch logic: the main menu,
+// the webserver-choice submenu, the install submenu, and routing a
+// chosen option to the package that handles it.
 //
-// Two deliberate departures from a literal 1:1 port, per project decision:
-//   - Branding (name/version/wiki link) is this fork's own, not the
-//     upstream project's (see version.go).
-//   - The main menu is data-driven (a []menuItem) instead of a hardcoded
-//     block of numbered fmt.Printf/case statements. Numbers are assigned
-//     by position, so adding/removing/reordering an entry (like dropping
-//     "Custom extensions by legiz" below) doesn't require renumbering
-//     every case label by hand and can't drift out of sync with the
-//     printed menu the way the bash version's parallel show_menu()/
-//     case-statement could.
+// The main menu is data-driven (a []menuItem) instead of a hardcoded
+// block of numbered fmt.Printf/case statements, so adding, removing, or
+// reordering an entry doesn't require renumbering every case label by
+// hand and can't drift out of sync with the printed menu.
 //
-// Scope for this port: as of 1.1.3 all three Caddy install flows
+// Scope for this project: as of v1.1.3 all three Caddy install flows
 // (node-only via internal/caddynode, panel-only via
 // internal/caddypanelonly, panel+node via internal/caddypanelfull) are
 // wired in below, alongside their Nginx counterparts. The WARP module is
-// still out of scope and stubbed. Everything else not yet ported
-// (manage_panel Caddy paths, selfsteal_templates, certificates, updater,
-// uninstaller, backup Caddy paths) is likewise stubbed and clearly
-// marked, so it's obvious what's real.
+// still out of scope and stubbed. See TECH.md for the current list of
+// what's implemented vs. stubbed.
 package menu
 
 import (
@@ -48,14 +39,13 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/uninstall"
 )
 
-// UpdateAvailable mirrors UPDATE_AVAILABLE=false (install_remnawave.sh:4).
-// check_update_status() (the code that flips this to true) isn't ported
-// yet, so it always reads false here.
+// UpdateAvailable is always false for now: the auto-update check that
+// would flip this to true isn't implemented yet (see TECH.md).
 var UpdateAvailable = false
 
-// menuItem is one entry of the main menu. newGroup mirrors the blank-line
-// grouping the original show_menu() hardcodes between lines 429/430,
-// 434/435 etc.
+// menuItem is one entry of the main menu. newGroup marks where a blank
+// line should print before this item, to visually group related menu
+// entries.
 type menuItem struct {
 	label    func() string // resolved at print time so language switches work
 	newGroup bool
@@ -95,7 +85,6 @@ var mainMenuItems = []menuItem{
 	{label: label("MENU_11"), action: func() bool { uninstall.RemoveScript(); return true }},
 }
 
-// Original bash (install_remnawave.sh:418-445): show_menu(), rebranded and
 // renumbered per mainMenuItems above.
 func showMenu() {
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, AppName, ui.ColorReset)
@@ -118,7 +107,6 @@ func showMenu() {
 	fmt.Println()
 }
 
-// Original bash (install_remnawave.sh:448-458): show_webserver_select().
 // Returns the chosen option string, same as reading WEBSERVER_OPTION.
 func showWebserverSelect() string {
 	fmt.Println()
@@ -132,7 +120,6 @@ func showWebserverSelect() string {
 	return ui.Reading(i18n.T("SELECT_WEBSERVER_PROMPT"))
 }
 
-// Original bash (install_remnawave.sh:461-473): show_install_menu().
 func showInstallMenu() {
 	fmt.Println()
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("INSTALL_MENU_TITLE"), ui.ColorReset)
@@ -150,7 +137,6 @@ func stub(label string) {
 	fmt.Printf("%s[%s] %s%s\n", ui.ColorGray, label, i18n.InDevelopment(), ui.ColorReset)
 }
 
-// Original bash (install_remnawave.sh:474-642): manage_install().
 func manageInstall() {
 	for {
 		showInstallMenu()
@@ -256,11 +242,9 @@ func manageInstall() {
 	}
 }
 
-// mainMenuPrompt fixes a staleness issue introduced by dropping an item:
-// the original PROMPT_ACTION string is hardcoded to say "(0-11)", which
-// would now be wrong since mainMenuItems only has 10 entries. Rebuilding
-// the "0-N" range from len(mainMenuItems) keeps it correct automatically,
-// no matter how many items the menu ends up with.
+// mainMenuPrompt builds the "0-N" range from len(mainMenuItems) rather
+// than hardcoding it, so it stays correct automatically no matter how
+// many items the menu ends up with.
 func mainMenuPrompt() string {
 	base := i18n.T("PROMPT_ACTION")
 	if idx := strings.LastIndex(base, "0-"); idx != -1 {
@@ -271,8 +255,8 @@ func mainMenuPrompt() string {
 	return base
 }
 
-// Run is the Go equivalent of the top-level script body (install_remnawave.sh:
-// 2202-2313): show_menu, read OPTION, dispatch against mainMenuItems.
+// Run shows the main menu, reads a choice, and dispatches against
+// mainMenuItems, looping until the user exits.
 func Run() {
 	for {
 		showMenu()

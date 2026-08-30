@@ -1,9 +1,5 @@
-// Package api is a port of src/api/remnawave_api.sh (489 lines): all the
-// functions that talk to the Remnawave panel's HTTP API. The bash version
-// shells out to curl for requests and jq for JSON parsing; here that
-// becomes net/http + encoding/json. Function names, parameter order, and
-// control flow stay one-for-one with the original, including places
-// where it prints an error but keeps going instead of returning early.
+// Package api holds all the functions that talk to the Remnawave
+// panel's HTTP API over net/http, with JSON handled by encoding/json.
 package api
 
 import (
@@ -20,42 +16,24 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
 
-// DirRemnawave mirrors DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
-// (install_remnawave.sh:5).
+// DirRemnawave is this tool's own config/state directory.
 var DirRemnawave = "/usr/local/remnawave_reverse/"
 
-// PanelDomain mirrors the $PANEL_DOMAIN global set during panel install,
-// used by get_panel_token()'s CREATE_API_TOKEN_INSTRUCTION message
-// (src/api/remnawave_api.sh:84).
+// PanelDomain is the panel domain set during panel install, used by
+// GetPanelToken's create-API-token instructions.
 var PanelDomain string
 
 var uuidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// httpClient is reused across requests (curl was invoked fresh each time
-// in bash; here one client is enough and more efficient).
+// httpClient is reused across requests rather than constructed fresh
+// each time.
 var httpClient = &http.Client{}
 
-// Original bash (src/api/remnawave_api.sh:4-23):
-//
-//	make_api_request() {
-//	    local method=$1 url=$2 token=$3 data=$4
-//	    local headers=(
-//	        -H "Authorization: Bearer $token"
-//	        -H "Content-Type: application/json"
-//	        -H "X-Forwarded-For: ${url#http://}"
-//	        -H "X-Forwarded-Proto: https"
-//	        -H "X-Remnawave-Client-Type: browser"
-//	    )
-//	    if [ -n "$data" ]; then
-//	        curl -s -X "$method" "$url" "${headers[@]}" -d "$data"
-//	    else
-//	        curl -s -X "$method" "$url" "${headers[@]}"
-//	    fi
-//	}
-//
-// Returns the raw response body, matching the bash version's stdout
-// capture. Callers parse the JSON themselves, mirroring how bash callers
-// pipe the result into jq.
+// MakeAPIRequest sends an HTTP request to the panel's API with the
+// standard set of headers (bearer token, content type, and the
+// X-Forwarded-*/X-Remnawave-Client-Type headers the panel expects from
+// a browser-originated request) and returns the raw response body.
+// Callers parse the JSON themselves.
 func MakeAPIRequest(method, url, token, data string) []byte {
 	_, body := makeAPIRequestWithStatus(method, url, token, data)
 	return body
@@ -98,20 +76,8 @@ func makeAPIRequestWithStatus(method, url, token, data string) (statusCode int, 
 	return resp.StatusCode, respBody
 }
 
-// Original bash (src/api/remnawave_api.sh:26-42):
-//
-//	register_remnawave() {
-//	    local domain_url=$1 username=$2 password=$3 token=$4
-//	    local register_data='{"username":"'"$username"'","password":"'"$password"'"}'
-//	    local register_response=$(make_api_request "POST" "http://$domain_url/api/auth/register" "$token" "$register_data")
-//	    if [ -z "$register_response" ]; then
-//	        echo -e "${COLOR_RED}${LANG[ERROR_EMPTY_RESPONSE_REGISTER]}${COLOR_RESET}"
-//	    elif [[ "$register_response" == *"accessToken"* ]]; then
-//	        echo "$register_response" | jq -r '.response.accessToken'
-//	    else
-//	        echo -e "${COLOR_RED}${LANG[ERROR_REGISTER]}: $register_response${COLOR_RESET}"
-//	    fi
-//	}
+// RegisterRemnawave registers the initial superadmin account on a
+// freshly installed panel.
 func RegisterRemnawave(domainURL, username, password, token string) string {
 	registerData := fmt.Sprintf(`{"username":"%s","password":"%s"}`, username, password)
 	resp := MakeAPIRequest("POST", "http://"+domainURL+"/api/auth/register", token, registerData)
@@ -133,7 +99,6 @@ func RegisterRemnawave(domainURL, username, password, token string) string {
 	return ""
 }
 
-// Original bash (src/api/remnawave_api.sh:44-119): get_panel_token().
 // See inline comments below for the line-by-line mapping; this is the
 // longest/most stateful function in the module.
 func GetPanelToken() (string, error) {
@@ -266,20 +231,16 @@ func isUnauthorizedMessage(resp []byte) bool {
 	return strings.Contains(strings.ToLower(parsed.Message), "unauthorized")
 }
 
-// Original bash (src/api/remnawave_api.sh:121-140):
+// GetPublicKey fetches the node's public key from the panel API and
+// substitutes it into the node's docker-compose.yml, replacing the
+// placeholder SECRET_KEY value written at file-creation time.
 //
-//	get_public_key() {
-//	    ...
-//	    sed -i "s|SECRET_KEY=\"PUBLIC KEY FROM REMNAWAVE-PANEL\"|SECRET_KEY=\"$pubkey\"|g" "$target_dir/docker-compose.yml"
-//	    echo -e "${COLOR_GREEN}${LANG[PUBLIC_KEY_SUCCESS]}${COLOR_RESET}"
-//	}
+// This does not stop on error: it prints the error and falls through to
+// attempt the file edit regardless, matching every other error-reporting
+// step in this package.
 //
-// NOTE: like the original, this does not stop on error. It prints the
-// error and falls through to attempt the sed/file edit regardless.
-//
-// BUG FIX (not in the original bash, introduced by a panel update, not
-// this port): Remnawave Panel v3.2.0 renamed the /api/keygen response
-// field from response.pubKey to response.secretKey.
+// FIXED: Remnawave Panel v3.2.0 renamed the /api/keygen response field
+// from response.pubKey to response.secretKey.
 func GetPublicKey(domainURL, token, targetDir string) {
 	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/keygen", token, "")
 	if len(resp) == 0 {
@@ -304,7 +265,6 @@ func GetPublicKey(domainURL, token, targetDir string) {
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("PUBLIC_KEY_SUCCESS"), ui.ColorReset)
 }
 
-// Original bash (src/api/remnawave_api.sh:142-165): generate_xray_keys().
 func GenerateXrayKeys(domainURL, token string) string {
 	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/system/tools/x25519/generate", token, "")
 	if len(resp) == 0 {
@@ -341,7 +301,6 @@ func GenerateXrayKeys(domainURL, token string) string {
 	return privateKey
 }
 
-// Original bash (src/api/remnawave_api.sh:167-191): check_node_domain().
 func CheckNodeDomain(domainURL, token, domain string) error {
 	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/nodes", token, "")
 	if len(resp) == 0 {
@@ -376,7 +335,6 @@ func CheckNodeDomain(domainURL, token, domain string) error {
 	return nil
 }
 
-// Original bash (src/api/remnawave_api.sh:193-232): create_node().
 func CreateNode(domainURL, token, configProfileUUID, inboundUUID string, nodeAddress, nodeName string) {
 	if nodeAddress == "" {
 		nodeAddress = "172.30.0.1"
@@ -420,7 +378,6 @@ func CreateNode(domainURL, token, configProfileUUID, inboundUUID string, nodeAdd
 	}
 }
 
-// Original bash (src/api/remnawave_api.sh:234-252): get_config_profiles().
 func GetConfigProfiles(domainURL, token string) (string, error) {
 	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/config-profiles", token, "")
 	if len(resp) == 0 || !json.Valid(resp) {
@@ -447,15 +404,12 @@ func GetConfigProfiles(domainURL, token string) (string, error) {
 	return "", nil
 }
 
-// Original bash (src/api/remnawave_api.sh:254-273): delete_config_profile().
-//
-// BUG FIX (not in the original bash, introduced by a panel update, not
-// this port): before Remnawave Panel v3.2.0, a successful DELETE
-// returned 200 with a JSON body, and an empty response body reliably
-// meant failure. Since v3.2.0, a successful DELETE returns 204 No
-// Content with an empty body instead, so checking len(resp) == 0 for
-// failure now misreports every successful deletion as an error. This
-// checks the actual HTTP status code instead.
+// FIXED: before Remnawave Panel v3.2.0, a successful DELETE returned
+// 200 with a JSON body, and an empty response body reliably meant
+// failure. Since v3.2.0, a successful DELETE returns 204 No Content
+// with an empty body instead, so checking len(resp) == 0 for failure
+// now misreports every successful deletion as an error. This checks
+// the actual HTTP status code instead.
 func DeleteConfigProfile(domainURL, token, profileUUID string) error {
 	if profileUUID == "" {
 		uuid, err := GetConfigProfiles(domainURL, token)
@@ -473,7 +427,6 @@ func DeleteConfigProfile(domainURL, token, profileUUID string) error {
 	return nil
 }
 
-// Original bash (src/api/remnawave_api.sh:275-338): create_config_profile().
 func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag string) (string, string) {
 	if inboundTag == "" {
 		inboundTag = "Steal"
@@ -553,7 +506,6 @@ func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag 
 	return configUUID, inboundUUID
 }
 
-// Original bash (src/api/remnawave_api.sh:340-377): create_host().
 func CreateHost(domainURL, token, inboundUUID, address, configUUID, hostRemark string) {
 	if hostRemark == "" {
 		hostRemark = "Steal"
@@ -595,9 +547,8 @@ func CreateHost(domainURL, token, inboundUUID, address, configUUID, hostRemark s
 	}
 }
 
-// Original bash (src/api/remnawave_api.sh:379-414): get_default_squad().
 // Returns the list of valid squad UUIDs, filtering out anything that
-// doesn't look like a UUID exactly like the original's regex check.
+// doesn't look like a UUID.
 func GetDefaultSquad(domainURL, token string) ([]string, error) {
 	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/internal-squads", token, "")
 
@@ -638,7 +589,6 @@ func GetDefaultSquad(domainURL, token string) ([]string, error) {
 	return valid, nil
 }
 
-// Original bash (src/api/remnawave_api.sh:416-459): update_squad().
 func UpdateSquad(domainURL, token, squadUUID, inboundUUID string) error {
 	if !uuidRE.MatchString(squadUUID) {
 		fmt.Printf("%s%s: %s%s\n", ui.ColorRed, i18n.T("INVALID_SQUAD_UUID"), squadUUID, ui.ColorReset)
@@ -701,7 +651,6 @@ func UpdateSquad(domainURL, token, squadUUID, inboundUUID string) error {
 	return nil
 }
 
-// Original bash (src/api/remnawave_api.sh:461-489): create_api_token().
 func CreateAPIToken(domainURL, token, targetDir, tokenName string) error {
 	if tokenName == "" {
 		tokenName = "subscription-page"

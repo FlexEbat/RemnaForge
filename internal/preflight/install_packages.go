@@ -13,15 +13,15 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
 
-// dirRemnawave mirrors DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
-// (install_remnawave.sh:5). Duplicated here (rather than importing
-// internal/api, which also has this constant) to avoid a needless
-// cross-package dependency for a single path string.
+// dirRemnawave holds this tool's own config/state directory. Duplicated
+// here (rather than importing internal/api, which also has this
+// constant) to avoid a needless cross-package dependency for a single
+// path string.
 const dirRemnawave = "/usr/local/remnawave_reverse/"
 
 const installMarker = dirRemnawave + "install_packages"
 
-// aptPackages mirrors the package list at install_remnawave.sh:1237.
+// aptPackages is the list of apt packages every install flow needs.
 var aptPackages = []string{
 	"ca-certificates", "curl", "jq", "ufw", "wget", "gnupg", "unzip", "nano",
 	"dialog", "git", "certbot", "python3-certbot-dns-cloudflare",
@@ -29,19 +29,11 @@ var aptPackages = []string{
 	"gawk", "python3-pip",
 }
 
-// EnsureInstalled is the Go equivalent of the guard repeated before every
-// install flow in the original, e.g. (install_remnawave.sh:500-501):
-//
-//	if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker ... || ! command -v certbot ...; then
-//	    install_packages || { ...; return; }
-//	fi
-//
-// The original has several slightly different variants of this guard
-// (some check certbot, some don't, depending on which install flow calls
-// it). This port uses one unified check that requires the marker file,
-// working docker, and certbot together, since every real install flow
-// in this port ends up needing certbot anyway (see internal/certs).
-// Every flow benefits from the stronger guarantee.
+// EnsureInstalled guards every install flow's dependency on
+// packages/docker/certbot with one unified check that requires the
+// marker file, working docker, and certbot together, since every real
+// install flow in this project ends up needing certbot anyway (see
+// internal/certs). Every flow benefits from the stronger guarantee.
 func EnsureInstalled() error {
 	if packagesAlreadySatisfied() {
 		return nil
@@ -65,24 +57,23 @@ func packagesAlreadySatisfied() bool {
 	return true
 }
 
-// Original bash (install_remnawave.sh:1229-1326): install_packages().
-// Inline comments mark the corresponding original line ranges.
+// InstallPackages bootstraps every dependency this project needs on a
+// fresh server: apt packages, cron, Docker, BBR, baseline UFW rules,
+// and unattended-upgrades.
 func InstallPackages() error {
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("INSTALL_PACKAGES"), ui.ColorReset)
 
-	// Lines 1232-1235.
 	if err := run("apt-get", "update", "-y"); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_UPDATE_LIST"), ui.ColorReset)
 		return err
 	}
 
-	// Lines 1237-1240.
 	if err := run("apt-get", append([]string{"install", "-y"}, aptPackages...)...); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_INSTALL_PACKAGES"), ui.ColorReset)
 		return err
 	}
 
-	// Lines 1242-1247: cron package.
+	// Cron package.
 	if !dpkgInstalled("cron") {
 		if err := run("apt-get", "install", "-y", "cron"); err != nil {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_INSTALL_CRON"), ui.ColorReset)
@@ -90,7 +81,7 @@ func InstallPackages() error {
 		}
 	}
 
-	// Lines 1249-1260: cron service active + enabled.
+	// Cron service active + enabled.
 	if !systemdActive("cron") {
 		if err := run("systemctl", "start", "cron"); err != nil {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("START_CRON_ERROR"), ui.ColorReset)
@@ -104,15 +95,15 @@ func InstallPackages() error {
 		}
 	}
 
-	// Lines 1262-1298: Docker.
+	// Docker.
 	if err := ensureDocker(); err != nil {
 		return err
 	}
 
-	// Lines 1300-1307: BBR congestion control.
+	// BBR congestion control.
 	enableBBR()
 
-	// Lines 1309-1313: UFW baseline rules.
+	// UFW baseline rules.
 	if err := run("ufw", "allow", "22/tcp", "comment", "SSH"); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CONFIGURE_UFW"), ui.ColorReset)
 		return err
@@ -126,13 +117,12 @@ func InstallPackages() error {
 		return err
 	}
 
-	// Lines 1315-1321: unattended-upgrades.
+	// Unattended-upgrades.
 	if err := configureUnattendedUpgrades(); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CONFIGURE_UPGRADES"), ui.ColorReset)
 		return err
 	}
 
-	// Lines 1323-1325.
 	if err := os.MkdirAll(dirRemnawave, 0755); err == nil {
 		_ = os.WriteFile(installMarker, nil, 0644)
 	}
@@ -170,12 +160,10 @@ func systemdEnabled(unit string) bool {
 	return exec.Command("systemctl", "is-enabled", "--quiet", unit).Run() == nil
 }
 
-// ensureDocker is the Go equivalent of install_remnawave.sh:1262-1298.
-// BUG FIX (not a 1:1 port): the original downloads get.docker.com's
-// install script to /tmp/get-docker.sh with curl, then runs `sh` on that
-// file. Here the script streams from net/http directly into `sh`'s
-// stdin, so nothing touches disk and there's no leftover
-// /tmp/get-docker.sh file to clean up.
+// ensureDocker installs Docker via get.docker.com's install script,
+// streamed from net/http directly into `sh`'s stdin rather than being
+// written to a temp file first, so nothing touches disk and there's no
+// leftover script file to clean up.
 func ensureDocker() error {
 	dockerOK := func() bool {
 		if _, err := exec.LookPath("docker"); err != nil {
@@ -236,8 +224,10 @@ func ensureDocker() error {
 	return nil
 }
 
-// enableBBR is the Go equivalent of install_remnawave.sh:1300-1307
-// (best-effort, matching the original's lack of error handling here).
+// enableBBR enables the BBR congestion-control algorithm, best-effort:
+// errors from the underlying commands are intentionally ignored, since
+// this is a nice-to-have network tuning step, not something worth
+// failing the whole install over.
 func enableBBR() {
 	const sysctlConf = "/etc/sysctl.conf"
 	data, _ := os.ReadFile(sysctlConf)
@@ -258,8 +248,8 @@ func enableBBR() {
 	_ = exec.Command("sysctl", "-p").Run()
 }
 
-// configureUnattendedUpgrades is the Go equivalent of
-// install_remnawave.sh:1315-1321.
+// configureUnattendedUpgrades turns on unattended security upgrades and
+// mail-on-upgrade notifications to root.
 func configureUnattendedUpgrades() error {
 	const confPath = "/etc/apt/apt.conf.d/50unattended-upgrades"
 	f, err := os.OpenFile(confPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)

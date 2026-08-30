@@ -1,8 +1,8 @@
-// Package managepanel is a port of src/modules/manage_panel.sh (467
-// lines): start/stop/update the panel or node stack, tail logs, run the
-// remnawave CLI, and temporarily open/close the panel on port 8443. The
-// open/close_panel_access Caddy branches are ported alongside their
-// Nginx counterparts, in internal/managepanel/access.go.
+// Package managepanel handles start/stop/update of the panel or node
+// stack, tailing logs, running the remnawave CLI, and temporarily
+// opening/closing the panel on port 8443. The Caddy branches of
+// opening/closing panel access live alongside their Nginx counterparts
+// in internal/managepanel/access.go.
 package managepanel
 
 import (
@@ -17,11 +17,8 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
 
-// findInstallDir is the Go equivalent of the repeated:
-//
-//	if [ -d "/opt/remnawave" ]; then dir="/opt/remnawave"
-//	elif [ -d "/opt/remnanode" ]; then dir="/opt/remnanode"
-//	else error DIR_NOT_FOUND; fi
+// findInstallDir returns whichever of /opt/remnawave or /opt/remnanode
+// exists.
 func findInstallDir() (string, bool) {
 	for _, d := range []string{"/opt/remnawave", "/opt/remnanode"} {
 		if info, err := os.Stat(d); err == nil && info.IsDir() {
@@ -32,15 +29,14 @@ func findInstallDir() (string, bool) {
 	return "", false
 }
 
-// dockerImageRunning is the Go equivalent of:
-//
-//	docker ps -q --filter "ancestor=$image" | grep -q .
+// dockerImageRunning reports whether any running container was started
+// from image.
 func dockerImageRunning(image string) bool {
 	out, err := exec.Command("docker", "ps", "-q", "--filter", "ancestor="+image).Output()
 	return err == nil && strings.TrimSpace(string(out)) != ""
 }
 
-// anyPanelOrNodeRunning checks all three images the original checks:
+// anyPanelOrNodeRunning checks the three known panel/node image tags:
 // remnawave/backend:latest, remnawave/node:latest, remnawave/backend:2.
 func anyPanelOrNodeRunning() bool {
 	for _, img := range []string{"remnawave/backend:latest", "remnawave/node:latest", "remnawave/backend:2"} {
@@ -57,8 +53,7 @@ func composeRun(dir string, args ...string) error {
 	return cmd.Run()
 }
 
-// Original bash (install_remnawave.sh's show_manage_panel_menu, lines
-// 4-65): the menu loop. Recursion in bash is a redraw-the-menu loop here.
+// ManagePanel is the top-level menu loop for this package.
 func ManagePanel() {
 	for {
 		fmt.Println()
@@ -98,7 +93,6 @@ func ManagePanel() {
 	}
 }
 
-// Original bash (install_remnawave.sh:67-86): run_remnawave_cli().
 // Go doesn't need the fd-juggling (`exec 3>&1 4>&2; exec > /dev/tty`) bash
 // uses to get an interactive TTY through a subshell. Wiring the child's
 // stdio directly to our own os.Std{in,out,err} gives the same interactive
@@ -135,7 +129,6 @@ func dockerContainerRunning(name string) bool {
 	return false
 }
 
-// Original bash (install_remnawave.sh:88-110): start_panel_node().
 func startPanelNode() {
 	dir, ok := findInstallDir()
 	if !ok {
@@ -154,7 +147,6 @@ func startPanelNode() {
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("PANEL_RUN"), ui.ColorReset)
 }
 
-// Original bash (install_remnawave.sh:112-133): stop_panel_node().
 func stopPanelNode() {
 	dir, ok := findInstallDir()
 	if !ok {
@@ -173,9 +165,8 @@ func stopPanelNode() {
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("PANEL_STOP"), ui.ColorReset)
 }
 
-// composeImageIDs is the Go equivalent of:
-//
-//	docker compose config --images | sort -u | xargs -I {} docker images -q {} | sort -u
+// composeImageIDs returns the deduplicated, sorted image IDs backing
+// this compose project's services.
 func composeImageIDs(dir string) string {
 	cmd := exec.Command("docker", "compose", "config", "--images")
 	cmd.Dir = dir
@@ -215,7 +206,6 @@ func uniqueSortedLines(s string) []string {
 	return out
 }
 
-// Original bash (install_remnawave.sh:135-184): update_panel_node().
 func updatePanelNode() {
 	dir, ok := findInstallDir()
 	if !ok {
@@ -248,7 +238,6 @@ func updatePanelNode() {
 	}
 }
 
-// Original bash (install_remnawave.sh:186-206): view_logs().
 func viewLogs() {
 	dir, ok := findInstallDir()
 	if !ok {

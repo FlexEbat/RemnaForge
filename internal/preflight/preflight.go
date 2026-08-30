@@ -2,17 +2,10 @@
 // EnsureInstalled/InstallPackages, the actual dependency bootstrap that
 // install flows run before doing real work.
 //
-// CheckDocker/CheckCertbot started out as preflight-only checks for a gap
-// in the original bash script: its install flows never checked docker at
-// all (they ran `docker compose up -d` and let it fail silently, showing
-// up ~5 minutes later as a "containers not ready" timeout), and checked
-// for certbot only reactively inside the "Manage Certificates" menu, not
-// before the install flows that also need it. install_packages.go (a full
-// port of install_packages(), install_remnawave.sh:1229-1326) closes that
-// gap: install flows now call EnsureInstalled(), which auto-bootstraps
-// docker/certbot/ufw/cron/unattended-upgrades/BBR when missing. This
-// matches the original's actual behavior, which always auto-installs a
-// missing dependency instead of just reporting it.
+// install_packages.go auto-bootstraps docker/certbot/ufw/cron/
+// unattended-upgrades/BBR when missing, so an install flow's later
+// `docker compose up -d` doesn't fail silently on a fresh server and
+// only surface as a "containers not ready" timeout minutes later.
 // CheckDocker/CheckCertbot remain as standalone checks for callers that
 // only need to verify state (the "Manage Certificates" menu should not
 // reinstall the world just to check a certificate).

@@ -29,9 +29,10 @@ func isWordByte(c byte) bool {
 // hand-indents the closing brace, or writes "server{" / "server  {").
 //
 // This isn't a full nginx config parser (no comment/string-literal
-// awareness), but it's a meaningful robustness improvement over the
-// literal-string matching used previously, for the same reason the
-// original bash's sed/grep pipeline had this exact fragility.
+// awareness), but it's a meaningful robustness improvement over plain
+// literal-string matching, which breaks the moment a hand-edited
+// nginx.conf uses different indentation or spacing than what this tool
+// itself generates.
 func findTopLevelBlocks(conf, keyword string) []nginxBlock {
 	var blocks []nginxBlock
 	depth := 0
