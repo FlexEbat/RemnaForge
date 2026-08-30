@@ -1,6 +1,6 @@
-// Package caddynode is a port of src/caddy/install_node.sh (179 lines):
-// installs a standalone Remnawave node behind Caddy (selfsteal reverse
-// proxy on a Unix socket, remnanode container alongside it).
+// Package caddynode installs a standalone Remnawave node behind Caddy
+// (selfsteal reverse proxy on a Unix socket, remnanode container
+// alongside it).
 //
 // Unlike internal/nginxnode, this doesn't call internal/certs at all.
 // Caddy issues and renews its own TLS certificate automatically via its
@@ -30,8 +30,7 @@ const nodeDir = "/opt/remnanode"
 
 var ipv4RE = regexp.MustCompile(`^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$`)
 
-// dockerComposeTemplate mirrors src/caddy/install_node.sh:52-109 exactly,
-// aside from Go's %s substitutions in place of bash's $VAR interpolation.
+// dockerComposeTemplate is the node's docker-compose.yml.
 const dockerComposeTemplate = `x-common: &common
   ulimits:
     nofile:
@@ -90,7 +89,7 @@ volumes:
     external: false
 `
 
-// caddyfileTemplate mirrors src/caddy/install_node.sh:111-139 verbatim.
+// caddyfileTemplate is the node's Caddyfile.
 // {$SELF_STEAL_DOMAIN} and {$CADDY_SOCKET_PATH} are Caddy's own
 // environment-variable placeholders, resolved by Caddy itself at runtime
 // from the container's environment (set in dockerComposeTemplate above),
@@ -125,16 +124,14 @@ https://{$SELF_STEAL_DOMAIN} {
 }
 `
 
-// nodeState carries values threaded between install_node_caddy() and
-// installation_node_caddy() in the original (SELFSTEAL_DOMAIN, PANEL_IP,
-// CERTIFICATE are all globals there).
+// nodeState carries the values gathered while prompting the user
+// through to where the docker-compose.yml/Caddyfile are written.
 type nodeState struct {
 	selfstealDomain string
 	panelIP         string
 	certificate     string // joined with real newlines, see readCertificate()
 }
 
-// Original bash (src/caddy/install_node.sh:4-140): install_node_caddy().
 func installNodeCaddy() (*nodeState, error) {
 	if err := os.MkdirAll(nodeDir, 0755); err != nil {
 		return nil, err
@@ -181,8 +178,7 @@ func installNodeCaddy() (*nodeState, error) {
 	}, nil
 }
 
-// isValidIPv4 is the Go equivalent of the four chained checks at
-// src/caddy/install_node.sh:21-24 (regex shape + each octet 0-255).
+// isValidIPv4 checks the regex shape plus that each octet is <= 255.
 // Duplicated from internal/nginxnode rather than shared, the same
 // pattern DirRemnawave duplication follows elsewhere in this codebase.
 func isValidIPv4(s string) bool {
@@ -202,11 +198,9 @@ func isValidIPv4(s string) bool {
 	return true
 }
 
-// readCertificate is the Go equivalent of src/caddy/install_node.sh:31-41:
-// read pasted multi-line certificate/key content until a blank line
-// following non-blank content. Lines join with real newlines here. The
-// original joins with the literal two characters "\n" and resolves them
-// to real newlines later via `echo -e`, producing the same result.
+// readCertificate reads pasted multi-line certificate/key content until
+// a blank line following non-blank content, joining lines with real
+// newlines.
 func readCertificate() string {
 	fmt.Print(ui.Question(i18n.T("CERT_PROMPT")))
 	scanner := bufio.NewScanner(os.Stdin)
@@ -225,14 +219,13 @@ func readCertificate() string {
 	return strings.Join(lines, "\n")
 }
 
-// InstallationNode is the Go equivalent of
-// src/caddy/install_node.sh:142-180: installation_node_caddy().
+// InstallationNode installs a standalone Caddy-fronted node.
 func InstallationNode() error {
 	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
-	// if missing, matching the original's auto-install behavior instead
-	// of only reporting the problem. certbot itself is unused by the
-	// Caddy flow, but ufw and docker are needed the same as everywhere
-	// else, so this still runs.
+	// if missing, so this doesn't just fail deep inside a later step with
+	// a confusing error. certbot itself is unused by the Caddy flow, but
+	// ufw and docker are needed the same as everywhere else, so this
+	// still runs.
 	if err := preflight.EnsureInstalled(); err != nil {
 		return err
 	}
@@ -244,12 +237,13 @@ func InstallationNode() error {
 		return err
 	}
 
-	// Lines 146-148: ufw (best-effort, matching the original's suppressed errors).
+	// Ufw (best-effort: this is a nice-to-have hardening step, not worth
+	// failing the whole install over).
 	_ = exec.Command("ufw", "allow", "80/tcp", "comment", "HTTP").Run()
 	_ = exec.Command("ufw", "allow", "from", state.panelIP, "to", "any", "port", "2222").Run()
 	_ = exec.Command("ufw", "reload").Run()
 
-	// Lines 150-155: bring the stack up.
+	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_NODE"), ui.ColorReset)
 	time.Sleep(3 * time.Second)
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
@@ -257,12 +251,12 @@ func InstallationNode() error {
 	upCmd.Dir = nodeDir
 	_ = upCmd.Run()
 
-	// Line 157: install a random selfsteal template.
+	// Install a random selfsteal template.
 	if err := selfsteal.RandomHTML(""); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 	}
 
-	// Lines 159-179: poll the node over HTTPS until it responds.
+	// Poll the node over HTTPS until it responds.
 	fmt.Printf(ui.ColorYellow+i18n.T("NODE_CHECK")+ui.ColorReset+"\n", state.selfstealDomain)
 	const maxAttempts = 5
 	const delay = 15 * time.Second

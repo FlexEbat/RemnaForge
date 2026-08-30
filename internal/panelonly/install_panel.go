@@ -1,16 +1,8 @@
-// Package panelonly is a port of src/nginx/install_panel_node.sh
-// (538 lines). Despite the filename, this file's own header comment says
-// "Module: Install Panel Only" and its function is install_panel_nginx().
-// It installs the Remnawave panel alone: it registers a node config
-// profile and host for a selfsteal domain that runs on a separate server
-// via the standalone install_node flow, not a co-located node.
-// The real "panel + node on one server" installer lives in
-// src/nginx/install_panel.sh (function install_panel_node_nginx(),
-// header comment "Module: Install Panel + Node"), ported separately as
-// internal/panelfull. The original project's filenames and their header
-// comments and contents are swapped relative to each other. Go package
-// names here describe what each package does instead of repeating that
-// mislabeling.
+// Package panelonly installs the Remnawave panel alone: it registers a
+// node config profile and host for a selfsteal domain that runs on a
+// separate server via the standalone install_node flow, not a
+// co-located node. The "panel + node on one server" installer is
+// internal/panelfull.
 package panelonly
 
 import (
@@ -32,8 +24,8 @@ import (
 
 const panelDir = "/opt/remnawave"
 
-// panelState carries values threaded between install_panel_nginx() and
-// installation_panel() in the original (all globals there).
+// panelState carries the values gathered while prompting the user
+// through to where docker-compose.yml/.env/nginx.conf are written.
 type panelState struct {
 	panelDomain     string
 	subDomain       string
@@ -49,9 +41,9 @@ type panelState struct {
 	appSecret       string
 }
 
-// dockerComposeHead is the first heredoc from install_panel_nginx()
-// (src/nginx/install_panel_node.sh:149-244): everything up to and
-// including the remnawave-nginx service's still-open volumes: list.
+// dockerComposeHead is the first half of docker-compose.yml: everything
+// up to and including the remnawave-nginx service's still-open
+// volumes: list.
 const dockerComposeHead = `x-common: &common
   ulimits:
     nofile:
@@ -148,9 +140,7 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 `
 
-// dotEnvTemplate is install_panel_nginx()'s first heredoc, the .env file
-// (src/nginx/install_panel_node.sh:48-147), verbatim aside from Go's %s
-// substitutions in place of bash's $VAR interpolation.
+// dotEnvTemplate is the panel's .env file.
 const dotEnvTemplate = `### APP ###
 APP_PORT=3000
 METRICS_PORT=3001
@@ -209,7 +199,6 @@ POSTGRES_PASSWORD=postgres
 POSTGRES_DB=postgres
 `
 
-// Original bash (src/nginx/install_panel_node.sh:4-245): install_panel_nginx().
 func installPanelNginx() (*panelState, error) {
 	if err := os.MkdirAll(panelDir, 0755); err != nil {
 		return nil, err
@@ -265,8 +254,7 @@ func installPanelNginx() (*panelState, error) {
 	return state, nil
 }
 
-// nginxConfTemplate is install_panel_node.sh's second heredoc
-// (src/nginx/install_panel_node.sh:313-443).
+// nginxConfTemplate is the panel's nginx.conf.
 const nginxConfTemplate = `server_names_hash_bucket_size 64;
 
 # Gzip Compression
@@ -420,15 +408,10 @@ server {
 }
 `
 
-// Original bash (src/nginx/install_panel_node.sh:247-538): installation_panel().
 func InstallationPanelOnly() error {
-	// Original bash guard, e.g. install_remnawave.sh:500-501:
-	//   if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker ... ; then
-	//       install_packages || { ...; return; }
-	//   fi
 	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
-	// if missing, matching the original's auto-install behavior instead
-	// of only reporting the problem.
+	// if missing, so this doesn't just fail deep inside a later step with
+	// a confusing error.
 	if err := preflight.EnsureInstalled(); err != nil {
 		return err
 	}
@@ -441,12 +424,12 @@ func InstallationPanelOnly() error {
 		return err
 	}
 
-	// Lines 254-267: handle_certificates() and method resolution. As with
-	// nginxnode, this uses the real method HandleCertificates reports
-	// instead of the original's dead "if CERT_METHOD is empty"
-	// re-derivation, which compensates for a bash-scoping quirk rather
-	// than an intentional design choice (see nginxnode for the full
-	// explanation).
+	// certs.HandleCertificates returns the actual method it used
+	// (wildcard vs per-domain), which is what determines whether the
+	// cert-domain fields below should be the base domain or the full
+	// domain - using that returned value directly instead of
+	// re-deriving it from scratch avoids the two ever disagreeing (see
+	// internal/nginxnode for a fuller walkthrough of the same pattern).
 	certResult, certErr := certs.HandleCertificates(
 		[]string{state.panelDomain, state.subDomain}, "", "", panelDir)
 	if certErr != nil {
@@ -454,7 +437,6 @@ func InstallationPanelOnly() error {
 	}
 	certMethod := certResult.Method
 
-	// Lines 269-277.
 	var panelCertDomain, subCertDomain string
 	if certMethod == "1" {
 		panelCertDomain = state.panelBaseDomain
@@ -464,7 +446,7 @@ func InstallationPanelOnly() error {
 		subCertDomain = state.subDomain
 	}
 
-	// Lines 279-311: append the subscription-page service + networks/volumes.
+	// Append the subscription-page service + networks/volumes.
 	composeTail := `
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
@@ -503,7 +485,7 @@ volumes:
 		return err
 	}
 
-	// Lines 313-443: nginx.conf.
+	// Nginx.conf.
 	nginxConf := fmt.Sprintf(nginxConfTemplate,
 		state.cookiesRandom1, state.cookiesRandom2,
 		state.panelDomain, panelCertDomain,
@@ -513,7 +495,7 @@ volumes:
 		return err
 	}
 
-	// Lines 445-450: bring the stack up.
+	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	upCmd := exec.Command("docker", "compose", "up", "-d")
@@ -525,11 +507,10 @@ volumes:
 	targetDir := panelDir
 	api.PanelDomain = state.panelDomain
 
-	// Lines 455-456.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("REGISTERING_REMNAWAVE"), ui.ColorReset)
 	time.Sleep(20 * time.Second)
 
-	// Lines 458-471: wait for the panel API to answer.
+	// Wait for the panel API to answer.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CHECK_CONTAINERS"), ui.ColorReset)
 	const maxAttempts = 5
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -555,33 +536,33 @@ volumes:
 		attempt++
 	}
 
-	// Line 474: register the superadmin account.
+	// Register the superadmin account.
 	token := api.RegisterRemnawave(domainURL, state.superadminUser, state.superadminPass, "")
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("REGISTRATION_SUCCESS"), ui.ColorReset)
 
-	// Lines 478-481: generate xray keys.
+	// Generate xray keys.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GENERATE_KEYS"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	privateKey := api.GenerateXrayKeys(domainURL, token)
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GENERATE_KEYS_SUCCESS"), ui.ColorReset)
 
-	// Line 484: delete the default config profile.
+	// Delete the default config profile.
 	_ = api.DeleteConfigProfile(domainURL, token, "")
 
-	// Lines 487-489: create our own config profile.
+	// Create our own config profile.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
 	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, "")
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
-	// Lines 492-493: create the node.
+	// Create the node.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_NODE"), ui.ColorReset)
 	api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, state.selfstealDomain, "")
 
-	// Lines 496-497: create the host.
+	// Create the host.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_HOST"), ui.ColorReset)
 	api.CreateHost(domainURL, token, inboundUUID, state.selfstealDomain, configProfileUUID, "")
 
-	// Lines 500-505: default squad.
+	// Default squad.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_DEFAULT_SQUAD"), ui.ColorReset)
 	squadUUIDs, _ := api.GetDefaultSquad(domainURL, token)
 	if len(squadUUIDs) > 0 {
@@ -589,11 +570,11 @@ volumes:
 	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("UPDATE_SQUAD"), ui.ColorReset)
 
-	// Lines 508-509: subscription-page API token.
+	// Subscription-page API token.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_API_TOKEN"), ui.ColorReset)
 	_ = api.CreateAPIToken(domainURL, token, targetDir, "")
 
-	// Lines 512-520: restart the subscription page so it picks up the token.
+	// Restart the subscription page so it picks up the token.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	downSub := exec.Command("docker", "compose", "down", "remnawave-subscription-page")
@@ -606,7 +587,7 @@ volumes:
 	upSub.Dir = panelDir
 	_ = upSub.Run()
 
-	// Lines 522-538: final summary screen.
+	// Final summary screen.
 	fmt.Printf("%s=================================================%s\n", ui.ColorYellow, ui.ColorReset)
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("INSTALL_COMPLETE"), ui.ColorReset)
 	fmt.Printf("%s=================================================%s\n", ui.ColorYellow, ui.ColorReset)

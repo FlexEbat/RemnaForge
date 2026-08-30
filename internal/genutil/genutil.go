@@ -1,8 +1,5 @@
-// Package genutil is a port of generate_user() and generate_password()
-// (install_remnawave.sh:337-360). Both originally pull from /dev/urandom
-// via tr/fold/shuf; here that's crypto/rand, which is the direct Go
-// equivalent of reading from /dev/urandom (and what /dev/urandom itself is
-// backed by on Linux).
+// Package genutil generates random usernames, passwords, and alnum
+// secrets using crypto/rand.
 package genutil
 
 import (
@@ -26,12 +23,8 @@ func randChar(charset string) byte {
 	return charset[n.Int64()]
 }
 
-// Original bash (install_remnawave.sh:337-340):
-//
-//	generate_user() {
-//	    local length=8
-//	    tr -dc 'a-zA-Z' < /dev/urandom | fold -w $length | head -n 1
-//	}
+// GenerateUser returns an 8-character random username made of letters
+// only.
 func GenerateUser() string {
 	const length = 8
 	letters := upperChars + lowerChars
@@ -42,10 +35,9 @@ func GenerateUser() string {
 	return string(out)
 }
 
-// Original bash (install_remnawave.sh:342-360): generate_password().
-// Guarantees at least 1 upper, 1 lower, 1 digit, 3 special chars, fills
-// the rest from the full charset, then shuffles. Matches the bash
-// version's `password+=...; ...; fold -w1 | shuf | tr -d '\n'` recipe.
+// GeneratePassword returns a 24-character random password. Guarantees
+// at least 1 upper, 1 lower, 1 digit, 3 special chars, fills the rest
+// from the full charset, then shuffles.
 func GeneratePassword() string {
 	const length = 24
 
@@ -60,7 +52,7 @@ func GeneratePassword() string {
 		chars = append(chars, randChar(allChars))
 	}
 
-	// Fisher-Yates shuffle using crypto/rand (equivalent to `shuf`).
+	// Fisher-Yates shuffle using crypto/rand.
 	for i := len(chars) - 1; i > 0; i-- {
 		j, _ := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
 		chars[i], chars[j.Int64()] = chars[j.Int64()], chars[i]
@@ -73,14 +65,11 @@ var alnumFilter = func(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
 }
 
-// GenerateAlnumSecret is the Go equivalent of:
-//
-//	openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 64
-//
-// (src/nginx/install_panel_node.sh:45-46, used for JWT_AUTH_SECRET and
-// JWT_API_TOKENS_SECRET). Filtering base64 output to alnum-only can come up
-// short of the requested length in bash, which has no retry. This function
-// generates additional random bytes until it has enough characters.
+// GenerateAlnumSecret returns a random alphanumeric-only secret of the
+// given length, used for APP_SECRET. Generates base64 output and
+// filters it down to alnum characters, retrying with additional random
+// bytes until it has enough, so it can't come up short the way naively
+// filtering a single fixed-size chunk could.
 func GenerateAlnumSecret(length int) string {
 	var sb strings.Builder
 	for sb.Len() < length {

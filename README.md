@@ -1,6 +1,6 @@
-# Remnawave Easy-Install
+# RemnaForge
 
-Форк [remnawave-reverse-proxy](https://github.com/eGamesAPI/remnawave-reverse-proxy) от eGames.
+Проект переименован и продолжает развиваться как независимый форк.
 
 ## Оглавление
 
@@ -17,7 +17,7 @@
 
 ## Что это
 
-Remnawave Easy-Install ставит и обслуживает [Remnawave](https://remna.st) на сервере: панель, ноду или обе части сразу, за Nginx или за Caddy. Инструмент выпускает TLS-сертификаты, добавляет ноды к уже работающей панели, управляет запущенным стеком и удаляет установку. Всё через интерактивное текстовое меню, без правки конфигов вручную.
+RemnaForge ставит и обслуживает [Remnawave](https://remna.st) на сервере: панель, ноду или обе части сразу, за Nginx или за Caddy. Инструмент выпускает TLS-сертификаты, добавляет ноды к уже работающей панели, управляет запущенным стеком и удаляет установку. Всё через интерактивное текстовое меню, без правки конфигов вручную.
 
 ## Возможности
 
@@ -25,7 +25,7 @@ Remnawave Easy-Install ставит и обслуживает [Remnawave](https:
 - Работает с двумя вебсерверами на выбор: Nginx или Caddy.
 - Для Nginx выпускает и продлевает TLS через `certbot`: Cloudflare DNS-01, ACME HTTP-01, Gcore DNS-01. Caddy выпускает и продлевает сертификаты сам через встроенный ACME-клиент.
 - Добавляет ноды к существующей панели через API Remnawave.
-- Ставит на selfsteal-домен случайный HTML-шаблон для маскировки трафика.
+- Ставит на selfsteal-домен случайный или выбранный HTML-шаблон для маскировки трафика.
 - Управляет установленным стеком: старт, стоп, обновление образов, просмотр логов, встроенный `remnawave` CLI, временный доступ к панели на порту 8443.
 - Переустанавливает панель или ноду поверх текущей установки.
 - Включает и выключает IPv6 на сервере.
@@ -53,7 +53,7 @@ Remnawave Easy-Install ставит и обслуживает [Remnawave](https:
 ```bash
 git clone -b dev https://github.com/FlexEbat/Remnwave-Easy-Install.git
 cd Remnwave-Easy-Install
-go build -o remnawave-easy-install ./cmd/remnawave
+go build -o remnaforge ./cmd/remnawave
 ```
 
 Нужен Go 1.22 или новее. Из внешних зависимостей `go.mod` требует только `golang.org/x/net` (пакет `publicsuffix`, для правильного определения базового домена под многоуровневыми публичными суффиксами вроде `.co.uk`). Остальной код собирается из стандартной библиотеки Go.
@@ -69,13 +69,13 @@ go build -o remnawave-easy-install ./cmd/remnawave
 Запустите бинарник от root:
 
 ```bash
-sudo ./remnawave-easy-install
+sudo ./remnaforge
 ```
 
 Инструмент покажет главное меню:
 
 ```
-Remnawave Easy-Install (fork eGames)
+RemnaForge
 Version X.X.X
 Wiki: https://github.com/FlexEbat/Remnwave-Easy-Install
 
@@ -127,12 +127,10 @@ internal/
   ├── panelonly/           установка панели без ноды за Nginx
   ├── preflight/           установка docker, certbot, ufw перед первым запуском
   ├── reinstall/           переустановка панели или ноды поверх текущей
-  ├── selfsteal/           случайный HTML-шаблон для selfsteal-домена
+  ├── selfsteal/           случайный или выбранный HTML-шаблон для selfsteal-домена
   ├── uninstall/           удаление инструмента и установленной панели
   └── ui/                  цвета терминала, чтение ввода, логирование в файл
 ```
-
-Функция, портированная из bash, несёт комментарий `Original bash (file:N-M): funcName()` с номерами строк оригинала.
 
 ## Тестирование и CI
 
@@ -168,4 +166,4 @@ gofmt -l .
 
 ## Лицензия
 
-[GNU GPLv3](LICENSE), как и оригинальный проект.
+[GNU GPLv3](LICENSE).

@@ -1,21 +1,8 @@
-// Package caddypanelonly is a port of src/caddy/install_panel.sh (465
-// lines). Despite the filename, this file's own header comment says
-// "Module: Install Panel" and its function is install_panel_caddy(). It
-// installs the Remnawave panel alone behind Caddy: it registers a node
-// config profile and host for a selfsteal domain that runs on a separate
-// server via internal/caddynode, not a co-located node. This mirrors
-// internal/panelonly (nginx), which is the "panel alone" installer for
-// src/nginx/install_panel_node.sh.
-//
-// The naming confusion here runs the OPPOSITE direction from nginx: for
-// nginx, install_panel_node.sh is panel-only and install_panel.sh is
-// panel+node (see internal/panelonly's and internal/panelfull's package
-// comments). For Caddy, install_panel.sh (this file, panel-only) and
-// install_panel_node.sh (panel+node, see internal/caddypanelfull) are
-// each named for what they'd naively seem to do, not swapped. Verified
-// by downloading and reading both files directly, not by assuming the
-// nginx pattern carries over. Go package names describe content either
-// way, per project convention.
+// Package caddypanelonly installs the Remnawave panel alone behind
+// Caddy: it registers a node config profile and host for a selfsteal
+// domain that runs on a separate server via internal/caddynode, not a
+// co-located node. This mirrors internal/panelonly (nginx), the "panel
+// alone" installer for the Nginx flow.
 //
 // Like internal/caddynode, this never calls internal/certs: Caddy issues
 // and renews its own TLS certificate via its built-in ACME client, so
@@ -40,8 +27,8 @@ import (
 
 const panelDir = "/opt/remnawave"
 
-// panelState carries values threaded between install_panel_caddy() and
-// installation_panel_caddy() in the original (all globals there).
+// panelState carries the values gathered while prompting the user
+// through to where docker-compose.yml/Caddyfile are written.
 type panelState struct {
 	panelDomain     string
 	subDomain       string
@@ -55,26 +42,14 @@ type panelState struct {
 	appSecret       string
 }
 
-// dotEnvTemplate mirrors install_panel.sh:49-148, with one intentional
-// deviation from that file's literal current content, applied
-// proactively rather than discovered as a live bug:
-//
-// BUG FIX (not a 1:1 port): the upstream src/caddy/install_panel.sh
-// still writes JWT_AUTH_SECRET/JWT_API_TOKENS_SECRET plus
-// SWAGGER_PATH/SCALAR_PATH/IS_DOCS_ENABLED, and still pins
-// remnawave/backend:2 below. That was correct for Remnawave Panel
-// pre-3.2.0, but internal/panelfull and internal/panelonly (nginx)
-// already had to fix this exact set of fields for the 1.1.1 release
-// (see TECH.md changelog) because the panel itself moved on:
-// JWT_AUTH_SECRET/JWT_API_TOKENS_SECRET were replaced by a single
-// APP_SECRET, and those Swagger/Scalar/docs toggles were removed
-// entirely. The Caddy source files just haven't caught up on GitHub
-// yet. Shipping a new install flow that writes fields the current
-// panel image ignores (and omits the one it now requires) would mean
-// building something already known to be broken on day one, so this
-// applies the same fix here instead of reproducing the stale upstream
-// literally. See internal/api/panelv3_test.go for the regression test
-// covering the panel-side API changes this depends on.
+// dotEnvTemplate is the panel's .env file. It uses a single APP_SECRET
+// rather than separate JWT_AUTH_SECRET/JWT_API_TOKENS_SECRET, and drops
+// the SWAGGER_PATH/SCALAR_PATH/IS_DOCS_ENABLED toggles, matching
+// Remnawave Panel v3.2.0+ (see internal/panelfull's and
+// internal/panelonly's (nginx) equivalent templates and TECH.md's
+// changelog for the same change made there). See
+// internal/api/panelv3_test.go for the regression test covering the
+// panel-side API changes this depends on.
 const dotEnvTemplate = `### APP ###
 APP_PORT=3000
 METRICS_PORT=3001
@@ -285,15 +260,14 @@ volumes:
     external: false
 `
 
-// caddyfileTemplate mirrors install_panel.sh:297-366. {$PANEL_DOMAIN},
+// caddyfileTemplate is the panel's Caddyfile. {$PANEL_DOMAIN},
 // {$SUB_DOMAIN}, {$BACKEND_URL}, {$SUB_BACKEND_URL} are Caddy's own
 // environment-variable placeholders (resolved by Caddy at runtime from
-// the container environment set in dockerComposeTemplate above), so they
-// stay as literal text here, same as caddynode's Caddyfile. cookies_random1/
-// cookies_random2, by contrast, are NOT escaped in the original's heredoc
-// (no backslash before their `$`), so bash substitutes the actual
-// generated cookie name/value directly into the file at creation time.
-// Go mirrors that with %s placeholders instead of Caddy env-refs.
+// the container environment set in dockerComposeTemplate above), so
+// they stay as literal text here, same as caddynode's Caddyfile.
+// cookiesRandom1/cookiesRandom2, by contrast, are substituted with Go's
+// %s placeholders at file-creation time, since they need to be baked
+// into the actual cookie name/value rather than resolved later.
 const caddyfileTemplate = `{
     admin off
 }
@@ -364,7 +338,6 @@ https://{$SUB_DOMAIN} {
 }
 `
 
-// Original bash (src/caddy/install_panel.sh:4-367): install_panel_caddy().
 func installPanelCaddy() (*panelState, error) {
 	if err := os.MkdirAll(panelDir, 0755); err != nil {
 		return nil, err
@@ -382,10 +355,8 @@ func installPanelCaddy() (*panelState, error) {
 		return nil, fmt.Errorf("aborted")
 	}
 
-	// Unlike internal/panelonly (nginx), the original here DOES validate
-	// the node/selfsteal domain with check_domain (install_panel.sh:23-29),
-	// not just a bare read. Confirmed by reading the actual file, not
-	// assumed from the nginx pattern.
+	// Unlike internal/panelonly (nginx), this validates the node/selfsteal
+	// domain with domain.CheckDomain, not just a bare read.
 	selfstealDomain := ui.Reading(i18n.T("ENTER_NODE_DOMAIN"))
 	if domain.CheckDomain(selfstealDomain, true, false) == domain.CheckAbort {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ABORT_MESSAGE"), ui.ColorReset)
@@ -419,15 +390,12 @@ func installPanelCaddy() (*panelState, error) {
 		return nil, err
 	}
 
-	// The original's REMNAWAVE_API_TOKEN placeholder is the literal text
-	// "$api_token" (line 269: `REMNAWAVE_API_TOKEN=\$api_token`, the
-	// backslash keeps bash from expanding an unset variable, so this
-	// exact string ends up in the file). api.CreateAPIToken's
+	// The REMNAWAVE_API_TOKEN placeholder written here is the literal
+	// text "$api_token" (kept as-is rather than left empty like the
+	// nginx panelonly/panelfull templates use). api.CreateAPIToken's
 	// replaceLineInFile matches by line prefix "REMNAWAVE_API_TOKEN=" and
-	// replaces the whole line regardless of what follows, so reproducing
-	// this exact placeholder text (rather than nginx panelonly/panelfull's
-	// empty placeholder) works identically either way. Kept literal here
-	// for a faithful port.
+	// replaces the whole line regardless of what follows, so either
+	// placeholder text works identically.
 	dockerCompose := fmt.Sprintf(dockerComposeTemplate,
 		state.panelDomain, state.subDomain, "$api_token",
 	)
@@ -443,8 +411,7 @@ func installPanelCaddy() (*panelState, error) {
 	return state, nil
 }
 
-// InstallationPanelOnly is the Go equivalent of
-// src/caddy/install_panel.sh:369-466: installation_panel_caddy().
+// InstallationPanelOnly installs the panel alone behind Caddy.
 func InstallationPanelOnly() error {
 	if err := preflight.EnsureInstalled(); err != nil {
 		return err
@@ -455,7 +422,7 @@ func InstallationPanelOnly() error {
 		return err
 	}
 
-	// Lines 372-378: bring the stack up.
+	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	_ = exec.Command("ufw", "allow", "80/tcp", "comment", "HTTP").Run()
@@ -468,11 +435,10 @@ func InstallationPanelOnly() error {
 	targetDir := panelDir
 	api.PanelDomain = state.panelDomain
 
-	// Lines 383-384.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("REGISTERING_REMNAWAVE"), ui.ColorReset)
 	time.Sleep(20 * time.Second)
 
-	// Lines 386-399: wait for the panel API to answer.
+	// Wait for the panel API to answer.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CHECK_CONTAINERS"), ui.ColorReset)
 	const maxAttempts = 5
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -498,11 +464,11 @@ func InstallationPanelOnly() error {
 		attempt++
 	}
 
-	// Line 402: register the superadmin account.
+	// Register the superadmin account.
 	token := api.RegisterRemnawave(domainURL, state.superadminUser, state.superadminPass, "")
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("REGISTRATION_SUCCESS"), ui.ColorReset)
 
-	// Lines 406-409: generate xray keys. No GetPublicKey call here (unlike
+	// Generate xray keys. No GetPublicKey call here (unlike
 	// internal/caddypanelfull): this variant has no co-located remnanode
 	// container to patch a SECRET_KEY into, matching internal/panelonly.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GENERATE_KEYS"), ui.ColorReset)
@@ -510,25 +476,25 @@ func InstallationPanelOnly() error {
 	privateKey := api.GenerateXrayKeys(domainURL, token)
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GENERATE_KEYS_SUCCESS"), ui.ColorReset)
 
-	// Line 412: delete the default config profile.
+	// Delete the default config profile.
 	_ = api.DeleteConfigProfile(domainURL, token, "")
 
-	// Lines 415-417: create our own config profile.
+	// Create our own config profile.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
 	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, "")
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
-	// Lines 420-421: create the node, passing the selfsteal domain as its
+	// Create the node, passing the selfsteal domain as its
 	// address (line 421: `create_node ... "$SELFSTEAL_DOMAIN"`), same as
 	// internal/panelonly.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_NODE"), ui.ColorReset)
 	api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, state.selfstealDomain, "")
 
-	// Lines 424-425: create the host.
+	// Create the host.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_HOST"), ui.ColorReset)
 	api.CreateHost(domainURL, token, inboundUUID, state.selfstealDomain, configProfileUUID, "")
 
-	// Lines 428-433: default squad.
+	// Default squad.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_DEFAULT_SQUAD"), ui.ColorReset)
 	squadUUIDs, _ := api.GetDefaultSquad(domainURL, token)
 	if len(squadUUIDs) > 0 {
@@ -536,11 +502,11 @@ func InstallationPanelOnly() error {
 	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("UPDATE_SQUAD"), ui.ColorReset)
 
-	// Lines 436-437: subscription-page API token.
+	// Subscription-page API token.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_API_TOKEN"), ui.ColorReset)
 	_ = api.CreateAPIToken(domainURL, token, targetDir, "")
 
-	// Lines 440-448: restart the subscription page so it picks up the token.
+	// Restart the subscription page so it picks up the token.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	downSub := exec.Command("docker", "compose", "down", "remnawave-subscription-page")
@@ -553,7 +519,7 @@ func InstallationPanelOnly() error {
 	upSub.Dir = panelDir
 	_ = upSub.Run()
 
-	// Lines 452-465: final summary screen.
+	// Final summary screen.
 	fmt.Printf("%s=================================================%s\n", ui.ColorYellow, ui.ColorReset)
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("INSTALL_COMPLETE"), ui.ColorReset)
 	fmt.Printf("%s=================================================%s\n", ui.ColorYellow, ui.ColorReset)

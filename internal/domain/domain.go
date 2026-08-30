@@ -1,17 +1,17 @@
-// Package domain is a port of three shared domain/certificate-related
-// helper functions defined at the top level of install_remnawave.sh and
-// used by every install_node/install_panel variant:
+// Package domain holds shared domain/certificate-related helpers used
+// by every install_node/install_panel variant: extracting a domain's
+// registrable base, checking that a domain resolves to this server (or
+// flagging a Cloudflare proxy IP instead), and detecting a wildcard
+// certificate's base domain.
 //
-//   - extract_domain()   (install_remnawave.sh:1328-1331)
-//   - check_domain()     (install_remnawave.sh:1333-1421)
-//   - is_wildcard_cert() (install_remnawave.sh:1423-1436)
-//
-// Several bash tool calls are replaced with native Go equivalents rather
-// than shelled out to, per project decision to improve where it's easy:
-//   - `dig +short A` -> net.LookupIP
-//   - `curl -s -4 ifconfig.me` (etc.) -> net/http
-//   - manual bit-shift CIDR math for the Cloudflare ranges -> net.ParseCIDR
-//   - `openssl x509 -noout -text | grep` -> crypto/x509 + encoding/pem
+// A few things are done with native Go rather than shelling out to a
+// CLI tool, since Go's standard library covers them directly:
+//   - DNS lookups use net.LookupIP instead of `dig +short A`.
+//   - Public-IP detection uses net/http instead of `curl -4 ifconfig.me`.
+//   - Cloudflare IP-range matching uses net.ParseCIDR instead of manual
+//     bit-shift math.
+//   - Certificate parsing uses crypto/x509 + encoding/pem instead of
+//     `openssl x509 -noout -text | grep`.
 package domain
 
 import (
@@ -30,27 +30,22 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-// Original bash (install_remnawave.sh:1328-1331):
-//
-//	extract_domain() {
-//	    local SUBDOMAIN=$1
-//	    echo "$SUBDOMAIN" | awk -F'.' '{if (NF > 2) {print $(NF-1)"."$NF} else {print $0}}'
-//	}
-//
-// BUG FIX (not a 1:1 port): the original always takes the last two
-// dot-separated labels, wrong for any domain under a multi-label public
-// suffix. "sub.example.co.uk" reduces to "co.uk" instead of
-// "example.co.uk". This breaks wildcard-certificate base-domain
-// detection for such domains, in both the original bash and (until now)
-// this port. Fixed here using the real Public Suffix List algorithm
-// (golang.org/x/net/publicsuffix) instead of perpetuating the bug.
+// ExtractDomain returns a subdomain's registrable base domain (its
+// "effective TLD + 1"), used to detect whether a wildcard certificate
+// covers the given host. This uses the real Public Suffix List
+// algorithm (golang.org/x/net/publicsuffix) rather than naively taking
+// the last two dot-separated labels, which is wrong for any domain
+// under a multi-label public suffix: "sub.example.co.uk" would
+// naively reduce to "co.uk" instead of "example.co.uk", breaking
+// wildcard-certificate base-domain detection for such domains.
 func ExtractDomain(subdomain string) string {
 	if etld1, err := publicsuffix.EffectiveTLDPlusOne(subdomain); err == nil {
 		return etld1
 	}
-	// Fall back to the original's naive behavior only if the PSL lookup
-	// itself fails, e.g. for a single-label or otherwise malformed input.
-	// EffectiveTLDPlusOne errors on those rather than silently guessing.
+	// Fall back to the naive last-two-labels behavior only if the PSL
+	// lookup itself fails, e.g. for a single-label or otherwise
+	// malformed input. EffectiveTLDPlusOne errors on those rather than
+	// silently guessing.
 	parts := strings.Split(subdomain, ".")
 	if len(parts) > 2 {
 		return parts[len(parts)-2] + "." + parts[len(parts)-1]
@@ -85,9 +80,8 @@ func resolveA(domain string) string {
 	return ""
 }
 
-// publicServerIP is the Go equivalent of:
-//
-//	curl -s -4 ifconfig.me || curl -s -4 api.ipify.org || curl -s -4 ipinfo.io/ip
+// publicServerIP tries a small list of public IP-echo services in
+// order, returning the first one that answers.
 func publicServerIP() string {
 	for _, url := range []string{"https://ifconfig.me", "https://api.ipify.org", "https://ipinfo.io/ip"} {
 		resp, err := httpClient.Get(url)
@@ -146,7 +140,6 @@ func ipInRanges(ipStr string, ranges []*net.IPNet) bool {
 	return false
 }
 
-// Original bash (install_remnawave.sh:1333-1421): check_domain().
 // showWarning/allowCFProxy default to true, matching bash's ${2:-true}/${3:-true}.
 func CheckDomain(domainName string, showWarning, allowCFProxy bool) CheckResult {
 	domainIP := resolveA(domainName)
@@ -203,20 +196,8 @@ func CheckDomain(domainName string, showWarning, allowCFProxy bool) CheckResult 
 	}
 }
 
-// Original bash (install_remnawave.sh:1423-1436):
-//
-//	is_wildcard_cert() {
-//	    local domain=$1
-//	    local cert_path="/etc/letsencrypt/live/$domain/fullchain.pem"
-//	    if [ ! -f "$cert_path" ]; then
-//	        return 1
-//	    fi
-//	    if openssl x509 -noout -text -in "$cert_path" | grep -q "\*\.$domain"; then
-//	        return 0
-//	    else
-//	        return 1
-//	    fi
-//	}
+// IsWildcardCert reports whether domainName's live certificate covers
+// "*.domainName" as one of its names.
 func IsWildcardCert(domainName string) bool {
 	certPath := "/etc/letsencrypt/live/" + domainName + "/fullchain.pem"
 

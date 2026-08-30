@@ -1,5 +1,5 @@
-// Package addnode is a port of src/modules/add_node.sh (96 lines): the
-// "Add Node to Panel" flow that talks to internal/api.
+// Package addnode implements the "Add Node to Panel" flow that talks
+// to internal/api.
 package addnode
 
 import (
@@ -15,12 +15,14 @@ import (
 
 var entityNameRE = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
 
-// Original bash (src/modules/add_node.sh:5-96): add_node_to_panel().
-// Inline comments mark the corresponding original line ranges.
+// AddNodeToPanel registers a new node with the panel over its local
+// API: it warns the user this must run on the panel's own server,
+// prompts for the node's details, creates a config profile, host, and
+// inbound for it, and prints the resulting node config.
 func AddNodeToPanel() {
 	domainURL := "127.0.0.1:3000"
 
-	// Lines 8-14: warning banner + confirmation prompt.
+	// Warning banner + confirmation prompt.
 	fmt.Println()
 	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("WARNING_LABEL"), ui.ColorReset)
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("WARNING_NODE_PANEL"), ui.ColorReset)
@@ -29,24 +31,23 @@ func AddNodeToPanel() {
 	confirm := ui.Reading(i18n.T("CONFIRM_PROMPT"))
 	fmt.Println()
 
-	// Lines 17-20: bail out unless the user confirmed with y/Y.
+	// Bail out unless the user confirmed with y/Y.
 	if confirm != "y" && confirm != "Y" {
 		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
 		ui.Exit(0)
 	}
 
-	// Lines 22-23.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("ADD_NODE_TO_PANEL"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 
-	// Lines 25-30: get_panel_token / read token file.
+	// Get_panel_token / read token file.
 	token, err := api.GetPanelToken()
 	if err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_TOKEN"), ui.ColorReset)
 		return
 	}
 
-	// Lines 32-39: prompt for the node's selfsteal domain until it checks out.
+	// Prompt for the node's selfsteal domain until it checks out.
 	var selfstealDomain string
 	for {
 		selfstealDomain = ui.Reading(i18n.T("ENTER_NODE_DOMAIN"))
@@ -56,7 +57,7 @@ func AddNodeToPanel() {
 		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("TRY_ANOTHER_DOMAIN"), ui.ColorReset)
 	}
 
-	// Lines 41-58: prompt for a valid, unused config-profile/entity name.
+	// Prompt for a valid, unused config-profile/entity name.
 	var entityName string
 	for {
 		entityName = ui.Reading(i18n.T("ENTER_NODE_NAME"))
@@ -71,9 +72,9 @@ func AddNodeToPanel() {
 
 		nameTaken, checkErr := configProfileNameExists(domainURL, token, entityName)
 		if checkErr != nil {
-			// Original bash has no explicit handling for a failed lookup here;
-			// it falls through to the jq -e check evaluating to false,
-			// i.e. behaves the same as "name not taken". Mirrored here.
+			// A failed lookup is treated the same as "name not taken":
+			// there's nothing more useful to do here than let the create
+			// call downstream surface any real conflict.
 			break
 		}
 		if nameTaken {
@@ -83,25 +84,25 @@ func AddNodeToPanel() {
 		break
 	}
 
-	// Lines 60-62: generate xray keys.
+	// Generate xray keys.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GENERATE_KEYS"), ui.ColorReset)
 	privateKey := api.GenerateXrayKeys(domainURL, token)
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GENERATE_KEYS_SUCCESS"), ui.ColorReset)
 
-	// Lines 64-66: create the config profile.
+	// Create the config profile.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
 	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, entityName, selfstealDomain, privateKey, entityName)
 	fmt.Printf("%s%s: %s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), entityName, ui.ColorReset)
 
-	// Lines 68-69: create the node.
+	// Create the node.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, fmt.Sprintf(i18n.T("CREATE_NEW_NODE"), selfstealDomain), ui.ColorReset)
 	api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, selfstealDomain, entityName)
 
-	// Lines 71-72: create the host.
+	// Create the host.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_HOST"), ui.ColorReset)
 	api.CreateHost(domainURL, token, inboundUUID, selfstealDomain, configProfileUUID, entityName)
 
-	// Lines 74-90: fetch default squads and add this inbound to each.
+	// Fetch default squads and add this inbound to each.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_DEFAULT_SQUAD"), ui.ColorReset)
 	squadUUIDs, squadErr := api.GetDefaultSquad(domainURL, token)
 	switch {
@@ -120,19 +121,15 @@ func AddNodeToPanel() {
 		}
 	}
 
-	// Lines 92-95: final success + post-install instructions.
+	// Final success + post-install instructions.
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("NODE_ADDED_SUCCESS"), ui.ColorReset)
 	fmt.Printf("%s-------------------------------------------------%s\n", ui.ColorRed, ui.ColorReset)
 	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("POST_PANEL_INSTRUCTION"), ui.ColorReset)
 	fmt.Printf("%s-------------------------------------------------%s\n", ui.ColorRed, ui.ColorReset)
 }
 
-// configProfileNameExists is the Go equivalent of:
-//
-//	local response=$(make_api_request "GET" "http://$domain_url/api/config-profiles" "$token")
-//	if echo "$response" | jq -e ".response.configProfiles[] | select(.name == \"$entity_name\")" > /dev/null; then
-//
-// (src/modules/add_node.sh:45-47).
+// configProfileNameExists reports whether a config profile with the
+// given name already exists on the panel.
 func configProfileNameExists(domainURL, token, name string) (bool, error) {
 	resp := api.MakeAPIRequest("GET", "http://"+domainURL+"/api/config-profiles", token, "")
 	if len(resp) == 0 {
