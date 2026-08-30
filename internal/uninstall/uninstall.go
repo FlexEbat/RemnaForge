@@ -1,14 +1,10 @@
-// Package uninstall is a port of remove_script() (install_remnawave.sh:
-// 242-306): lets the user remove just this tool's own state, or wipe the
-// installed panel/node (docker containers, images, volumes) too.
+// Package uninstall lets the user remove just this tool's own state, or
+// wipe the installed panel/node (docker containers, images, volumes)
+// too.
 //
-// One adaptation (not a 1:1 port): the original always has a fixed
-// self-installed location. install_script_if_missing() copies itself to
-// ${DIR_REMNAWAVE}remnawave_reverse and symlinks /usr/local/bin/
-// remnawave_reverse (install_remnawave.sh:308-316). This fork has no
-// installer script yet (see README: build-from-source only for now), so
-// no single guaranteed binary path exists to remove. "Remove script
-// only" removes the config/state directory
+// This fork has no installer script yet (see README: build-from-source
+// only for now), so no single guaranteed binary path exists to remove.
+// "Remove script only" removes the config/state directory
 // (/usr/local/remnawave_reverse, which holds the saved panel API token,
 // see internal/api.DirRemnawave) and removes a binary at the
 // conventional /usr/local/bin/remnawave-easy-install path if one exists
@@ -24,19 +20,16 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
 
-// dirRemnawave mirrors DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
-// (install_remnawave.sh:5). Duplicated as a local constant (like
-// internal/preflight does) to avoid a needless cross-package import for a
-// single path string.
+// dirRemnawave holds this tool's own config/state directory. Duplicated
+// as a local constant (like internal/preflight does) to avoid a
+// needless cross-package import for a single path string.
 const dirRemnawave = "/usr/local/remnawave_reverse"
 
-// conventionalBinPath is where a manually-copied build of this tool would
-// plausibly live, matching the README's suggested build/install location.
-// The original bash has no equivalent for this specific path; see the
-// package doc comment above.
+// conventionalBinPath is where a manually-copied build of this tool
+// would plausibly live, matching the README's suggested build/install
+// location; see the package doc comment above.
 const conventionalBinPath = "/usr/local/bin/remnawave-easy-install"
 
-// Original bash (install_remnawave.sh:242-306): remove_script().
 func RemoveScript() {
 	for {
 		fmt.Println()
@@ -65,7 +58,6 @@ func RemoveScript() {
 	}
 }
 
-// Original bash (install_remnawave.sh:254-267).
 func removeScriptOnly() {
 	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CONFIRM_REMOVE_SCRIPT"), ui.ColorReset)
 	confirm := ui.Reading("")
@@ -81,7 +73,6 @@ func removeScriptOnly() {
 	ui.Exit(0)
 }
 
-// Original bash (install_remnawave.sh:268-295).
 func removeScriptAndPanel() {
 	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CONFIRM_REMOVE_ALL"), ui.ColorReset)
 	confirm := ui.Reading("")
@@ -97,17 +88,16 @@ func removeScriptAndPanel() {
 		fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 		downCmd := exec.Command("docker", "compose", "down", "-v", "--rmi", "all", "--remove-orphans")
 		downCmd.Dir = dir
-		// BUG FIX (not a 1:1 port): this used to report a failed `docker
-		// compose down` with LANG[CHANGE_DIR_FAILED] ("Failed to change to
-		// directory %s"), copy-pasted from the original's `cd dir || {
-		// error CHANGE_DIR_FAILED; exit 1 }` guard. This port never does a
-		// literal `cd` (downCmd.Dir is used instead), so that message
-		// named the wrong failure. Also, unlike the original (and unlike
-		// this port's own internal/reinstall.reinstallRemnawave, which
-		// intentionally discards this error to match upstream's
-		// fire-and-forget `docker compose down &`), this path already
-		// checks the error, so it now reports it under its real name
-		// instead of silently keeping a misleading message.
+		// FIXED: this used to report a failed `docker compose down` with
+		// i18n.T("CHANGE_DIR_FAILED") ("Failed to change to directory %s"),
+		// left over from an earlier revision that actually did a directory
+		// change here; it no longer does (downCmd.Dir is used instead), so
+		// that message named the wrong failure. Unlike
+		// internal/reinstall.reinstallRemnawave, which intentionally
+		// discards this same error (fire-and-forget `docker compose down`,
+		// matching how it's run elsewhere in this codebase), this path
+		// already checks the error, so it now reports it under its real
+		// name instead of keeping a misleading message.
 		if err := downCmd.Run(); err != nil {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, fmt.Sprintf(i18n.T("DOCKER_COMPOSE_DOWN_FAILED"), dir), ui.ColorReset)
 		}

@@ -1,19 +1,8 @@
-// Package caddypanelfull is a port of src/caddy/install_panel_node.sh
-// (525 lines). Despite the filename looking like it might mean
-// "panel, with a node domain field" (i.e. panel-only, as the analogous
-// nginx filename install_panel_node.sh turned out to be), this file's
-// own header comment says "Module: Install Panel + Node" and its
-// function is install_panel_node_caddy(). It installs the Remnawave
-// panel and a co-located selfsteal node together: a real remnanode
-// container, unix-socket Caddy with proxy_protocol, and a random
-// selfsteal template on one server. This mirrors internal/panelfull
-// (nginx), the actual "panel + node on one server" installer.
-//
-// See internal/caddypanelonly's package comment for the full naming
-// story: the Caddy files' names happen to match their content (unlike
-// the nginx files, which are swapped relative to their names). Verified
-// by downloading and reading both files directly. Go package names
-// describe content regardless.
+// Package caddypanelfull installs the Remnawave panel and a co-located
+// selfsteal node together: a real remnanode container, unix-socket
+// Caddy with proxy_protocol, and a random selfsteal template on one
+// server. This mirrors internal/panelfull (nginx), the "panel + node on
+// one server" installer.
 //
 // Like internal/caddynode, this never calls internal/certs: Caddy issues
 // and renews its own TLS certificate via its built-in ACME client, so
@@ -39,8 +28,8 @@ import (
 
 const panelDir = "/opt/remnawave"
 
-// state carries values threaded between install_panel_node_caddy() and
-// installation_panel_node_caddy() in the original (all globals there).
+// state carries the values gathered while prompting the user through to
+// where docker-compose.yml/Caddyfile are written.
 type state struct {
 	panelDomain     string
 	subDomain       string
@@ -54,14 +43,11 @@ type state struct {
 	appSecret       string
 }
 
-// dotEnvTemplate mirrors install_panel_node.sh:52-151. Same
-// v3.2.0-compatibility deviation as internal/caddypanelonly's
-// dotEnvTemplate (APP_SECRET instead of JWT_AUTH_SECRET+
-// JWT_API_TOKENS_SECRET, no SWAGGER_PATH/SCALAR_PATH/IS_DOCS_ENABLED),
-// for the identical reason: the upstream Caddy bash file predates the
-// panel's 3.2.0 API changes that internal/panelfull and
-// internal/panelonly already had to accommodate. See that package's
-// comment for the full rationale, not repeated here.
+// dotEnvTemplate is the panel's .env file. Same v3.2.0-compatible fields
+// as internal/caddypanelonly's dotEnvTemplate (a single APP_SECRET
+// rather than JWT_AUTH_SECRET+JWT_API_TOKENS_SECRET, no
+// SWAGGER_PATH/SCALAR_PATH/IS_DOCS_ENABLED); see that package's comment
+// for the full rationale, not repeated here.
 const dotEnvTemplate = `### APP ###
 APP_PORT=3000
 METRICS_PORT=3001
@@ -398,7 +384,6 @@ https://{$SUB_DOMAIN} {
 }
 `
 
-// Original bash (src/caddy/install_panel_node.sh:4-418): install_panel_node_caddy().
 func installPanelNodeCaddy() (*state, error) {
 	if err := os.MkdirAll(panelDir, 0755); err != nil {
 		return nil, err
@@ -470,8 +455,8 @@ func installPanelNodeCaddy() (*state, error) {
 	return st, nil
 }
 
-// InstallationPanelNode is the Go equivalent of
-// src/caddy/install_panel_node.sh:420-526: installation_panel_node_caddy().
+// InstallationPanelNode installs the panel plus a co-located node
+// behind Caddy.
 func InstallationPanelNode() error {
 	if err := preflight.EnsureInstalled(); err != nil {
 		return err
@@ -482,7 +467,7 @@ func InstallationPanelNode() error {
 		return err
 	}
 
-	// Lines 423-429: bring the stack up.
+	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL_NODE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	_ = exec.Command("ufw", "allow", "80/tcp", "comment", "HTTP").Run()
@@ -491,20 +476,18 @@ func InstallationPanelNode() error {
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 	_ = upCmd.Run()
 
-	// Lines 431-432: allow the co-located node's docker subnet to reach
-	// itself on 2222 (best-effort, matching the original's suppressed
-	// errors), same as internal/panelfull.
+	// Allow the co-located node's docker subnet to reach itself on 2222
+	// (best-effort, same as internal/panelfull).
 	_ = exec.Command("ufw", "allow", "from", "172.30.0.0/16", "to", "any", "port", "2222", "proto", "tcp").Run()
 
 	domainURL := "127.0.0.1:3000"
 	targetDir := panelDir
 	api.PanelDomain = st.panelDomain
 
-	// Lines 437-438.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("REGISTERING_REMNAWAVE"), ui.ColorReset)
 	time.Sleep(20 * time.Second)
 
-	// Lines 440-453: wait for the panel API to answer.
+	// Wait for the panel API to answer.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CHECK_CONTAINERS"), ui.ColorReset)
 	const maxAttempts = 5
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -530,11 +513,11 @@ func InstallationPanelNode() error {
 		attempt++
 	}
 
-	// Line 456: register the superadmin account.
+	// Register the superadmin account.
 	token := api.RegisterRemnawave(domainURL, st.superadminUser, st.superadminPass, "")
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("REGISTRATION_SUCCESS"), ui.ColorReset)
 
-	// Lines 460-462: fetch the real public key and patch it into
+	// Fetch the real public key and patch it into
 	// docker-compose.yml's remnanode SECRET_KEY. Key difference from
 	// caddypanelonly: the node is co-located here, so it needs its real
 	// key, not just a config-profile record. Same as internal/panelfull.
@@ -542,33 +525,33 @@ func InstallationPanelNode() error {
 	time.Sleep(1 * time.Second)
 	api.GetPublicKey(domainURL, token, targetDir)
 
-	// Lines 465-468: generate xray keys.
+	// Generate xray keys.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GENERATE_KEYS"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	privateKey := api.GenerateXrayKeys(domainURL, token)
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GENERATE_KEYS_SUCCESS"), ui.ColorReset)
 
-	// Line 471: delete the default config profile.
+	// Delete the default config profile.
 	_ = api.DeleteConfigProfile(domainURL, token, "")
 
-	// Lines 474-476: create our config profile.
+	// Create our config profile.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
 	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, "")
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
-	// Lines 479-480: create the node. The original calls create_node here
-	// without a node_address override (unlike caddypanelonly, which
-	// passes SELFSTEAL_DOMAIN as the address), so it gets CreateNode's
-	// own defaults (172.30.0.1 / "Steal"), matching the co-located node's
-	// actual docker-network address. Same as internal/panelfull.
+	// Create the node without a node_address override (unlike
+	// caddypanelonly, which passes SELFSTEAL_DOMAIN as the address), so
+	// it gets CreateNode's own defaults (172.30.0.1 / "Steal"), matching
+	// the co-located node's actual docker-network address. Same as
+	// internal/panelfull.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_NODE"), ui.ColorReset)
 	api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, "", "")
 
-	// Lines 483-484: create the host.
+	// Create the host.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_HOST"), ui.ColorReset)
 	api.CreateHost(domainURL, token, inboundUUID, st.selfstealDomain, configProfileUUID, "")
 
-	// Lines 487-492: default squad.
+	// Default squad.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_DEFAULT_SQUAD"), ui.ColorReset)
 	squadUUIDs, _ := api.GetDefaultSquad(domainURL, token)
 	if len(squadUUIDs) > 0 {
@@ -576,11 +559,11 @@ func InstallationPanelNode() error {
 	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("UPDATE_SQUAD"), ui.ColorReset)
 
-	// Lines 495-496: subscription-page API token.
+	// Subscription-page API token.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_API_TOKEN"), ui.ColorReset)
 	_ = api.CreateAPIToken(domainURL, token, targetDir, "")
 
-	// Lines 499-507: restart the whole stack so remnanode picks up its
+	// Restart the whole stack so remnanode picks up its
 	// real SECRET_KEY and the subscription page picks up its API token.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STOPPING_REMNAWAVE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
@@ -596,12 +579,12 @@ func InstallationPanelNode() error {
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 	_ = upCmd2.Run()
 
-	// Line 525: install a random selfsteal template for the co-located node.
+	// Install a random selfsteal template for the co-located node.
 	if err := selfsteal.RandomHTML(""); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 	}
 
-	// Lines 511-523: final summary screen.
+	// Final summary screen.
 	fmt.Printf("%s=================================================%s\n", ui.ColorYellow, ui.ColorReset)
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("INSTALL_COMPLETE"), ui.ColorReset)
 	fmt.Printf("%s=================================================%s\n", ui.ColorYellow, ui.ColorReset)

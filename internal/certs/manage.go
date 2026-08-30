@@ -13,23 +13,17 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
 
-// ensureCertbot is the Go equivalent of the `command -v certbot ||
-// install_packages` guard repeated in manage_certificates()
-// (install_remnawave.sh:1637-1643, 1648-1654). install_packages() itself
-// (the apt bootstrap routine) isn't ported yet, so if certbot is missing
-// we report the same error the original would show if that install failed,
-// rather than silently doing nothing. Delegates to internal/preflight so
+// ensureCertbot reports an error if certbot isn't installed, rather
+// than silently doing nothing. Delegates to internal/preflight so
 // install flows can run the identical check before they even get here.
 func ensureCertbot() error {
 	return preflight.CheckCertbot()
 }
 
-// Original bash (install_remnawave.sh:1621-1630): show_manage_certificates().
-//
-// BUG FIX (not a 1:1 port): the original prints LANG[MENU_8] ("Manage
-// IPv6") as this submenu's title, wrong for a certificates menu. This
-// port uses LANG[MENU_9] ("Manage certificates domain") instead, this
-// feature's actual label in the parent menu.
+// FIXED: this submenu's title used to be i18n.T("MENU_8") ("Manage IPv6"),
+// wrong for a certificates menu. Uses i18n.T("MENU_9") ("Manage
+// certificates domain") instead, this feature's actual label in the
+// parent menu.
 func showManageCertificates() {
 	fmt.Println()
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("MENU_9"), ui.ColorReset)
@@ -43,7 +37,6 @@ func showManageCertificates() {
 
 // ManageCertificates is the menu-facing entry point, wired into
 // internal/menu for "Manage certificates domain".
-// Original bash (install_remnawave.sh:1632-1667): manage_certificates().
 func ManageCertificates() {
 	showManageCertificates()
 	option := ui.Reading(i18n.T("CERT_PROMPT1"))
@@ -66,7 +59,6 @@ func ManageCertificates() {
 	}
 }
 
-// Original bash (install_remnawave.sh:1669-1818): update_current_certificates().
 func updateCurrentCertificates() {
 	if _, err := os.Stat(letsencryptLive); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CERT_NOT_FOUND"), ui.ColorReset)
@@ -101,11 +93,10 @@ func updateCurrentCertificates() {
 
 	certStatus := map[string]string{}
 
-	// BUG FIX (not in the original): Go map iteration order is randomized
-	// per-run by design, unlike bash's associative arrays which iterate in
-	// insertion order. Sorting the keys here makes both the processing
-	// order and (more importantly) the final results summary below
-	// reproducible between runs, instead of shuffling every time.
+	// Go map iteration order is randomized per-run by design. Sorting the
+	// keys here makes both the processing order and (more importantly)
+	// the final results summary below reproducible between runs, instead
+	// of shuffling every time.
 	domainsInOrder := make([]string, 0, len(uniqueDomains))
 	for certDomain := range uniqueDomains {
 		domainsInOrder = append(domainsInOrder, certDomain)
@@ -205,9 +196,9 @@ func updateCurrentCertificates() {
 	}
 }
 
-// ensureDNSCredentials is the Go equivalent of install_remnawave.sh:
-// 1724-1756: if the renewal.conf points at a credentials file that's gone
-// missing, re-prompt for the API key/email and recreate it.
+// ensureDNSCredentials re-prompts for the DNS API key/email and
+// recreates the credentials file if renewal.conf points at one that's
+// gone missing.
 func ensureDNSCredentials(certMethod, renewalConf string) {
 	data, err := os.ReadFile(renewalConf)
 	if err != nil {
@@ -249,7 +240,6 @@ func ensureDNSCredentials(certMethod, renewalConf string) {
 	}
 }
 
-// Original bash (install_remnawave.sh:1820-1865): generate_new_certificates().
 func generateNewCertificates() {
 	newDomain := ui.Reading(i18n.T("CERT_GENERATE_PROMPT"))
 

@@ -1,19 +1,11 @@
-// Package selfsteal is a port of src/modules/selfsteal_templates.sh
-// (150 lines): downloads one of three community template repos, picks a
-// random page from it, lightly obfuscates it (randomized ids/classes/meta
-// tags so every install looks different), and installs it to
-// /var/www/html.
+// Package selfsteal downloads one of three community "SNI steal"
+// template repos, picks a random page from it, lightly obfuscates it
+// (randomized ids/classes/meta tags so every install looks different),
+// and installs it to /var/www/html as the decoy site a reverse proxy
+// serves to anyone who isn't a legitimate client.
 //
-// Two deliberate improvements over the literal bash flow (per project
-// decision to not force a 1:1 port where a better option exists):
-//   - Download+unzip is done in-memory via net/http + archive/zip instead
-//     of shelling out to wget/unzip and writing main.zip to disk.
-//   - The bash version's `spinner $$ ... &` background process is replaced
-//     with a simple "please wait" message; no functional spinner animation
-//     is reproduced since spinner() itself lives in install_remnawave.sh
-//     and hasn't been ported (nor does the terminal's non-blocking spinner
-//     translate well into Go without pulling in a TTY animation library
-//     for a purely cosmetic effect).
+// Download+unzip is done in-memory via net/http + archive/zip instead
+// of shelling out to wget/unzip and writing a zip file to disk.
 package selfsteal
 
 import (
@@ -37,14 +29,14 @@ import (
 const optDir = "/opt"
 const webRoot = "/var/www/html"
 
-// templateURLs mirrors template_urls (src/modules/selfsteal_templates.sh:29-33).
+// templateURLs lists the community template repositories users can pick
+// from as a decoy site source.
 var templateURLs = []string{
 	"https://github.com/eGamesAPI/simple-web-templates/archive/refs/heads/main.zip",
 	"https://github.com/distillium/sni-templates/archive/refs/heads/main.zip",
 	"https://github.com/prettyleaf/nothing-sni/archive/refs/heads/main.zip",
 }
 
-// Original bash (src/modules/selfsteal_templates.sh:4-14): show_template_source_options().
 func showTemplateSourceOptions() {
 	fmt.Println()
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CHOOSE_TEMPLATE_SOURCE"), ui.ColorReset)
@@ -58,10 +50,9 @@ func showTemplateSourceOptions() {
 }
 
 // ManageSelfstealTemplates is the menu-facing entry point for "Install
-// random template for node". Despite the menu label (LANG[MENU_4],
-// unchanged from the original's "random"), this now lets the user pick a
-// specific page within the chosen source instead of always picking one
-// at random. See InteractiveInstall.
+// random template for node". Despite the menu label, this lets the
+// user pick a specific page within the chosen source instead of always
+// picking one at random. See InteractiveInstall.
 func ManageSelfstealTemplates() {
 	showTemplateSourceOptions()
 	option := ui.Reading(i18n.T("CHOOSE_TEMPLATE_OPTION"))
@@ -99,23 +90,21 @@ func (ts *templateSet) randomName() string {
 	return ts.names[rand.Intn(len(ts.names))]
 }
 
-// Original bash (src/modules/selfsteal_templates.sh:16-150): randomhtml().
 // prepareTemplateSet covers its setup half, lines 21-77: clean up
 // leftovers, download, extract, and list the pages available to choose
 // from, without picking one yet. installTemplate (below) covers the rest.
 func prepareTemplateSet(templateSource string) (*templateSet, error) {
-	// Lines 21-22: clean up any leftovers from a previous run.
+	// Clean up any leftovers from a previous run.
 	_ = os.RemoveAll(filepath.Join(optDir, "main.zip"))
 	_ = os.RemoveAll(filepath.Join(optDir, "simple-web-templates-main"))
 	_ = os.RemoveAll(filepath.Join(optDir, "sni-templates-main"))
 	_ = os.RemoveAll(filepath.Join(optDir, "nothing-sni-main"))
 
-	// Lines 24-25.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("RANDOM_TEMPLATE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 
-	// Lines 35-47: pick which repo to download.
+	// Pick which repo to download.
 	var selectedURL string
 	switch templateSource {
 	case "":
@@ -130,13 +119,13 @@ func prepareTemplateSet(templateSource string) (*templateSet, error) {
 		selectedURL = templateURLs[1]
 	}
 
-	// Lines 49-55: download with retry (in-memory instead of wget->disk).
+	// Download with retry (in-memory instead of wget->disk).
 	zipData, err := downloadWithRetry(selectedURL)
 	if err != nil {
 		return nil, fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
 	}
 
-	// Line 54: unzip main.zip (in-memory instead of the `unzip` binary).
+	// Unzip main.zip (in-memory instead of the `unzip` binary).
 	zr, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
 	if err != nil {
 		return nil, fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
@@ -145,7 +134,7 @@ func prepareTemplateSet(templateSource string) (*templateSet, error) {
 		return nil, fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
 	}
 
-	// Lines 57-66: cd into the extracted folder + drop unwanted files.
+	// Cd into the extracted folder + drop unwanted files.
 	var templateDir string
 	switch {
 	case strings.Contains(selectedURL, "eGamesAPI"):
@@ -159,7 +148,7 @@ func prepareTemplateSet(templateSource string) (*templateSet, error) {
 		removeAll(templateDir, "assets", "README.md", "index.html")
 	}
 
-	// Lines 68-77: list the pages/files available within the repo.
+	// List the pages/files available within the repo.
 	var names []string
 	if strings.Contains(selectedURL, "nothing-sni") {
 		for i := 1; i <= 8; i++ {
@@ -189,7 +178,7 @@ func prepareTemplateSet(templateSource string) (*templateSet, error) {
 // supplies the v1/v2 choice for that one template: RandomHTML rolls it
 // randomly, InteractiveInstall asks the user.
 func installTemplate(ts *templateSet, chosen string, pickVariant func(options []string) string) error {
-	// Lines 79-85: special-case the distillium "503 error pages" template,
+	// Special-case the distillium "503 error pages" template,
 	// which itself has v1/v2 sub-variants.
 	if strings.Contains(ts.selectedURL, "distillium") && chosen == "503 error pages" {
 		chosen = filepath.Join(chosen, pickVariant([]string{"v1", "v2"}))
@@ -197,7 +186,7 @@ func installTemplate(ts *templateSet, chosen string, pickVariant func(options []
 
 	selectedPath := filepath.Join(ts.templateDir, chosen)
 
-	// Lines 87-103: generate randomized tokens used to obfuscate the page.
+	// Generate randomized tokens used to obfuscate the page.
 	randomMetaID := randHex(16)
 	randomComment := randHex(8)
 	randomClassSuffix := randHex(4)
@@ -215,7 +204,7 @@ func installTemplate(ts *templateSet, chosen string, pickVariant func(options []
 	randomClass := randomClassPrefix + "-" + randomClassSuffix
 	randomTitle := "Page_" + randomTitleSuffix
 
-	// Lines 105-121: apply the obfuscation to every .html/.css file found.
+	// Apply the obfuscation to every .html/.css file found.
 	if err := obfuscateHTMLFiles(selectedPath, htmlTokens{
 		metaName:   randomMetaName,
 		metaID:     randomMetaID,
@@ -230,10 +219,9 @@ func installTemplate(ts *templateSet, chosen string, pickVariant func(options []
 	}
 	obfuscateCSSFiles(selectedPath, randomComment, randomClass)
 
-	// Line 127.
 	fmt.Printf("%s %s\n", i18n.T("SELECT_TEMPLATE"), chosen)
 
-	// Lines 129-141: install into /var/www/html.
+	// Install into /var/www/html.
 	info, statErr := os.Stat(selectedPath)
 	switch {
 	case statErr == nil && info.IsDir():
@@ -256,13 +244,13 @@ func installTemplate(ts *templateSet, chosen string, pickVariant func(options []
 		return fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
 	}
 
-	// Lines 143-146: sanity check the obfuscation actually took.
+	// Sanity check the obfuscation actually took.
 	if !anyHTMLContains(webRoot, randomMetaName) {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("FAILED_TO_MODIFY_HTML_FILES"), ui.ColorReset)
 		return nil
 	}
 
-	// Lines 148-149: final cleanup.
+	// Final cleanup.
 	_ = os.RemoveAll(filepath.Join(optDir, "simple-web-templates-main"))
 	_ = os.RemoveAll(filepath.Join(optDir, "sni-templates-main"))
 	_ = os.RemoveAll(filepath.Join(optDir, "nothing-sni-main"))
@@ -289,10 +277,9 @@ func RandomHTML(templateSource string) error {
 	return installTemplate(ts, ts.randomName(), randomVariant)
 }
 
-// InteractiveInstall is the Go equivalent of randomhtml(), extended to
-// let the user pick which page to install instead of always rolling one
-// at random. This is not in the original bash, which never offers this
-// choice. ManageSelfstealTemplates is the only caller.
+// InteractiveInstall downloads the chosen template source and lets the
+// user pick which page to install instead of always rolling one at
+// random. ManageSelfstealTemplates is the only caller.
 func InteractiveInstall(templateSource string) error {
 	ts, err := prepareTemplateSet(templateSource)
 	if err != nil {
@@ -329,12 +316,8 @@ func InteractiveInstall(templateSource string) error {
 	return installTemplate(ts, chosen, pickVariant)
 }
 
-// downloadWithRetry is the Go equivalent of:
-//
-//	while ! wget -q --timeout=30 --tries=10 --retry-connrefused "$selected_url"; do
-//	    echo "${LANG[DOWNLOAD_FAIL]}"
-//	    sleep 3
-//	done
+// downloadWithRetry fetches url, retrying with a 3-second delay between
+// attempts (up to 10 tries) on failure.
 func downloadWithRetry(url string) ([]byte, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 	for {
@@ -354,13 +337,11 @@ func downloadWithRetry(url string) ([]byte, error) {
 	}
 }
 
-// BUG FIX (not a 1:1 port): the original shells out to `unzip`, which
-// refuses by default to write a path that escapes the extraction
-// directory ("Zip Slip"). filepath.Join alone doesn't reject a
-// malicious f.Name like "../../etc/cron.d/x", so this checks the
-// cleaned, joined path stays under dest before writing anything.
+// extractZip guards against Zip Slip: filepath.Join alone doesn't
+// reject a malicious f.Name like "../../etc/cron.d/x", so this checks
+// the cleaned, joined path stays under dest before writing anything.
 // templateURLs are fixed, trusted GitHub archives, so this is
-// defense-in-depth against a compromised upstream repo or a
+// defense-in-depth against a compromised template repo or a
 // tampered-with download, not a fix for a currently-reachable exploit.
 func extractZip(zr *zip.Reader, dest string) error {
 	destClean := filepath.Clean(dest) + string(filepath.Separator)
@@ -416,10 +397,9 @@ type htmlTokens struct {
 
 var titleTagRE = regexp.MustCompile(`(?s)<title>.*?</title>`)
 
-// obfuscateHTMLFiles replicates the `find ... -exec sed -i ...` pipeline at
-// src/modules/selfsteal_templates.sh:105-116, one substitution per line
-// there, applied to every .html file under root (root may itself be a
-// single .html file, matching find's behavior when given a file path).
+// obfuscateHTMLFiles applies a fixed set of substitutions to every
+// .html file under root (root may itself be a single .html file), to
+// strip template-author credit lines and randomize ids/classes/titles.
 func obfuscateHTMLFiles(root string, t htmlTokens) error {
 	return walkFiles(root, ".html", func(path string) error {
 		data, err := os.ReadFile(path)
@@ -443,8 +423,8 @@ func obfuscateHTMLFiles(root string, t htmlTokens) error {
 	})
 }
 
-// obfuscateCSSFiles replicates src/modules/selfsteal_templates.sh:118-121:
-// prepend a comment line and a tiny throwaway class rule to every .css file.
+// obfuscateCSSFiles prepends a comment line and a tiny throwaway class
+// rule to every .css file.
 func obfuscateCSSFiles(root, comment, class string) {
 	_ = walkFiles(root, ".css", func(path string) error {
 		data, err := os.ReadFile(path)

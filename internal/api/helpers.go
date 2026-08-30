@@ -7,19 +7,15 @@ import (
 	"strings"
 )
 
-// randHex is the Go equivalent of: openssl rand -hex 8
-// (src/api/remnawave_api.sh:283, inside create_config_profile()).
+// randHex generates n random bytes and returns them hex-encoded.
 func randHex(n int) string {
 	buf := make([]byte, n)
 	_, _ = rand.Read(buf)
 	return hex.EncodeToString(buf)
 }
 
-// replaceInFile is the Go equivalent of:
-//
-//	sed -i "s|old|new|g" path
-//
-// used by get_public_key() (src/api/remnawave_api.sh:137).
+// replaceInFile replaces every occurrence of old with new in the file
+// at path.
 func replaceInFile(path, old, new string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -29,12 +25,8 @@ func replaceInFile(path, old, new string) {
 	_ = os.WriteFile(path, []byte(updated), 0644)
 }
 
-// replaceLineInFile is the Go equivalent of:
-//
-//	sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" path
-//
-// used by create_api_token() (src/api/remnawave_api.sh:484): any line
-// starting with `prefix` gets fully replaced by `newLine`.
+// replaceLineInFile replaces every line starting with prefix with
+// newLine.
 func replaceLineInFile(path, prefix, newLine string) {
 	data, err := os.ReadFile(path)
 	if err != nil {

@@ -1,28 +1,12 @@
-// Package oscheck is a port of check_os() (install_remnawave.sh:90-94):
+// Package oscheck checks that the host OS is a supported Debian or
+// Ubuntu release.
 //
-//	check_os() {
-//	    if ! grep -q "bullseye" /etc/os-release && ! grep -q "bookworm" /etc/os-release && \
-//	       ! grep -q "jammy" /etc/os-release && ! grep -q "noble" /etc/os-release && \
-//	       ! grep -q "trixie" /etc/os-release; then
-//	        error "${LANG[ERROR_OS]}"
-//	    fi
-//	}
-//
-// Deliberate improvement over a literal port: the original hardcodes five
-// specific codenames (Debian 11 "bullseye", 12 "bookworm", 13 "trixie";
-// Ubuntu 22.04 "jammy", 24.04 "noble") and needs a hand-edit every time a
-// new Debian/Ubuntu release ships. That is the bug this port fixes: the
-// bundled LANG[ERROR_OS] message still said "Debian 11/12 and Ubuntu
-// 22.04/24.04", already stale since "trixie" (Debian 13) was in the check
-// but not the message, and neither covered Ubuntu 26.04 "resolute" or
-// Debian 13.x point releases.
-//
-// Instead of matching codenames, this parses /etc/os-release's ID and
-// VERSION_ID and compares version numbers: Debian >= 11, Ubuntu >= 22.04.
-// That covers everything the original's codename list did (bullseye,
-// bookworm, trixie, jammy, noble), plus Ubuntu 26.04 "resolute" and any
-// Debian 13.x/future point or major release, without needing another edit
-// every two years.
+// Rather than matching a hardcoded list of codenames (which needs a
+// hand-edit every time a new Debian/Ubuntu release ships), this parses
+// /etc/os-release's ID and VERSION_ID and compares version numbers:
+// Debian >= 11, Ubuntu >= 22.04. That covers every release in the
+// classic codename set (bullseye, bookworm, trixie, jammy, noble) plus
+// anything newer, without needing another edit every two years.
 package oscheck
 
 import (
@@ -70,10 +54,10 @@ func parseOSRelease(path string) (id, versionID string, err error) {
 	return id, versionID, scanner.Err()
 }
 
-// CheckOS is the Go equivalent of check_os(). It returns an error (instead
-// of bash's error()+exit 1) so the caller can decide how to present it;
-// callers that want the original's "print in red and exit" behavior can do
-// so themselves at the top level.
+// CheckOS checks that the host OS is a supported release. It returns an
+// error rather than printing and exiting itself, so the caller can
+// decide how to present it; a caller that wants a "print in red and
+// exit" behavior can do so at the top level.
 func CheckOS() error {
 	id, versionID, err := parseOSRelease(osReleasePath)
 	if err != nil {
@@ -126,13 +110,8 @@ func parseVersion(versionID string) (major, minor int, ok bool) {
 	return major, minor, true
 }
 
-// Original bash (install_remnawave.sh:96-100):
-//
-//	check_root() {
-//	    if [[ $EUID -ne 0 ]]; then
-//	        error "${LANG[ERROR_ROOT]}"
-//	    fi
-//	}
+// CheckRoot returns an error unless the process is running as root
+// (euid 0).
 func CheckRoot() error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("%s", i18n.T("ERROR_ROOT"))
