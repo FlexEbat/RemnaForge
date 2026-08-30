@@ -1,23 +1,16 @@
-// Package certs is a full port of the certificate-management subsystem in
-// install_remnawave.sh: check_certificates(), check_api(),
-// get_certificates(), check_cert_expiry(), fix_letsencrypt_structure(),
-// handle_certificates(), and the "Manage certificates" menu
-// (show_manage_certificates/manage_certificates/update_current_certificates/
-// generate_new_certificates). All actual issuance goes through the
-// `certbot` binary via os/exec, matching the original. Reimplementing
-// ACME/ECDSA cert issuance would be a bigger and riskier undertaking than
-// shelling out to a well-tested tool that a Remnawave server already
-// needs installed.
+// Package certs is the certificate-management subsystem: checking
+// existing certificates, issuing new ones, and the "Manage
+// certificates" menu (update existing / generate new). All actual
+// issuance goes through the `certbot` binary via os/exec, rather than
+// reimplementing ACME/ECDSA cert issuance, a bigger and riskier
+// undertaking than shelling out to a well-tested tool that a Remnawave
+// server already needs installed.
 //
-// Deliberate improvement over a literal port: handle_certificates()
-// hardcodes target_dir="/opt/remnawave" (install_remnawave.sh:1970), which
-// means every caller's SSL docker-compose volume-mount lines get appended
-// to the *panel's* compose file regardless of which flow invoked it.
-// This is harmless for install_panel/install_panel_node (which do use
-// /opt/remnawave), but wrong for a standalone install_node
-// (/opt/remnanode). HandleCertificates here takes targetDir as an
-// explicit parameter instead of hardcoding it, so each caller points at
-// its own compose file.
+// HandleCertificates takes targetDir as an explicit parameter (rather
+// than a single hardcoded path), so each caller's SSL docker-compose
+// volume-mount lines get appended to its own compose file: this matters
+// because internal/panelfull/internal/panelonly point at
+// /opt/remnawave, while internal/nginxnode points at /opt/remnanode.
 package certs
 
 import (
@@ -32,15 +25,13 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
 
-// Result is returned by HandleCertificates. The original has no
-// equivalent return value; CERT_METHOD stays a global there. Callers
-// like nginxnode need to know which domain's certificate to reference,
-// so this type surfaces it instead of making every caller re-derive it.
+// Result is returned by HandleCertificates so callers like nginxnode can
+// know which domain's certificate to reference, instead of having every
+// caller re-derive it.
 type Result struct {
 	Method string // "1" Cloudflare, "2" ACME HTTP-01, "3" Gcore
 }
 
-// Original bash (install_remnawave.sh:1966-2124): handle_certificates().
 func HandleCertificates(domainsToCheck []string, certMethod, letsencryptEmail, targetDir string) (Result, error) {
 	needCertificates := false
 	minDaysLeft := 9999
@@ -164,10 +155,9 @@ func HandleCertificates(domainsToCheck []string, certMethod, letsencryptEmail, t
 	return Result{Method: certMethod}, nil
 }
 
-// syncCertRenewalCron is the Go equivalent of install_remnawave.sh:2101-2111:
-// ensure a weekly root crontab entry exists for certbot renewal, replacing
-// it if the certificate is close to expiry and the entry doesn't already
-// match.
+// syncCertRenewalCron ensures a weekly root crontab entry exists for
+// certbot renewal, replacing it if the certificate is close to expiry
+// and the entry doesn't already match.
 func syncCertRenewalCron(cronCommand string, minDaysLeft int) {
 	existing := currentCrontab()
 
@@ -214,8 +204,10 @@ func addCronRule(existing, cronCommand string) {
 	_ = cmd.Run()
 }
 
-// fixRenewHook is the Go equivalent of install_remnawave.sh:2113-2123: make
-// sure each domain's renewal.conf has the panel-restart renew_hook.
+// fixRenewHook makes sure each domain's renewal.conf has the
+// panel-restart renew_hook. Shares renewHookCommand (check.go) with
+// FixLetsencryptStructure so both write the same text; see the comment
+// on renewHookCommand for why that matters.
 func fixRenewHook(domainName string) {
 	renewalConf := filepath.Join(letsencryptRenewal, domainName+".conf")
 	data, err := os.ReadFile(renewalConf)
@@ -223,7 +215,7 @@ func fixRenewHook(domainName string) {
 		return
 	}
 	conf := string(data)
-	desiredHook := `renew_hook = sh -c 'cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx'`
+	desiredHook := renewHookCommand
 
 	if !strings.Contains(conf, "renew_hook") {
 		conf = strings.TrimRight(conf, "\n") + "\n" + desiredHook + "\n"

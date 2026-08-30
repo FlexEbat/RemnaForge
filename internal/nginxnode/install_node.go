@@ -1,6 +1,6 @@
-// Package nginxnode is a port of src/nginx/install_node.sh (203 lines):
-// installs a standalone Remnawave node behind Nginx (selfsteal reverse
-// proxy on a Unix socket, remnanode container alongside it).
+// Package nginxnode installs a standalone Remnawave node behind Nginx
+// (selfsteal reverse proxy on a Unix socket, remnanode container
+// alongside it).
 package nginxnode
 
 import (
@@ -26,8 +26,7 @@ const nodeDir = "/opt/remnanode"
 
 var ipv4RE = regexp.MustCompile(`^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$`)
 
-// dockerComposeHead is the first half of docker-compose.yml, written by
-// install_node_nginx() (src/nginx/install_node.sh:56-80), verbatim.
+// dockerComposeHead is the first half of the node's docker-compose.yml.
 const dockerComposeHead = `x-common: &common
   ulimits:
     nofile:
@@ -53,9 +52,8 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 `
 
-// nodeState carries values threaded between install_node_nginx() and
-// installation_node() in the original (SELFSTEAL_DOMAIN, PANEL_IP,
-// CERTIFICATE, SELFSTEAL_BASE_DOMAIN are all globals there).
+// nodeState carries the values gathered while prompting the user
+// through to where the docker-compose.yml/Caddyfile are written.
 type nodeState struct {
 	selfstealDomain     string
 	selfstealBaseDomain string
@@ -63,7 +61,6 @@ type nodeState struct {
 	certificate         string // joined with real newlines, see readCertificate()
 }
 
-// Original bash (src/nginx/install_node.sh:4-81): install_node_nginx().
 func installNodeNginx() (*nodeState, error) {
 	if err := os.MkdirAll(nodeDir, 0755); err != nil {
 		return nil, err
@@ -109,8 +106,7 @@ func installNodeNginx() (*nodeState, error) {
 	}, nil
 }
 
-// isValidIPv4 is the Go equivalent of the four chained checks at
-// src/nginx/install_node.sh:21-24 (regex shape + each octet 0-255).
+// isValidIPv4 checks the regex shape plus that each octet is <= 255.
 func isValidIPv4(s string) bool {
 	m := ipv4RE.FindStringSubmatch(s)
 	if m == nil {
@@ -128,11 +124,9 @@ func isValidIPv4(s string) bool {
 	return true
 }
 
-// readCertificate is the Go equivalent of src/nginx/install_node.sh:31-41:
-// read pasted multi-line certificate/key content until a blank line
-// following non-blank content. Lines join with real newlines here. The
-// original joins with the literal two characters "\n" and resolves them
-// to real newlines later via `echo -e`, producing the same result.
+// readCertificate reads pasted multi-line certificate/key content until
+// a blank line following non-blank content, joining lines with real
+// newlines.
 func readCertificate() string {
 	fmt.Print(ui.Question(i18n.T("CERT_PROMPT")))
 	scanner := bufio.NewScanner(os.Stdin)
@@ -151,15 +145,10 @@ func readCertificate() string {
 	return strings.Join(lines, "\n")
 }
 
-// Original bash (src/nginx/install_node.sh:83-203): installation_node().
 func InstallationNode() error {
-	// Original bash guard, e.g. install_remnawave.sh:500-501:
-	//   if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker ... ; then
-	//       install_packages || { ...; return; }
-	//   fi
 	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
-	// if missing, matching the original's auto-install behavior instead
-	// of only reporting the problem.
+	// if missing, so this doesn't just fail deep inside a later step with
+	// a confusing error.
 	if err := preflight.EnsureInstalled(); err != nil {
 		return err
 	}
@@ -172,21 +161,18 @@ func InstallationNode() error {
 		return err
 	}
 
-	// Lines 90-93: handle_certificates(). The original passes CERT_METHOD
-	// by value, not by nameref, into handle_certificates(), so the method
-	// it picked never makes it back to the caller. The "if CERT_METHOD is
-	// empty" fallback right after it (lines 95-102) always runs instead,
-	// re-deriving the method from whether an existing wildcard cert
-	// happens to be on disk. That fallback compensates for a bash scoping
-	// bug, not an intentional design choice. This port skips the
-	// fallback and uses the real method HandleCertificates reports.
+	// certs.HandleCertificates returns the actual method it used
+	// (wildcard vs per-domain), which is what determines whether the
+	// cert-domain field below should be the base domain or the full
+	// domain - using that returned value directly avoids re-deriving it
+	// from scratch (e.g. from whether a wildcard cert happens to already
+	// be on disk) and ever disagreeing with it.
 	certResult, certErr := certs.HandleCertificates([]string{state.selfstealDomain}, "", "", nodeDir)
 	if certErr != nil {
 		return certErr
 	}
 	certMethod := certResult.Method
 
-	// Lines 104-109.
 	var nodeCertDomain string
 	if certMethod == "1" {
 		nodeCertDomain = state.selfstealBaseDomain
@@ -194,7 +180,7 @@ func InstallationNode() error {
 		nodeCertDomain = state.selfstealDomain
 	}
 
-	// Lines 111-129: append the rest of docker-compose.yml.
+	// Append the rest of docker-compose.yml.
 	composeTail := fmt.Sprintf(`      - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
     command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
@@ -220,7 +206,7 @@ func InstallationNode() error {
 		return err
 	}
 
-	// Lines 131-168: nginx.conf.
+	// Nginx.conf.
 	nginxConf := fmt.Sprintf(`server_names_hash_bucket_size 64;
 
 # Gzip Compression
@@ -285,11 +271,12 @@ server {
 		return err
 	}
 
-	// Lines 170-171: ufw (best-effort, errors ignored like the original's 2>&1).
+	// Ufw (best-effort: this is a nice-to-have hardening step, not worth
+	// failing the whole install over).
 	_ = exec.Command("ufw", "allow", "from", state.panelIP, "to", "any", "port", "2222").Run()
 	_ = exec.Command("ufw", "reload").Run()
 
-	// Lines 173-178: bring the stack up.
+	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_NODE"), ui.ColorReset)
 	time.Sleep(3 * time.Second)
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
@@ -297,12 +284,12 @@ server {
 	upCmd.Dir = nodeDir
 	_ = upCmd.Run()
 
-	// Line 180: install a random selfsteal template.
+	// Install a random selfsteal template.
 	if err := selfsteal.RandomHTML(""); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 	}
 
-	// Lines 182-202: poll the node over HTTPS until it responds.
+	// Poll the node over HTTPS until it responds.
 	fmt.Printf(ui.ColorYellow+i18n.T("NODE_CHECK")+ui.ColorReset+"\n", state.selfstealDomain)
 	const maxAttempts = 5
 	const delay = 15 * time.Second

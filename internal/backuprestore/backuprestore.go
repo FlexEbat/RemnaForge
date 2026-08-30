@@ -1,16 +1,13 @@
-// Package backuprestore is a port of the "Backup and Restore" menu item
-// (install_remnawave.sh:2272-2277).
+// Package backuprestore implements the "Backup and Restore" menu item.
 //
-// The original doesn't implement backup/restore itself. It downloads and
-// runs a separate, independently maintained tool:
+// This project doesn't implement backup/restore itself. It downloads
+// and runs a separate, independently maintained tool:
 // https://github.com/distillium/remnawave-backup-restore (MIT license,
 // ~3600 lines of bash: Google Drive/S3 upload, Telegram notifications,
 // its own cron scheduling, its own translations). Reimplementing that
 // tool in Go would mean forking and maintaining a second, unrelated
-// project inside this one. Instead, this package does exactly what the
-// original menu item does: fetch the script if it isn't cached yet, then
-// hand off to it interactively. That is a complete, honestly-scoped port
-// of what "Backup and Restore" actually is here, not a stub.
+// project inside this one. Instead, this package fetches the script if
+// it isn't cached yet, then hands off to it interactively.
 package backuprestore
 
 import (
@@ -26,25 +23,18 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
 
-// scriptURL matches install_remnawave.sh:2276 exactly.
+// scriptURL is the community backup/restore tool this package fetches.
 const scriptURL = "https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh"
 
-// Run is the Go equivalent of:
-//
-//	if [ -f ~/backup-restore.sh ]; then
-//	    rw-backup
-//	else
-//	    curl -o ~/backup-restore.sh https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh && chmod +x ~/backup-restore.sh && ~/backup-restore.sh
-//	fi
-//
-// (install_remnawave.sh:2272-2277). If the script was already downloaded
-// on a previous run, this uses the `rw-backup` command it installs on its
-// own first run, exactly like the original. Otherwise it downloads a
-// fresh copy to $HOME and runs that directly.
+// Run downloads the community backup/restore script to $HOME if it
+// isn't already there, then hands off to it interactively. If the
+// script was already downloaded on a previous run, this uses the
+// `rw-backup` command it installs on its own first run instead of
+// downloading it again.
 func Run() error {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		home = "/root" // this tool already requires root; matches the original's ~ under sudo
+		home = "/root" // this tool already requires root, so this is a safe fallback
 	}
 	scriptPath := filepath.Join(home, "backup-restore.sh")
 

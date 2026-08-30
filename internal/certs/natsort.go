@@ -8,11 +8,11 @@ import (
 
 var chunkRE = regexp.MustCompile(`\d+|\D+`)
 
-// natLess replicates `sort -V` well enough for our purposes: split each
-// string into runs of digits vs. non-digits, compare digit runs
-// numerically and non-digit runs lexically. Used everywhere the original
-// piped `find ... | sort -V | tail -n 1` to pick the "latest" matching
-// directory/version (e.g. "example.com", "example.com-0001", ...).
+// natLess implements natural-sort ordering well enough for our
+// purposes: split each string into runs of digits vs. non-digits,
+// compare digit runs numerically and non-digit runs lexically. Used to
+// pick the "latest" matching directory/version (e.g. "example.com",
+// "example.com-0001", ...).
 func natLess(a, b string) bool {
 	ac := chunkRE.FindAllString(a, -1)
 	bc := chunkRE.FindAllString(b, -1)

@@ -5,8 +5,9 @@ import (
 	"encoding/hex"
 )
 
-// randHex is the Go equivalent of: openssl rand -hex N
-// (used throughout randomhtml(), src/modules/selfsteal_templates.sh:87-93).
+// randHex generates n random bytes and returns them hex-encoded, used
+// to build randomized ids/classes when obfuscating a selfsteal
+// template.
 func randHex(n int) string {
 	buf := make([]byte, n)
 	_, _ = rand.Read(buf)

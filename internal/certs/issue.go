@@ -28,11 +28,8 @@ func secretsDir() string {
 	return "/root/.secrets/certbot"
 }
 
-// Original bash (install_remnawave.sh:1481-1505): check_api().
 // Validates Cloudflare credentials against the Cloudflare API, prompting
-// up to 3 times like the original. Returns the (possibly re-entered)
-// apiKey/email, since Go can't mutate the caller's variables the way
-// bash's globals do.
+// up to 3 times. Returns the (possibly re-entered) apiKey/email.
 func CheckAPI(apiKey, email string) (validAPIKey, validEmail string, err error) {
 	const attempts = 3
 	client := &http.Client{Timeout: 15 * time.Second}
@@ -84,7 +81,6 @@ func runCertbot(args ...string) error {
 	return cmd.Run()
 }
 
-// Original bash (install_remnawave.sh:1507-1618): get_certificates().
 func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 	baseDomain := domain.ExtractDomain(domainName)
 	wildcardDomain := "*." + baseDomain

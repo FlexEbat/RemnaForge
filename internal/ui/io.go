@@ -9,8 +9,7 @@ import (
 	"regexp"
 )
 
-// LogFile is the destination for tee-style logging, mirroring the
-// LOGFILE variable set up in install_remnawave.sh:106-110 (log_entry()).
+// LogFile is the destination for tee-style logging.
 var LogFile = "/usr/local/remnawave_reverse/remnawave_reverse.log"
 
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
@@ -19,39 +18,22 @@ var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 // long-lived scanner (instead of a fresh one per call) is important:
 // bufio.Scanner reads stdin in chunks, so a new scanner per call would
 // silently swallow whatever line was buffered but unread by the previous
-// scanner, losing input. bash's `read` re-reads stdin line-by-line with
-// no such buffering surprise.
+// scanner, losing input.
 var stdinScanner = bufio.NewScanner(os.Stdin)
 
-// Original bash (install_remnawave.sh:77-79):
-//
-//	question() {
-//	    echo -e "${COLOR_GREEN}[?]${COLOR_RESET} ${COLOR_YELLOW}$*${COLOR_RESET}"
-//	}
+// Question formats a prompt string with the standard "[?]" marker.
 func Question(msg string) string {
 	return fmt.Sprintf("%s[?]%s %s%s%s", ColorGreen, ColorReset, ColorYellow, msg, ColorReset)
 }
 
-// Original bash (install_remnawave.sh:81-83):
-//
-//	reading() {
-//	    read -rp " $(question "$1")" "$2"
-//	}
-//
-// Go doesn't have bash's "read into a named variable", so Reading returns
-// the entered string instead of writing into a caller-named variable.
+// Reading prints prompt via Question and reads a line of input.
 func Reading(prompt string) string {
 	fmt.Printf(" %s", Question(prompt))
 	stdinScanner.Scan()
 	return stdinScanner.Text()
 }
 
-// Original bash (install_remnawave.sh:85-88):
-//
-//	error() {
-//	    echo -e "${COLOR_RED}$*${COLOR_RESET}"
-//	    exit 1
-//	}
+// ErrorExit prints msg in red and exits with status 1.
 func ErrorExit(msg string) {
 	fmt.Printf("%s%s%s\n", ColorRed, msg, ColorReset)
 	Exit(1)
@@ -76,27 +58,17 @@ func Exit(code int) {
 	os.Exit(code)
 }
 
-// Println prints a line already colored by the caller, equivalent to the
-// many `echo -e "${COLOR_X}...${COLOR_RESET}"` calls throughout the scripts.
+// Println prints a line already colored by the caller.
 func Println(msg string) {
 	fmt.Println(msg)
 }
 
-// Original bash (install_remnawave.sh:106-110):
-//
-//	log_entry() {
-//	  mkdir -p ${DIR_REMNAWAVE}
-//	  LOGFILE="${DIR_REMNAWAVE}remnawave_reverse.log"
-//	  exec > >(tee -a "$LOGFILE") 2>&1
-//	}
-//
-// EnableFileLogging reproduces `exec > >(tee -a "$LOGFILE") 2>&1`: every
-// byte the process writes to stdout or stderr, including from child
-// processes started with cmd.Stdout = os.Stdout (docker, certbot, ufw),
-// goes to the terminal and to LogFile. Go has no direct equivalent of
-// bash's `exec >`, so this creates a pipe, points os.Stdout and os.Stderr
-// at the write end, and copies everything read from it to both the
-// original terminal and the log file.
+// EnableFileLogging tees everything the process writes to stdout or
+// stderr, including from child processes started with cmd.Stdout =
+// os.Stdout (docker, certbot, ufw), to both the terminal and LogFile.
+// It creates a pipe, points os.Stdout and os.Stderr at the write end,
+// and copies everything read from it to both the original terminal and
+// the log file.
 //
 // Call this once, as early as possible in main(), before anything else
 // prints. It returns a cleanup function that restores the original
@@ -146,14 +118,8 @@ func EnableFileLogging() (cleanup func(), err error) {
 	return cleanup, nil
 }
 
-// Original bash (install_remnawave.sh:102-104):
-//
-//	log_clear() {
-//	  sed -i -e 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$LOGFILE"
-//	}
-//
-// Rather than shelling out to sed, we strip ANSI escape codes from the log
-// file natively.
+// LogClear strips ANSI escape codes from the log file, done natively
+// instead of shelling out to sed.
 func LogClear() error {
 	data, err := os.ReadFile(LogFile)
 	if err != nil {

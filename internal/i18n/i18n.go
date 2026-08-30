@@ -1,62 +1,45 @@
-// Package i18n mirrors the LANG[...] associative array populated by
-// src/lang/en.sh and src/lang/ru.sh, and loaded via set_language() /
-// load_language() in install_remnawave.sh:17-75.
+// Package i18n holds the two supported translations (English and
+// Russian) for every user-facing string in this tool, plus the current
+// language and the accessor used to look strings up by key.
 //
-// This file is generated (by porting all LANG[KEY]="value" lines from both
-// bash files) rather than hand-typed, to guarantee every string used by
-// every module matches the original exactly. Two deliberate adjustments
-// versus a literal byte-for-byte copy:
+// A handful of strings carry inline notes about earlier wording issues
+// that have since been fixed, kept for context on why a string reads
+// the way it does:
 //
-//  1. Bash's literal `\n` (backslash + n) inside these double-quoted
-//     assignments is only turned into a real newline later, when the
-//     string is consumed via `printf`/`echo -e`. Go's fmt does not
-//     reinterpret escape sequences found inside data, so we resolve `\n`
-//     to a real newline once, here, at data-definition time.
-//  2. LANG[CONFIG_NOT_FOUND] / LANG[NGINX_CONF_NOT_FOUND] originally
-//     referenced "$dir" inside a *double*-quoted bash string, so bash
-//     expanded it at `source` time. $dir is not a global variable at
-//     that point, so it silently expanded to "" and the message ended
-//     with "not found in " and nothing after. BUG FIX (not a 1:1 port):
-//     both strings now use a proper Go %s placeholder. Call sites
+//  1. i18n.T("CONFIG_NOT_FOUND") / i18n.T("NGINX_CONF_NOT_FOUND") used to embed
+//     a directory path via unconditional string interpolation, which
+//     silently produced "not found in " with nothing after it whenever
+//     that path wasn't set at message-construction time. FIXED: both
+//     strings now use a proper Go %s placeholder. Call sites
 //     (internal/managepanel) pass the real directory in via
 //     fmt.Sprintf, restoring the obviously-intended behavior.
-//  3. LANG[ERROR_OS] (both languages) was hand-edited after generation:
-//     the original text ("Supported only Debian 11/12 and Ubuntu
-//     22.04/24.04") was already stale in the bash source itself. Debian
-//     13 ("trixie") was accepted by check_os()'s codename list but never
-//     mentioned in the message. Since internal/oscheck now checks version
-//     numbers instead of a fixed codename list (Debian >= 11, Ubuntu >=
-//     22.04, no upper bound), the message was updated to say "11+"/"22.04+"
-//     to match reality instead of perpetuating the stale range.
-//  4. LANG[INVALID_CHOICE] said "Please select 0-11" in the original,
-//     baked into a string shared by menus of different sizes (the main
-//     menu and the selfsteal-template menu). No fixed range is correct
-//     for both. BUG FIX (not a 1:1 port): the range dropped from the
-//     message entirely, leaving "Invalid choice." The main menu still
-//     tells the user the current range through mainMenuPrompt() in
-//     internal/menu, which computes it from the live item count.
-//  5. LANG[INSTALL_PROMPT] and LANG[INSTALL_INVALID_CHOICE] said
-//     "0-5" in the original, but show_install_menu() lists exactly 4
-//     options (panel+node, panel only, add node, node only) plus 0 to
-//     exit: a valid range of 0-4. BUG FIX (not a 1:1 port): both strings
-//     now say "0-4".
-//  6. DOCKER_COMPOSE_DOWN_FAILED is a new key, not present in the
-//     original en.sh/ru.sh. internal/uninstall.removeScriptAndPanel()
+//  2. i18n.T("ERROR_OS") (both languages) said "Supported only Debian 11/12
+//     and Ubuntu 22.04/24.04", stale text that didn't reflect what
+//     internal/oscheck actually accepted. Since internal/oscheck checks
+//     version numbers rather than a fixed list (Debian >= 11, Ubuntu >=
+//     22.04, no upper bound), the message says "11+"/"22.04+" to match
+//     reality.
+//  3. i18n.T("INVALID_CHOICE") said "Please select 0-11", baked into a
+//     string shared by menus of different sizes (the main menu and the
+//     selfsteal-template menu). No fixed range is correct for both.
+//     FIXED: the range was dropped from the message entirely, leaving
+//     "Invalid choice." The main menu still tells the user the current
+//     range through mainMenuPrompt() in internal/menu, which computes
+//     it from the live item count.
+//  4. i18n.T("INSTALL_PROMPT") and i18n.T("INSTALL_INVALID_CHOICE") said "0-5",
+//     but the install menu lists exactly 4 options (panel+node, panel
+//     only, add node, node only) plus 0 to exit: a valid range of 0-4.
+//     FIXED: both strings now say "0-4".
+//  5. DOCKER_COMPOSE_DOWN_FAILED: internal/uninstall.removeScriptAndPanel()
 //     used to report a failed `docker compose down` with
-//     LANG[CHANGE_DIR_FAILED] ("Failed to change to directory %s"),
-//     wrong wording carried over from a copy-pasted pattern: the Go port
-//     never does a literal `cd` (it sets cmd.Dir instead), so that
-//     message no longer matched the failure it was reporting. This key
-//     names the actual failure instead.
-//
-// Keys are ported module-by-module as we go (see internal/<module>
-//
-//	packages); the full set is included here up front since it costs
-//	nothing extra and avoids constant re-editing of this file.
+//     i18n.T("CHANGE_DIR_FAILED") ("Failed to change to directory %s"),
+//     wrong wording left over from an earlier revision that actually
+//     did a directory change here; it no longer does (cmd.Dir is set
+//     instead), so that message no longer matched the failure it was
+//     reporting. This key names the actual failure instead.
 package i18n
 
-// Lang holds the currently active translation, equivalent to bash's
-// `declare -gA LANG`.
+// Lang holds the currently active translation.
 var Lang map[string]string
 
 var english = map[string]string{
@@ -146,7 +129,7 @@ var english = map[string]string{
 	"CONFIRM_REMOVE_SCRIPT":               "All script data will be removed from the server. Are you sure? (y/n): ",
 	"CONFIRM_SERVER_PANEL":                "Are you sure you are on the server with the installed panel?",
 	"CONTAINERS_NOT_READY_ATTEMPT":        "Containers are not ready, waiting... Attempt %d of %d.",
-	"CONTAINERS_TIMEOUT":                  "Containers not ready after %d attempts.\n\nCheck logs:\n  cd /opt/remnawave && docker compose logs -f\n\nAlso check typical Docker issues:\n  https://wiki.egam.es/troubleshooting/docker-issues/",
+	"CONTAINERS_TIMEOUT":                  "Containers not ready after %d attempts.\n\nCheck logs:\n  cd /opt/remnawave && docker compose logs -f\n\nAlso check the Docker documentation for troubleshooting:\n  https://docs.docker.com/engine/daemon/troubleshoot/",
 	"CONTAINER_NOT_FOUND":                 "Container %s not found",
 	"CONTAINER_NOT_RUNNING":               "Container 'remnawave' is not running. Please start it first.",
 	"CREATE_API_TOKEN_INSTRUCTION":        "Go to the panel at: https://%s\nNavigate to 'API Tokens' -> 'Create New Token' and create a token.\nCopy the created token and enter it below.",
@@ -163,8 +146,8 @@ var english = map[string]string{
 	"DELETE_APPS":                         "Delete specific applications",
 	"DIR_NOT_FOUND":                       "Directory /opt/remnawave or /opt/remnanode not found",
 	"DISABLING_IPV6":                      "Disabling IPv6...",
-	// DOCKER_COMPOSE_DOWN_FAILED is not from the original en.sh/ru.sh; see
-	// point 6 in the file doc comment above.
+	// DOCKER_COMPOSE_DOWN_FAILED: see point 5 in the file doc comment
+	// above.
 	"DOCKER_COMPOSE_DOWN_FAILED":              "Failed to stop containers in %s",
 	"DOES_NOT_REQUIRE_UPDATE":                 "does not require updating (",
 	"DOMAINS_MUST_BE_UNIQUE":                  "Error: All domains (panel, subscription, and node) must be unique.",
@@ -304,7 +287,7 @@ var english = map[string]string{
 	"MENU_7":                                  "Backup and Restore",
 	"MENU_8":                                  "Manage IPv6",
 	"MENU_9":                                  "Manage certificates domain",
-	"MENU_TITLE":                              "REMNAWAVE REVERSE-PROXY by eGames",
+	"MENU_TITLE":                              "REMNAFORGE",
 	"NGINX_CONF_ERROR":                        "Failed to extract necessary parameters from nginx.conf",
 	"NGINX_CONF_MODIFY_FAILED":                "Failed to modify nginx.conf",
 	"NGINX_CONF_NOT_FOUND":                    "File nginx.conf not found in %s",
@@ -547,7 +530,7 @@ var russian = map[string]string{
 	"CONFIRM_REMOVE_SCRIPT":                   "Все данные скрипта будут удалены с сервера. Вы уверены? (y/n): ",
 	"CONFIRM_SERVER_PANEL":                    "Вы уверены, что находитесь на сервере с установленной панелью?",
 	"CONTAINERS_NOT_READY_ATTEMPT":            "Контейнеры не готовы, ожидание... Попытка %d из %d.",
-	"CONTAINERS_TIMEOUT":                      "Контейнеры не готовы после %d попыток.\n\nПроверьте логи:\n  cd /opt/remnawave && docker compose logs -f\n\nТакже посмотрите типичные ошибки Docker:\n  https://wiki.egam.es/ru/troubleshooting/docker-issues/",
+	"CONTAINERS_TIMEOUT":                      "Контейнеры не готовы после %d попыток.\n\nПроверьте логи:\n  cd /opt/remnawave && docker compose logs -f\n\nТакже посмотрите документацию Docker по устранению неполадок:\n  https://docs.docker.com/engine/daemon/troubleshoot/",
 	"CONTAINER_NOT_FOUND":                     "Контейнер %s не найден",
 	"CONTAINER_NOT_RUNNING":                   "Контейнер 'remnawave' не запущен. Пожалуйста, запустите его сначала.",
 	"CREATE_API_TOKEN_INSTRUCTION":            "Зайдите в панель по адресу: https://%s\nПерейдите в раздел 'API токены' -> 'Создать новый токен' и создайте токен.\nСкопируйте созданный токен и введите его ниже.",
@@ -703,7 +686,7 @@ var russian = map[string]string{
 	"MENU_7":                                  "Backup and Restore",
 	"MENU_8":                                  "Управление IPv6",
 	"MENU_9":                                  "Управление сертификатами домена",
-	"MENU_TITLE":                              "REMNAWAVE REVERSE-PROXY by eGames",
+	"MENU_TITLE":                              "REMNAFORGE",
 	"NGINX_CONF_ERROR":                        "Не удалось извлечь необходимые параметры из nginx.conf",
 	"NGINX_CONF_MODIFY_FAILED":                "Не удалось изменить конфигурацию Nginx.",
 	"NGINX_CONF_NOT_FOUND":                    "Файл nginx.conf не найден в %s",
@@ -859,11 +842,10 @@ var russian = map[string]string{
 	"YQ_SUCCESSFULLY_INSTALLED":               "yq успешно установлен!",
 }
 
-// IN_DEVELOPMENT is not from the original en.sh/ru.sh. It is a stub
-// message this Go port uses for menu paths not yet translated from bash,
-// or for Caddy/WARP, which the project excludes by scope. It lives in
-// its own map, separate from the generated english/russian ones above,
-// to make clear this text has no bash source of truth.
+// IN_DEVELOPMENT is a stub message used for menu paths not yet
+// implemented, or for WARP, which the project excludes by scope. It
+// lives in its own map, separate from the english/russian ones above,
+// to make clear this text isn't part of the regular translation set.
 var inDevelopment = map[string]string{
 	"en": "🚧 Not implemented yet in this Go port.",
 	"ru": "🚧 Пока не реализовано в Go-версии.",
@@ -877,10 +859,8 @@ func InDevelopment() string {
 	return inDevelopment["en"]
 }
 
-// availableTemplates, like inDevelopment above, is not from the original
-// en.sh/ru.sh. internal/selfsteal.InteractiveInstall uses it as the
-// header for the per-page picker menu, a feature the original bash never
-// had (it always picked a page at random, with no such prompt to label).
+// availableTemplates is used by internal/selfsteal.InteractiveInstall
+// as the header for the per-page picker menu.
 var availableTemplates = map[string]string{
 	"en": "Available templates:",
 	"ru": "Доступные шаблоны:",
@@ -895,9 +875,8 @@ func AvailableTemplates() string {
 }
 
 // downloadingBackupRestore, like inDevelopment and availableTemplates
-// above, is not from the original en.sh/ru.sh. internal/backuprestore
-// prints it while fetching distillium/remnawave-backup-restore for the
-// first time.
+// above, lives in its own map. internal/backuprestore prints it while
+// fetching distillium/remnawave-backup-restore for the first time.
 var downloadingBackupRestore = map[string]string{
 	"en": "Downloading backup-restore tool (distillium/remnawave-backup-restore)...",
 	"ru": "Загрузка инструмента резервного копирования (distillium/remnawave-backup-restore)...",
@@ -915,9 +894,10 @@ func DownloadingBackupRestore() string {
 // is a flat string map with no language tag.
 var Current = "en"
 
-// SetLanguage corresponds to set_language() in install_remnawave.sh:47-75,
-// minus the remote-download fallback (curl/wget), since the Go binary ships
-// its translations compiled in rather than fetching them at runtime.
+// SetLanguage switches the active translation table. Unlike a
+// shell-script implementation that might fetch translation files at
+// runtime, this binary ships both translations compiled in, so there's
+// no download/fallback path to worry about.
 func SetLanguage(lang string) {
 	switch lang {
 	case "ru":
@@ -929,7 +909,7 @@ func SetLanguage(lang string) {
 	}
 }
 
-// T looks up a translation key, equivalent to bash's ${LANG[KEY]}.
+// T looks up a translation string by key in the active language.
 func T(key string) string {
 	return Lang[key]
 }

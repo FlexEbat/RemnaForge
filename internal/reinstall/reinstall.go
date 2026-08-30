@@ -1,8 +1,6 @@
-// Package reinstall is a port of show_reinstall_options(),
-// choose_reinstall_type(), and reinstall_remnawave()
-// (install_remnawave.sh:786-867). It wipes any existing panel or node
-// install, then hands off to the same install flows internal/menu uses
-// for a fresh install, for both Nginx and Caddy.
+// Package reinstall wipes any existing panel or node install, then
+// hands off to the same install flows internal/menu uses for a fresh
+// install, for both Nginx and Caddy.
 package reinstall
 
 import (
@@ -46,7 +44,6 @@ func showWebserverSelect() string {
 }
 
 // ChooseReinstallType is the menu-facing entry point.
-// Original bash (install_remnawave.sh:658-710): choose_reinstall_type().
 func ChooseReinstallType() {
 	showReinstallOptions()
 	option := ui.Reading(i18n.T("REINSTALL_PROMPT"))
@@ -100,11 +97,10 @@ func runInstall(reinstallOption string) {
 	}
 }
 
-// runInstallCaddy is the Caddy leg of choose_reinstall_type()'s
-// REINSTALL_OPTION/WEBSERVER_OPTION matrix (install_remnawave.sh:811-824,
-// WEBSERVER_OPTION=2 branch): same REINSTALL_OPTION numbering as
-// runInstall (1=panel+node, 2=panel only, 3=node only), routed to the
-// Caddy install packages instead of the Nginx ones.
+// runInstallCaddy is the Caddy leg of the reinstall type/webserver
+// choice: same reinstallOption numbering as runInstall (1=panel+node,
+// 2=panel only, 3=node only), routed to the Caddy install packages
+// instead of the Nginx ones.
 func runInstallCaddy(reinstallOption string) {
 	var err error
 	switch reinstallOption {
@@ -120,12 +116,9 @@ func runInstallCaddy(reinstallOption string) {
 	}
 }
 
-// reinstallRemnawave is the Go equivalent of install_remnawave.sh:712-727:
-// tear down any existing panel or node stack before a fresh install.
-// The original runs `docker compose down` in the background and shows a
-// spinner while it waits; this port runs it synchronously and prints a
-// plain "please wait" message instead, the same simplification used
-// throughout the install flows for the original's spinner() calls.
+// reinstallRemnawave tears down any existing panel or node stack before
+// a fresh install, printing a plain "please wait" message while it
+// waits for `docker compose down` to finish.
 func reinstallRemnawave() {
 	for _, dir := range []string{"/opt/remnawave", "/opt/remnanode"} {
 		if _, err := os.Stat(dir); err != nil {

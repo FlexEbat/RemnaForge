@@ -19,9 +19,23 @@ const letsencryptLive = "/etc/letsencrypt/live"
 const letsencryptArchive = "/etc/letsencrypt/archive"
 const letsencryptRenewal = "/etc/letsencrypt/renewal"
 
-// latestMatchingDir is the Go equivalent of the repeated:
+// renewHookCommand is the certbot renew_hook line this project writes into
+// every domain's renewal.conf, shared by FixLetsencryptStructure (this
+// file) and fixRenewHook (handle.go).
 //
-//	find "$cert_dir" -maxdepth 1 -type d -name "${DOMAIN}*" | sort -V | tail -n 1
+// FIXED: these two call sites used to hardcode two *different*
+// renew_hook strings for this exact same purpose - one included a
+// trailing "docker compose exec remnawave-nginx nginx -s reload", the
+// other didn't. Depending on which of the two ran last, a server could
+// end up with either hook, silently. Both now share this single
+// constant, using the more complete variant (the extra reload is a
+// harmless no-op immediately after `docker compose up -d`, and a real
+// safety net if that ever changes to not force a full container
+// restart).
+const renewHookCommand = `renew_hook = sh -c 'cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx && docker compose exec remnawave-nginx nginx -s reload'`
+
+// latestMatchingDir returns the highest natural-sort-ordered directory
+// name under base matching prefix*, or "" if none exist.
 func latestMatchingDir(base, prefix string) string {
 	entries, err := os.ReadDir(base)
 	if err != nil {
@@ -40,7 +54,6 @@ func latestMatchingDir(base, prefix string) string {
 	return filepath.Join(base, matches[len(matches)-1])
 }
 
-// Original bash (install_remnawave.sh:1438-1479): check_certificates().
 func CheckCertificates(domainName string) bool {
 	if _, err := os.Stat(letsencryptLive); err != nil {
 		fmt.Printf("%s%s %s%s\n", ui.ColorRed, i18n.T("CERT_NOT_FOUND"), domainName, ui.ColorReset)
@@ -86,7 +99,6 @@ func CheckCertificates(domainName string) bool {
 	return false
 }
 
-// Original bash (install_remnawave.sh:1867-1892): check_cert_expiry().
 // Uses crypto/x509 directly instead of shelling to
 // `openssl x509 -enddate` + `date -d`.
 func CheckCertExpiry(domainName string) (int, error) {
@@ -118,7 +130,6 @@ func CheckCertExpiry(domainName string) (int, error) {
 
 var certVersionRE = regexp.MustCompile(`cert(\d+)\.pem$`)
 
-// Original bash (install_remnawave.sh:1894-1963): fix_letsencrypt_structure().
 func FixLetsencryptStructure(domainName string) error {
 	liveDir := filepath.Join(letsencryptLive, domainName)
 	archiveDir := filepath.Join(letsencryptArchive, domainName)
@@ -190,7 +201,7 @@ func FixLetsencryptStructure(domainName string) error {
 	conf = setRenewalConfLine(conf, "fullchain", fullchainPath)
 	conf = setRenewalConfLine(conf, "privkey", privkeyPath)
 
-	expectedHook := `renew_hook = sh -c 'cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx && docker compose exec remnawave-nginx nginx -s reload'`
+	expectedHook := renewHookCommand
 	conf = removeLinesWithPrefix(conf, "renew_hook")
 	conf = strings.TrimRight(conf, "\n") + "\n" + expectedHook + "\n"
 
@@ -206,9 +217,8 @@ func FixLetsencryptStructure(domainName string) error {
 	return nil
 }
 
-// renewalConfValue is the Go equivalent of:
-//
-//	grep "^key" renewal.conf | cut -d'=' -f2 | tr -d ' '
+// renewalConfValue reads the value of a "key = value" line from a
+// renewal.conf-style config.
 func renewalConfValue(conf, key string) string {
 	for _, line := range strings.Split(conf, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), key) {
@@ -221,9 +231,8 @@ func renewalConfValue(conf, key string) string {
 	return ""
 }
 
-// setRenewalConfLine is the Go equivalent of:
-//
-//	if ! grep -q "^key = value" file; then sed -i "s|^key =.*|key = value|" file; fi
+// setRenewalConfLine sets a "key = value" line in conf, adding it if
+// not already present with that exact value.
 func setRenewalConfLine(conf, key, value string) string {
 	target := fmt.Sprintf("%s = %s", key, value)
 	lines := strings.Split(conf, "\n")
