@@ -9,11 +9,35 @@ import (
 	"time"
 
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/api"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
 )
 
 var entityNameRE = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
+
+// selectNodeWebserver asks which webserver the node being registered
+// runs behind. CreateConfigProfile's Hysteria2 inbound needs a
+// certificate path convention, and that convention is different for a
+// node installed via internal/nginxnode (certbot, /etc/letsencrypt/live)
+// versus internal/caddynode (Caddy's own ACME client, its data volume).
+// This flow doesn't install or inspect the node itself, so it has no
+// other way to know which one applies.
+func selectNodeWebserver() string {
+	for {
+		fmt.Println()
+		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("SELECT_WEBSERVER_TITLE"), ui.ColorReset)
+		fmt.Println()
+		fmt.Printf("%s1. Nginx%s\n", ui.ColorYellow, ui.ColorReset)
+		fmt.Printf("%s2. Caddy%s\n", ui.ColorYellow, ui.ColorReset)
+		fmt.Println()
+		choice := ui.Reading(i18n.T("SELECT_WEBSERVER_PROMPT"))
+		if choice == "1" || choice == "2" {
+			return choice
+		}
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("INVALID_CHOICE"), ui.ColorReset)
+	}
+}
 
 // AddNodeToPanel registers a new node with the panel over its local
 // API: it warns the user this must run on the panel's own server,
@@ -89,9 +113,19 @@ func AddNodeToPanel() {
 	privateKey := api.GenerateXrayKeys(domainURL, token)
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GENERATE_KEYS_SUCCESS"), ui.ColorReset)
 
+	// Which webserver the node runs behind, needed for the Hysteria2
+	// inbound's certificate path convention (see selectNodeWebserver).
+	webserver := selectNodeWebserver()
+	var certFullchain, certPrivkey string
+	if webserver == "1" {
+		certFullchain, certPrivkey = certs.NginxCertPaths(selfstealDomain)
+	} else {
+		certFullchain, certPrivkey = certs.CaddyCertPaths(selfstealDomain)
+	}
+
 	// Create the config profile.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, entityName, selfstealDomain, privateKey, entityName)
+	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, entityName, selfstealDomain, privateKey, entityName, certFullchain, certPrivkey)
 	fmt.Printf("%s%s: %s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), entityName, ui.ColorReset)
 
 	// Create the node.

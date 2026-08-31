@@ -427,11 +427,36 @@ func DeleteConfigProfile(domainURL, token, profileUUID string) error {
 	return nil
 }
 
-func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag string) (string, string) {
+// CreateConfigProfile creates a config profile with three inbounds on
+// the shared unix socket / direct-TLS pattern this project's node
+// install flows set up:
+//
+//   - Raw: VLESS+Reality over TCP, terminated by the webserver's unix
+//     socket (same pattern as before this profile grew two more
+//     inbounds).
+//   - HYSTERIA-BBR: Hysteria2, TLS terminated directly by Xray itself
+//     (not by the webserver) using certFullchain/certPrivkey, since
+//     Hysteria2 runs over QUIC/UDP and neither Nginx nor Caddy proxies
+//     that the way they do the Reality/XHTTP unix sockets.
+//   - XHTTP-TLS: VLESS+XHTTP over its own unix socket, fronted by the
+//     webserver's /api/v2/stream-events location/route.
+//
+// certFullchain/certPrivkey must be the path Xray will see *inside the
+// node's own container* once this profile is applied there - not
+// necessarily a path that exists on the machine calling this function.
+// Callers that provision the node's files themselves (internal/panelfull,
+// internal/panelonly's sibling flows, internal/nginxnode,
+// internal/caddynode) know these paths outright. Callers that only
+// register an already-installed, possibly remote node
+// (internal/addnode) can't read that node's certificate and have to
+// pass the deterministic path convention its install flow would have
+// used instead.
+func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag, certFullchain, certPrivkey string) (string, string) {
 	if inboundTag == "" {
-		inboundTag = "Steal"
+		inboundTag = "Raw"
 	}
 	shortID := randHex(8)
+	salamanderPassword := randHex(8)
 
 	requestBody := map[string]any{
 		"name": name,
@@ -464,6 +489,64 @@ func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag 
 						},
 					},
 				},
+				{
+					"tag":      "HYSTERIA-BBR",
+					"port":     443,
+					"listen":   "0.0.0.0",
+					"protocol": "hysteria",
+					"settings": map[string]any{"clients": []any{}, "version": 2},
+					"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
+					"streamSettings": map[string]any{
+						"network":  "hysteria",
+						"security": "tls",
+						"finalmask": map[string]any{
+							"udp": []map[string]any{
+								{"type": "salamander", "settings": map[string]any{"password": salamanderPassword}},
+							},
+							"quicParams": map[string]any{
+								"debug":           false,
+								"bbrProfile":      "standard",
+								"congestion":      "bbr",
+								"maxIdleTimeout":  90,
+								"keepAlivePeriod": 20,
+							},
+						},
+						"tlsSettings": map[string]any{
+							"alpn": []string{"h3"},
+							"certificates": []map[string]any{
+								{"keyFile": certPrivkey, "certificateFile": certFullchain},
+							},
+						},
+						"hysteriaSettings": map[string]any{
+							"version": 2,
+							"masquerade": map[string]any{
+								"type": "proxy",
+								"proxy": map[string]any{
+									"url":         "https://" + domain,
+									"rewriteHost": true,
+								},
+							},
+							"udpIdleTimeout":        90,
+							"ignoreClientBandwidth": true,
+						},
+					},
+				},
+				{
+					"tag":      "XHTTP-TLS",
+					"port":     0,
+					"listen":   "/dev/shm/xhttp.sock,0666",
+					"protocol": "vless",
+					"settings": map[string]any{"clients": []any{}, "decryption": "none"},
+					"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
+					"streamSettings": map[string]any{
+						"network":  "xhttp",
+						"security": "none",
+						"xhttpSettings": map[string]any{
+							"host": domain,
+							"path": "/api/v2/stream-events",
+						},
+					},
+				},
 			},
 			"outbounds": []map[string]any{
 				{"tag": "DIRECT", "protocol": "freedom"},
@@ -471,7 +554,8 @@ func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag 
 			},
 			"routing": map[string]any{
 				"rules": []map[string]any{
-					{"ip": []string{"geoip:private"}, "type": "field", "outboundTag": "BLOCK"},
+					{"type": "field", "domain": []string{"geosite:private", "geosite:category-ru"}, "outboundTag": "BLOCK"},
+					{"ip": []string{"geoip:private", "geoip:ru"}, "type": "field", "outboundTag": "BLOCK"},
 					{"type": "field", "protocol": []string{"bittorrent"}, "outboundTag": "BLOCK"},
 				},
 			},
