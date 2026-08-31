@@ -561,7 +561,7 @@ volumes:
 	// under the base domain's directory instead, which this flow has no
 	// way to know from here.
 	nodeCertFullchain, nodeCertPrivkey := certs.NginxCertPaths(state.selfstealDomain)
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, "", nodeCertFullchain, nodeCertPrivkey)
+	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, "", nodeCertFullchain, nodeCertPrivkey, api.ConfigProfileInbounds{Raw: true})
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
 	// Create the node.

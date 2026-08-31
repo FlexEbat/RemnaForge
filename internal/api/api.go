@@ -427,139 +427,171 @@ func DeleteConfigProfile(domainURL, token, profileUUID string) error {
 	return nil
 }
 
-// CreateConfigProfile creates a config profile with three inbounds on
-// the shared unix socket / direct-TLS pattern this project's node
-// install flows set up:
-//
-//   - Raw: VLESS+Reality over TCP, terminated by the webserver's unix
-//     socket (same pattern as before this profile grew two more
-//     inbounds).
-//   - HYSTERIA-BBR: Hysteria2, TLS terminated directly by Xray itself
-//     (not by the webserver) using certFullchain/certPrivkey, since
-//     Hysteria2 runs over QUIC/UDP and neither Nginx nor Caddy proxies
-//     that the way they do the Reality/XHTTP unix sockets.
-//   - XHTTP-TLS: VLESS+XHTTP over its own unix socket, fronted by the
-//     webserver's /api/v2/stream-events location/route.
-//
-// certFullchain/certPrivkey must be the path Xray will see *inside the
-// node's own container* once this profile is applied there - not
-// necessarily a path that exists on the machine calling this function.
-// Callers that provision the node's files themselves (internal/panelfull,
-// internal/panelonly's sibling flows, internal/nginxnode,
-// internal/caddynode) know these paths outright. Callers that only
-// register an already-installed, possibly remote node
-// (internal/addnode) can't read that node's certificate and have to
-// pass the deterministic path convention its install flow would have
-// used instead.
-func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag, certFullchain, certPrivkey string) (string, string) {
+// ConfigProfileInbounds selects which inbounds a config profile's
+// config carries. Raw (VLESS+Reality) is this project's stock,
+// always-available inbound; Hysteria2 and XHTTP are optional additions
+// a node can turn on later (see internal/menu's node-profile picker).
+type ConfigProfileInbounds struct {
+	Raw       bool
+	Hysteria2 bool
+	XHTTP     bool
+}
+
+// buildInboundConfig returns the Xray inbounds array for the requested
+// ConfigProfileInbounds selection, reusing existingByTag's settings for
+// any inbound kind that was already present under that tag (so toggling
+// Hysteria2/XHTTP on or off later doesn't rotate the Raw inbound's
+// privateKey/shortIds and silently break every client already using
+// it), and generating fresh secrets only for a kind that's being turned
+// on for the first time. existingByTag may be nil.
+func buildInboundConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, certFullchain, certPrivkey string, existingByTag map[string]map[string]any) []map[string]any {
+	var inbounds []map[string]any
+
+	if sel.Raw {
+		if existing, ok := existingByTag[rawTag]; ok {
+			inbounds = append(inbounds, existing)
+		} else {
+			shortID := randHex(8)
+			inbounds = append(inbounds, map[string]any{
+				"tag":      rawTag,
+				"port":     443,
+				"protocol": "vless",
+				"settings": map[string]any{"clients": []any{}, "decryption": "none"},
+				"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
+				"streamSettings": map[string]any{
+					"network":  "tcp",
+					"security": "reality",
+					"realitySettings": map[string]any{
+						"show":        false,
+						"xver":        1,
+						"dest":        "/dev/shm/nginx.sock",
+						"spiderX":     "",
+						"shortIds":    []string{shortID},
+						"privateKey":  privateKey,
+						"serverNames": []string{domain},
+					},
+				},
+			})
+		}
+	}
+
+	if sel.Hysteria2 {
+		if existing, ok := existingByTag["HYSTERIA-BBR"]; ok {
+			inbounds = append(inbounds, existing)
+		} else {
+			salamanderPassword := randHex(8)
+			inbounds = append(inbounds, map[string]any{
+				"tag":      "HYSTERIA-BBR",
+				"port":     443,
+				"listen":   "0.0.0.0",
+				"protocol": "hysteria",
+				"settings": map[string]any{"clients": []any{}, "version": 2},
+				"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
+				"streamSettings": map[string]any{
+					"network":  "hysteria",
+					"security": "tls",
+					"finalmask": map[string]any{
+						"udp": []map[string]any{
+							{"type": "salamander", "settings": map[string]any{"password": salamanderPassword}},
+						},
+						"quicParams": map[string]any{
+							"debug":           false,
+							"bbrProfile":      "standard",
+							"congestion":      "bbr",
+							"maxIdleTimeout":  90,
+							"keepAlivePeriod": 20,
+						},
+					},
+					"tlsSettings": map[string]any{
+						"alpn": []string{"h3"},
+						"certificates": []map[string]any{
+							{"keyFile": certPrivkey, "certificateFile": certFullchain},
+						},
+					},
+					"hysteriaSettings": map[string]any{
+						"version": 2,
+						"masquerade": map[string]any{
+							"type": "proxy",
+							"proxy": map[string]any{
+								"url":         "https://" + domain,
+								"rewriteHost": true,
+							},
+						},
+						"udpIdleTimeout":        90,
+						"ignoreClientBandwidth": true,
+					},
+				},
+			})
+		}
+	}
+
+	if sel.XHTTP {
+		if existing, ok := existingByTag["XHTTP-TLS"]; ok {
+			inbounds = append(inbounds, existing)
+		} else {
+			inbounds = append(inbounds, map[string]any{
+				"tag":      "XHTTP-TLS",
+				"port":     0,
+				"listen":   "/dev/shm/xhttp.sock,0666",
+				"protocol": "vless",
+				"settings": map[string]any{"clients": []any{}, "decryption": "none"},
+				"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
+				"streamSettings": map[string]any{
+					"network":  "xhttp",
+					"security": "none",
+					"xhttpSettings": map[string]any{
+						"host": domain,
+						"path": "/api/v2/stream-events",
+					},
+				},
+			})
+		}
+	}
+
+	return inbounds
+}
+
+func buildProfileConfig(inbounds []map[string]any) map[string]any {
+	return map[string]any{
+		"log": map[string]any{"loglevel": "warning"},
+		"dns": map[string]any{
+			"queryStrategy": "UseIPv4",
+			"servers": []map[string]any{
+				{"address": "https://dns.google/dns-query", "skipFallback": false},
+			},
+		},
+		"inbounds": inbounds,
+		"outbounds": []map[string]any{
+			{"tag": "DIRECT", "protocol": "freedom"},
+			{"tag": "BLOCK", "protocol": "blackhole"},
+		},
+		"routing": map[string]any{
+			"rules": []map[string]any{
+				{"type": "field", "domain": []string{"geosite:private", "geosite:category-ru"}, "outboundTag": "BLOCK"},
+				{"ip": []string{"geoip:private", "geoip:ru"}, "type": "field", "outboundTag": "BLOCK"},
+				{"type": "field", "protocol": []string{"bittorrent"}, "outboundTag": "BLOCK"},
+			},
+		},
+	}
+}
+
+// CreateConfigProfile creates a config profile. By default (inbounds
+// left as its zero value) it carries only the stock Raw (VLESS+Reality)
+// inbound; the panel's config-profiles menu can add Hysteria2 and/or
+// XHTTP to it later via UpdateConfigProfileInbounds. See
+// ConfigProfileInbounds and buildInboundConfig for what each inbound
+// needs.
+func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag, certFullchain, certPrivkey string, inbounds ConfigProfileInbounds) (string, string) {
 	if inboundTag == "" {
 		inboundTag = "Raw"
 	}
-	shortID := randHex(8)
-	salamanderPassword := randHex(8)
+	if !inbounds.Raw && !inbounds.Hysteria2 && !inbounds.XHTTP {
+		inbounds.Raw = true
+	}
 
 	requestBody := map[string]any{
-		"name": name,
-		"config": map[string]any{
-			"log": map[string]any{"loglevel": "warning"},
-			"dns": map[string]any{
-				"queryStrategy": "UseIPv4",
-				"servers": []map[string]any{
-					{"address": "https://dns.google/dns-query", "skipFallback": false},
-				},
-			},
-			"inbounds": []map[string]any{
-				{
-					"tag":      inboundTag,
-					"port":     443,
-					"protocol": "vless",
-					"settings": map[string]any{"clients": []any{}, "decryption": "none"},
-					"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
-					"streamSettings": map[string]any{
-						"network":  "tcp",
-						"security": "reality",
-						"realitySettings": map[string]any{
-							"show":        false,
-							"xver":        1,
-							"dest":        "/dev/shm/nginx.sock",
-							"spiderX":     "",
-							"shortIds":    []string{shortID},
-							"privateKey":  privateKey,
-							"serverNames": []string{domain},
-						},
-					},
-				},
-				{
-					"tag":      "HYSTERIA-BBR",
-					"port":     443,
-					"listen":   "0.0.0.0",
-					"protocol": "hysteria",
-					"settings": map[string]any{"clients": []any{}, "version": 2},
-					"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
-					"streamSettings": map[string]any{
-						"network":  "hysteria",
-						"security": "tls",
-						"finalmask": map[string]any{
-							"udp": []map[string]any{
-								{"type": "salamander", "settings": map[string]any{"password": salamanderPassword}},
-							},
-							"quicParams": map[string]any{
-								"debug":           false,
-								"bbrProfile":      "standard",
-								"congestion":      "bbr",
-								"maxIdleTimeout":  90,
-								"keepAlivePeriod": 20,
-							},
-						},
-						"tlsSettings": map[string]any{
-							"alpn": []string{"h3"},
-							"certificates": []map[string]any{
-								{"keyFile": certPrivkey, "certificateFile": certFullchain},
-							},
-						},
-						"hysteriaSettings": map[string]any{
-							"version": 2,
-							"masquerade": map[string]any{
-								"type": "proxy",
-								"proxy": map[string]any{
-									"url":         "https://" + domain,
-									"rewriteHost": true,
-								},
-							},
-							"udpIdleTimeout":        90,
-							"ignoreClientBandwidth": true,
-						},
-					},
-				},
-				{
-					"tag":      "XHTTP-TLS",
-					"port":     0,
-					"listen":   "/dev/shm/xhttp.sock,0666",
-					"protocol": "vless",
-					"settings": map[string]any{"clients": []any{}, "decryption": "none"},
-					"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
-					"streamSettings": map[string]any{
-						"network":  "xhttp",
-						"security": "none",
-						"xhttpSettings": map[string]any{
-							"host": domain,
-							"path": "/api/v2/stream-events",
-						},
-					},
-				},
-			},
-			"outbounds": []map[string]any{
-				{"tag": "DIRECT", "protocol": "freedom"},
-				{"tag": "BLOCK", "protocol": "blackhole"},
-			},
-			"routing": map[string]any{
-				"rules": []map[string]any{
-					{"type": "field", "domain": []string{"geosite:private", "geosite:category-ru"}, "outboundTag": "BLOCK"},
-					{"ip": []string{"geoip:private", "geoip:ru"}, "type": "field", "outboundTag": "BLOCK"},
-					{"type": "field", "protocol": []string{"bittorrent"}, "outboundTag": "BLOCK"},
-				},
-			},
-		},
+		"name":   name,
+		"config": buildProfileConfig(buildInboundConfig(inbounds, domain, privateKey, inboundTag, certFullchain, certPrivkey, nil)),
 	}
 	body, _ := json.Marshal(requestBody)
 
@@ -570,6 +602,7 @@ func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag,
 			UUID     string `json:"uuid"`
 			Inbounds []struct {
 				UUID string `json:"uuid"`
+				Tag  string `json:"tag"`
 			} `json:"inbounds"`
 		} `json:"response"`
 	}
@@ -579,8 +612,19 @@ func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag,
 	}
 
 	configUUID := parsed.Response.UUID
+	// Match the primary inbound by tag rather than assuming it's first
+	// in the response: nothing guarantees the panel echoes inbounds
+	// back in submission order, and getting this wrong would silently
+	// hand CreateNode/CreateHost/UpdateSquad a Hysteria2 or XHTTP
+	// inbound's UUID instead of Raw's.
 	var inboundUUID string
-	if len(parsed.Response.Inbounds) > 0 {
+	for _, ib := range parsed.Response.Inbounds {
+		if ib.Tag == inboundTag {
+			inboundUUID = ib.UUID
+			break
+		}
+	}
+	if inboundUUID == "" && len(parsed.Response.Inbounds) > 0 {
 		inboundUUID = parsed.Response.Inbounds[0].UUID
 	}
 	if configUUID == "" || inboundUUID == "" {

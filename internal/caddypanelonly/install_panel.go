@@ -493,7 +493,7 @@ func InstallationPanelOnly() error {
 	// with its default storage backend, which every Caddy flow in this
 	// project does.
 	nodeCertFullchain, nodeCertPrivkey := certs.CaddyCertPaths(state.selfstealDomain)
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, "", nodeCertFullchain, nodeCertPrivkey)
+	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, "", nodeCertFullchain, nodeCertPrivkey, api.ConfigProfileInbounds{Raw: true})
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
 	// Create the node, passing the selfsteal domain as its address, same
