@@ -551,7 +551,7 @@ func InstallationPanelNode() error {
 	// same certificate Caddy itself obtained via ACME, out of the
 	// caddy_data volume both containers share (see certs.CaddyCertPaths).
 	nodeCertFullchain, nodeCertPrivkey := certs.CaddyCertPaths(st.selfstealDomain)
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, "", nodeCertFullchain, nodeCertPrivkey)
+	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, "", nodeCertFullchain, nodeCertPrivkey, api.ConfigProfileInbounds{Raw: true})
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
 	// Create the node without a node_address override (unlike
