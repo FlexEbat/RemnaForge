@@ -31,6 +31,7 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ipv6"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/managepanel"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/nginxnode"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/nodeprofile"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelfull"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelonly"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/reinstall"
@@ -81,8 +82,9 @@ var mainMenuItems = []menuItem{
 		return false
 	}},
 	{label: label("MENU_9"), action: func() bool { certs.ManageCertificates(); return false }},
-	{label: label("MENU_10"), newGroup: true, action: stubAction("update_remnawave_reverse")},
-	{label: label("MENU_11"), action: func() bool { uninstall.RemoveScript(); return true }},
+	{label: label("MENU_10"), action: func() bool { nodeprofile.ManageNodeProfile(); return false }},
+	{label: label("MENU_11"), newGroup: true, action: stubAction("update_remnawave_reverse")},
+	{label: label("MENU_12"), action: func() bool { uninstall.RemoveScript(); return true }},
 }
 
 // renumbered per mainMenuItems above.

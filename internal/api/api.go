@@ -427,9 +427,68 @@ func DeleteConfigProfile(domainURL, token, profileUUID string) error {
 	return nil
 }
 
-// ConfigProfileInbounds selects which inbounds a config profile's
-// config carries. Raw (VLESS+Reality) is this project's stock,
-// always-available inbound; Hysteria2 and XHTTP are optional additions
+// FindConfigProfileByName looks up a config profile by its exact name,
+// returning its UUID and current config content. Used by the node
+// profile menu to locate an existing profile before changing its
+// inbound selection.
+func FindConfigProfileByName(domainURL, token, name string) (uuid string, config map[string]any, err error) {
+	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/config-profiles", token, "")
+	if len(resp) == 0 || !json.Valid(resp) {
+		return "", nil, fmt.Errorf("no configs")
+	}
+
+	var parsed struct {
+		Response struct {
+			ConfigProfiles []struct {
+				Name string `json:"name"`
+				UUID string `json:"uuid"`
+			} `json:"configProfiles"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal(resp, &parsed); err != nil {
+		return "", nil, err
+	}
+	for _, p := range parsed.Response.ConfigProfiles {
+		if p.Name == name {
+			uuid = p.UUID
+			break
+		}
+	}
+	if uuid == "" {
+		return "", nil, fmt.Errorf("config profile %q not found", name)
+	}
+
+	detailResp := MakeAPIRequest("GET", "http://"+domainURL+"/api/config-profiles/"+uuid, token, "")
+	if len(detailResp) == 0 || !json.Valid(detailResp) {
+		return uuid, nil, fmt.Errorf("empty response fetching config profile %s", uuid)
+	}
+	var detail struct {
+		Response struct {
+			Config map[string]any `json:"config"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal(detailResp, &detail); err != nil {
+		return uuid, nil, err
+	}
+	return uuid, detail.Response.Config, nil
+}
+
+// UpdateConfigProfile replaces a config profile's config in place.
+// Per the panel's actual contract, this is PATCH /api/config-profiles
+// (no UUID in the URL path) with a {uuid, config} body, and it replaces
+// the whole config rather than merging fields into it - so config must
+// already be the complete document the caller wants stored, not a
+// partial patch.
+func UpdateConfigProfile(domainURL, token, profileUUID string, config map[string]any) error {
+	body, _ := json.Marshal(map[string]any{"uuid": profileUUID, "config": config})
+	status, resp := makeAPIRequestWithStatus("PATCH", "http://"+domainURL+"/api/config-profiles", token, string(body))
+	if status < 200 || status >= 300 {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_UPDATE_PROFILE"), ui.ColorReset)
+		return fmt.Errorf("update config profile failed with status %d: %s", status, resp)
+	}
+	return nil
+}
+
 // a node can turn on later (see internal/menu's node-profile picker).
 type ConfigProfileInbounds struct {
 	Raw       bool
@@ -573,6 +632,16 @@ func buildProfileConfig(inbounds []map[string]any) map[string]any {
 			},
 		},
 	}
+}
+
+// BuildProfileConfig builds a full profile config document for the
+// given inbound selection, reusing existingByTag's settings for any
+// inbound kind already present under its tag (existingByTag may be
+// nil). Exported for internal/nodeprofile, which builds a replacement
+// config for an already-existing profile before calling
+// UpdateConfigProfile.
+func BuildProfileConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, certFullchain, certPrivkey string, existingByTag map[string]map[string]any) map[string]any {
+	return buildProfileConfig(buildInboundConfig(sel, domain, privateKey, rawTag, certFullchain, certPrivkey, existingByTag))
 }
 
 // CreateConfigProfile creates a config profile. By default (inbounds
