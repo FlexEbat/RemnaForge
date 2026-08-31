@@ -19,6 +19,37 @@ const letsencryptLive = "/etc/letsencrypt/live"
 const letsencryptArchive = "/etc/letsencrypt/archive"
 const letsencryptRenewal = "/etc/letsencrypt/renewal"
 
+// caddyCertDir is the default file-storage layout Caddy's built-in ACME
+// client uses inside its own data volume, one subdirectory per issuer.
+// This is Caddy's documented default (unchanged since Caddy 2 beta 17,
+// 2020) for its Let's Encrypt production issuer specifically; a
+// deployment that overrides Caddy's storage backend or issuer (this
+// project's Caddyfiles don't) would need a different path.
+const caddyCertDir = "/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory"
+
+// NginxCertPaths returns the fullchain/privkey path pair certbot uses
+// for domain under /etc/letsencrypt/live, the layout every Nginx-based
+// install flow in this project mounts into both the webserver container
+// (as /etc/nginx/ssl/<domain>/...) and, for a config profile's
+// Hysteria2 inbound, directly into the node container at this same
+// path.
+func NginxCertPaths(domain string) (fullchain, privkey string) {
+	return letsencryptLive + "/" + domain + "/fullchain.pem",
+		letsencryptLive + "/" + domain + "/privkey.pem"
+}
+
+// CaddyCertPaths returns the certificate/key path pair Caddy's built-in
+// ACME client will have written for domain, once issued, inside the
+// caddy_data volume every Caddy-based install flow in this project
+// already shares with its webserver container. A config profile's
+// Hysteria2 inbound reads these directly, same as NginxCertPaths for
+// the Nginx flows, via a read-only mount of that same named volume into
+// the node container.
+func CaddyCertPaths(domain string) (cert, key string) {
+	return caddyCertDir + "/" + domain + "/" + domain + ".crt",
+		caddyCertDir + "/" + domain + "/" + domain + ".key"
+}
+
 // renewHookCommand is the certbot renew_hook line this project writes into
 // every domain's renewal.conf, shared by FixLetsencryptStructure (this
 // file) and fixRenewHook (handle.go).

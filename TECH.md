@@ -1,8 +1,10 @@
 # TECH.md
 
-**Версия: v1.2.3** (2026-08-30)
+**Версия: v1.3.0** (2026-08-30)
 
 Changelog (новое сверху, один пункт на одну пушнутую единицу работы):
+
+- **v1.3.0**: конфиг-профиль ноды (`internal/api.CreateConfigProfile`) теперь несёт три inbound'а вместо одного: `Raw` (VLESS+Reality, как раньше, тег переименован из `Steal`), `HYSTERIA-BBR` (Hysteria2, TLS терминирует сам Xray) и `XHTTP-TLS` (VLESS+XHTTP поверх второго unix-сокета). Изменение затронуло все пять мест, где создаётся профиль (`addnode`, `panelfull`, `panelonly`, `caddypanelfull`, `caddypanelonly`) и все четыре установщика самой ноды (`nginxnode`, `caddynode`, `panelfull`, `caddypanelfull`), которым нужно: 1) location `/api/v2/stream-events` в nginx.conf либо `handle`-блок в Caddyfile, проксирующий на `/dev/shm/xhttp.sock`, и 2) volume-монтирование сертификата ноды в контейнер `remnanode`, читаемое напрямую Xray для Hysteria2 (для Nginx — `/etc/letsencrypt/live/<домен>/{fullchain,privkey}.pem`, для Caddy — общий том `caddy_data`, путь `certs.CaddyCertPaths`, зависящий от дефолтного макета хранилища сертификатов Caddy). Роутинг-правила профиля расширены (блокировка `geosite:category-ru`/`geoip:ru` в дополнение к private). Два открытых момента, не решаемых внутри этого изменения: (1) `panelonly`/`caddypanelonly`/`addnode` не управляют файлами самой ноды и поэтому не могут знать, использовала ли она wildcard-сертификат (в этом случае реальный каталог сертификата — базовый домен, а не полный) — путь строится по домену как есть; (2) `CreateConfigProfile` по-прежнему берёт `inboundUUID` для `CreateNode`/`CreateHost`/`UpdateSquad` из первого элемента массива `inbounds` в ответе панели, полагаясь на то, что панель возвращает inbound'ы в том же порядке, в котором они были отправлены — не проверено против реального API панели.
 
 - **v1.2.3**: репозиторий на GitHub переименован из `Remnwave-Easy-Install` в `RemnaForge`. Обновлены оставшиеся ссылки на старое имя репозитория в `TECH.md` (раздел 0) и `internal/menu/version.go` (`WikiURL`).
 - **v1.2.2**: `CONTRIBUTING.md`: добавлен формат заголовка коммита `type(scope): description` (`feat`/`fix`/`docs`/`refactor`/`test`/`chore`) с примерами на масштабе проекта. Раздел 7 (Definition of Done), пункт 8, ссылается на этот формат.
