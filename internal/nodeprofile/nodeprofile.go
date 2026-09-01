@@ -85,6 +85,23 @@ func pickInbounds(initial api.ConfigProfileInbounds) api.ConfigProfileInbounds {
 	}
 }
 
+// findRealityTag returns the tag of whichever inbound in byTag is the
+// Reality one, identified by streamSettings.security == "reality"
+// rather than assumed to be tagged "Raw": internal/addnode lets the
+// operator's own entity name become the inbound tag instead of always
+// using "Raw" (see its CreateConfigProfile call), so a profile created
+// that way has its Reality inbound under a different tag. Returns ""
+// if no Reality inbound is present at all.
+func findRealityTag(byTag map[string]map[string]any) string {
+	for tag, ib := range byTag {
+		stream, _ := ib["streamSettings"].(map[string]any)
+		if security, _ := stream["security"].(string); security == "reality" {
+			return tag
+		}
+	}
+	return ""
+}
+
 // inboundsByTag pulls each inbound out of an existing config's
 // "inbounds" array into a map keyed by tag, so api.BuildProfileConfig
 // can reuse an inbound's already-issued secrets instead of generating
@@ -106,21 +123,22 @@ func inboundsByTag(config map[string]any) map[string]map[string]any {
 
 // currentSelection reports which of Raw/Hysteria2/XHTTP are present in
 // an existing config, so the picker opens already reflecting reality
-// instead of always starting from a blank slate.
-func currentSelection(byTag map[string]map[string]any) api.ConfigProfileInbounds {
-	_, hasRaw := byTag["Raw"]
+// instead of always starting from a blank slate. Raw is detected by
+// realityTag rather than a fixed tag name; see findRealityTag.
+func currentSelection(byTag map[string]map[string]any, realityTag string) api.ConfigProfileInbounds {
 	_, hasHy := byTag["HYSTERIA-BBR"]
 	_, hasXHTTP := byTag["XHTTP-TLS"]
-	return api.ConfigProfileInbounds{Raw: hasRaw, Hysteria2: hasHy, XHTTP: hasXHTTP}
+	return api.ConfigProfileInbounds{Raw: realityTag != "", Hysteria2: hasHy, XHTTP: hasXHTTP}
 }
 
 // existingDomain finds the domain already baked into whichever inbound
 // is present, checked in the order a fresh profile would have set them
-// up: Raw's Reality serverName, then XHTTP's host, then Hysteria2's
-// masquerade target. All three are the same domain in every profile
-// this project creates, so any one of them answers the question.
-func existingDomain(byTag map[string]map[string]any) string {
-	if raw, ok := byTag["Raw"]; ok {
+// up: the Reality inbound's serverName, then XHTTP's host. All three
+// inbounds carry the same domain in every profile this project
+// creates, so any one of them answers the question.
+func existingDomain(byTag map[string]map[string]any, realityTag string) string {
+	if realityTag != "" {
+		raw := byTag[realityTag]
 		stream, _ := raw["streamSettings"].(map[string]any)
 		reality, _ := stream["realitySettings"].(map[string]any)
 		if names, ok := reality["serverNames"].([]any); ok && len(names) > 0 {
@@ -139,11 +157,11 @@ func existingDomain(byTag map[string]map[string]any) string {
 	return ""
 }
 
-func existingPrivateKey(byTag map[string]map[string]any) string {
-	raw, ok := byTag["Raw"]
-	if !ok {
+func existingPrivateKey(byTag map[string]map[string]any, realityTag string) string {
+	if realityTag == "" {
 		return ""
 	}
+	raw := byTag[realityTag]
 	stream, _ := raw["streamSettings"].(map[string]any)
 	reality, _ := stream["realitySettings"].(map[string]any)
 	pk, _ := reality["privateKey"].(string)
@@ -169,14 +187,23 @@ func ManageNodeProfile() {
 	}
 
 	byTag := inboundsByTag(config)
-	selection := pickInbounds(currentSelection(byTag))
+	// realityTag is "" for a profile with no Reality inbound yet, and
+	// "Raw" is the right tag to create it under in that case, matching
+	// this project's own install flows' default.
+	realityTag := findRealityTag(byTag)
+	rawTag := realityTag
+	if rawTag == "" {
+		rawTag = "Raw"
+	}
 
-	domainName := existingDomain(byTag)
+	selection := pickInbounds(currentSelection(byTag, realityTag))
+
+	domainName := existingDomain(byTag, realityTag)
 	if domainName == "" {
 		domainName = ui.Reading(i18n.T("ENTER_NODE_DOMAIN"))
 	}
 
-	privateKey := existingPrivateKey(byTag)
+	privateKey := existingPrivateKey(byTag, realityTag)
 	if privateKey == "" && selection.Raw {
 		privateKey = api.GenerateXrayKeys(domainURL, token)
 	}
@@ -190,7 +217,7 @@ func ManageNodeProfile() {
 		}
 	}
 
-	newConfig := api.BuildProfileConfig(selection, domainName, privateKey, "Raw", certFullchain, certPrivkey, byTag)
+	newConfig := api.BuildProfileConfig(selection, domainName, privateKey, rawTag, certFullchain, certPrivkey, byTag)
 	if err := api.UpdateConfigProfile(domainURL, token, profileUUID, newConfig); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NODE_PROFILE_UPDATE_FAILED"), ui.ColorReset)
 		return
