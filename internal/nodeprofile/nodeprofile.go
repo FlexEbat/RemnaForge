@@ -209,7 +209,11 @@ func ManageNodeProfile() {
 	}
 
 	var certFullchain, certPrivkey string
-	if selection.Hysteria2 {
+	if _, hysteria2AlreadyActive := byTag["HYSTERIA-BBR"]; selection.Hysteria2 && !hysteria2AlreadyActive {
+		// Only newly enabling Hysteria2 needs a cert path: an
+		// already-active Hysteria2 inbound is reused verbatim by
+		// api.BuildProfileConfig, so asking here would be a pointless
+		// prompt whose answer gets thrown away.
 		if selectWebserver() == "1" {
 			certFullchain, certPrivkey = certs.NginxCertPaths(domainName)
 		} else {
