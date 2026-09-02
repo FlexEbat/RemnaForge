@@ -81,6 +81,7 @@ services:
         - SECRET_KEY=%s
       volumes:
         - /dev/shm:/dev/shm:rw
+        - caddy_data:/data:ro
 
 volumes:
   caddy_data:
@@ -113,9 +114,18 @@ http://{$SELF_STEAL_DOMAIN} {
 
 https://{$SELF_STEAL_DOMAIN} {
     bind unix/{$CADDY_SOCKET_PATH}
-    root * /var/www/html
-    try_files {path} /index.html
-    file_server
+
+    handle /api/v2/stream-events {
+        reverse_proxy unix//dev/shm/xhttp.sock {
+            header_up Connection ""
+        }
+    }
+
+    handle {
+        root * /var/www/html
+        try_files {path} /index.html
+        file_server
+    }
 }
 
 :80 {

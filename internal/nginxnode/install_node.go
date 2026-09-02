@@ -179,6 +179,7 @@ func InstallationNode() error {
 	} else {
 		nodeCertDomain = state.selfstealDomain
 	}
+	certFullchain, certPrivkey := certs.NginxCertPaths(nodeCertDomain)
 
 	// Append the rest of docker-compose.yml.
 	composeTail := fmt.Sprintf(`      - /dev/shm:/dev/shm:rw
@@ -198,7 +199,9 @@ func InstallationNode() error {
       - SECRET_KEY=%s
     volumes:
       - /dev/shm:/dev/shm:rw
-`, state.certificate)
+      - %s:%s:ro
+      - %s:%s:ro
+`, state.certificate, certFullchain, certFullchain, certPrivkey, certPrivkey)
 
 	composePath := filepath.Join(nodeDir, "docker-compose.yml")
 	existing, _ := os.ReadFile(composePath)
@@ -253,9 +256,30 @@ server {
     ssl_certificate_key "/etc/nginx/ssl/%s/privkey.pem";
     ssl_trusted_certificate "/etc/nginx/ssl/%s/fullchain.pem";
 
-    root /var/www/html;
-    index index.html;
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
+
+    location /api/v2/stream-events {
+        proxy_http_version 1.1;
+        proxy_pass http://unix:/dev/shm/xhttp.sock;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+        proxy_set_header X-Real-IP $proxy_protocol_addr;
+        proxy_set_header X-Forwarded-For $proxy_protocol_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding on;
+
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    location / {
+        root /var/www/html;
+        index index.html;
+    }
 }
 
 server {

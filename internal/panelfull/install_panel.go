@@ -42,9 +42,10 @@ type state struct {
 	appSecret           string
 }
 
-// dockerComposeHead mirrors install_panel.sh:160-255: everything up to and
-// including remnawave-nginx's still-open volumes: list. Identical to
-// panelonly's, since both files share this same preamble verbatim.
+// dockerComposeHead is the first half of docker-compose.yml, everything
+// up to and including remnawave-nginx's still-open volumes: list.
+// Identical to panelonly's, since both share this same preamble
+// verbatim.
 const dockerComposeHead = `x-common: &common
   ulimits:
     nofile:
@@ -141,7 +142,7 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 `
 
-// dotEnvTemplate mirrors install_panel.sh:59-158, identical in content to
+// dotEnvTemplate is the panel's .env file, identical in content to
 // panelonly's.
 const dotEnvTemplate = `### APP ###
 APP_PORT=3000
@@ -260,8 +261,8 @@ func installPanelNodeNginx() (*state, error) {
 	return st, nil
 }
 
-// nginxConfTemplate mirrors install_panel.sh:349-505, the unix-socket
-// and proxy_protocol variant. This server also terminates TLS for the
+// nginxConfTemplate is the panel's nginx.conf, the unix-socket and
+// proxy_protocol variant. This server also terminates TLS for the
 // co-located node, unlike panelonly's plain `listen 443 ssl`.
 const nginxConfTemplate = `server_names_hash_bucket_size 64;
 
@@ -429,9 +430,30 @@ server {
     ssl_certificate_key "/etc/nginx/ssl/%[8]s/privkey.pem";
     ssl_trusted_certificate "/etc/nginx/ssl/%[8]s/fullchain.pem";
 
-    root /var/www/html;
-    index index.html;
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
+
+    location /api/v2/stream-events {
+        proxy_http_version 1.1;
+        proxy_pass http://unix:/dev/shm/xhttp.sock;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+        proxy_set_header X-Real-IP $proxy_protocol_addr;
+        proxy_set_header X-Forwarded-For $proxy_protocol_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding on;
+
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    location / {
+        root /var/www/html;
+        index index.html;
+    }
 }
 
 server {
@@ -482,9 +504,11 @@ func InstallationPanelNode() error {
 		nodeCertDomain = st.selfstealDomain
 	}
 
+	certFullchain, certPrivkey := certs.NginxCertPaths(nodeCertDomain)
+
 	// Append remnawave-nginx's remaining volumes/command,
 	// the subscription-page service, remnanode, networks, volumes.
-	composeTail := `      - /dev/shm:/dev/shm:rw
+	composeTail := fmt.Sprintf(`      - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
     command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
 
@@ -517,6 +541,8 @@ func InstallationPanelNode() error {
       - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
     volumes:
       - /dev/shm:/dev/shm:rw
+      - %s:%s:ro
+      - %s:%s:ro
 
 networks:
   remnawave-network:
@@ -536,7 +562,7 @@ volumes:
     name: valkey-socket
     driver: local
     external: false
-`
+`, certFullchain, certFullchain, certPrivkey, certPrivkey)
 	composePath := filepath.Join(panelDir, "docker-compose.yml")
 	existing, _ := os.ReadFile(composePath)
 	if err := os.WriteFile(composePath, append(existing, []byte(composeTail)...), 0644); err != nil {
@@ -623,7 +649,7 @@ volumes:
 
 	// Create our config profile.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, "")
+	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, "", certFullchain, certPrivkey, api.ConfigProfileInbounds{Raw: true})
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
 	// Create the node without node_address/node_name overrides, unlike

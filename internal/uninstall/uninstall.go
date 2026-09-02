@@ -33,7 +33,7 @@ const conventionalBinPath = "/usr/local/bin/remnawave-easy-install"
 func RemoveScript() {
 	for {
 		fmt.Println()
-		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("MENU_11"), ui.ColorReset)
+		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("MENU_12"), ui.ColorReset)
 		fmt.Println()
 		fmt.Printf("%s1. %s%s\n", ui.ColorYellow, i18n.T("REMOVE_SCRIPT_ONLY"), ui.ColorReset)
 		fmt.Printf("%s2. %s%s\n", ui.ColorYellow, i18n.T("REMOVE_SCRIPT_AND_PANEL"), ui.ColorReset)
