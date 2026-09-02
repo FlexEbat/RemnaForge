@@ -31,6 +31,7 @@ import (
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ipv6"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/managepanel"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/nginxnode"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/nodeprofile"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelfull"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelonly"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/reinstall"
@@ -81,8 +82,9 @@ var mainMenuItems = []menuItem{
 		return false
 	}},
 	{label: label("MENU_9"), action: func() bool { certs.ManageCertificates(); return false }},
-	{label: label("MENU_10"), newGroup: true, action: stubAction("update_remnawave_reverse")},
-	{label: label("MENU_11"), action: func() bool { uninstall.RemoveScript(); return true }},
+	{label: label("MENU_10"), action: func() bool { nodeprofile.ManageNodeProfile(); return false }},
+	{label: label("MENU_11"), newGroup: true, action: stubAction("update_remnawave_reverse")},
+	{label: label("MENU_12"), action: func() bool { uninstall.RemoveScript(); return true }},
 }
 
 // renumbered per mainMenuItems above.
@@ -118,6 +120,20 @@ func showWebserverSelect() string {
 	fmt.Printf("%s0. %s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
 	fmt.Println()
 	return ui.Reading(i18n.T("SELECT_WEBSERVER_PROMPT"))
+}
+
+// confirmCaddyProxyProtocolWarning warns about a known issue before an
+// install flow that co-locates a node with Caddy: the stock caddy
+// Docker image this project uses doesn't include the proxy_protocol
+// listener module the Caddyfile needs, so Caddy fails to start (see
+// TECH.md). Returns true if the operator wants to proceed anyway.
+func confirmCaddyProxyProtocolWarning() bool {
+	fmt.Println()
+	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("WARNING_LABEL"), ui.ColorReset)
+	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CADDY_PROXY_PROTOCOL_WARNING"), ui.ColorReset)
+	fmt.Println()
+	confirm := ui.Reading(i18n.T("CONFIRM_CONTINUE"))
+	return confirm == "y" || confirm == "Y"
 }
 
 func showInstallMenu() {
@@ -162,6 +178,10 @@ func manageInstall() {
 					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 				}
 			case "2":
+				if !confirmCaddyProxyProtocolWarning() {
+					_ = ui.LogClear()
+					continue
+				}
 				if err := caddypanelfull.InstallationPanelNode(); err != nil {
 					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 				}
@@ -213,6 +233,10 @@ func manageInstall() {
 					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 				}
 			case "2":
+				if !confirmCaddyProxyProtocolWarning() {
+					_ = ui.LogClear()
+					continue
+				}
 				if err := caddynode.InstallationNode(); err != nil {
 					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 				}

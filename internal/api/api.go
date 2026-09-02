@@ -427,55 +427,240 @@ func DeleteConfigProfile(domainURL, token, profileUUID string) error {
 	return nil
 }
 
-func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag string) (string, string) {
-	if inboundTag == "" {
-		inboundTag = "Steal"
+// FindConfigProfileByName looks up a config profile by its exact name,
+// returning its UUID and current config content. Used by the node
+// profile menu to locate an existing profile before changing its
+// inbound selection.
+func FindConfigProfileByName(domainURL, token, name string) (uuid string, config map[string]any, err error) {
+	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/config-profiles", token, "")
+	if len(resp) == 0 || !json.Valid(resp) {
+		return "", nil, fmt.Errorf("no configs")
 	}
-	shortID := randHex(8)
 
-	requestBody := map[string]any{
-		"name": name,
-		"config": map[string]any{
-			"log": map[string]any{"loglevel": "warning"},
-			"dns": map[string]any{
-				"queryStrategy": "UseIPv4",
-				"servers": []map[string]any{
-					{"address": "https://dns.google/dns-query", "skipFallback": false},
-				},
-			},
-			"inbounds": []map[string]any{
-				{
-					"tag":      inboundTag,
-					"port":     443,
-					"protocol": "vless",
-					"settings": map[string]any{"clients": []any{}, "decryption": "none"},
-					"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
-					"streamSettings": map[string]any{
-						"network":  "tcp",
-						"security": "reality",
-						"realitySettings": map[string]any{
-							"show":        false,
-							"xver":        1,
-							"dest":        "/dev/shm/nginx.sock",
-							"spiderX":     "",
-							"shortIds":    []string{shortID},
-							"privateKey":  privateKey,
-							"serverNames": []string{domain},
-						},
+	var parsed struct {
+		Response struct {
+			ConfigProfiles []struct {
+				Name string `json:"name"`
+				UUID string `json:"uuid"`
+			} `json:"configProfiles"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal(resp, &parsed); err != nil {
+		return "", nil, err
+	}
+	for _, p := range parsed.Response.ConfigProfiles {
+		if p.Name == name {
+			uuid = p.UUID
+			break
+		}
+	}
+	if uuid == "" {
+		return "", nil, fmt.Errorf("config profile %q not found", name)
+	}
+
+	detailResp := MakeAPIRequest("GET", "http://"+domainURL+"/api/config-profiles/"+uuid, token, "")
+	if len(detailResp) == 0 || !json.Valid(detailResp) {
+		return uuid, nil, fmt.Errorf("empty response fetching config profile %s", uuid)
+	}
+	var detail struct {
+		Response struct {
+			Config map[string]any `json:"config"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal(detailResp, &detail); err != nil {
+		return uuid, nil, err
+	}
+	return uuid, detail.Response.Config, nil
+}
+
+// UpdateConfigProfile replaces a config profile's config in place.
+// Per the panel's actual contract, this is PATCH /api/config-profiles
+// (no UUID in the URL path) with a {uuid, config} body, and it replaces
+// the whole config rather than merging fields into it - so config must
+// already be the complete document the caller wants stored, not a
+// partial patch.
+func UpdateConfigProfile(domainURL, token, profileUUID string, config map[string]any) error {
+	body, _ := json.Marshal(map[string]any{"uuid": profileUUID, "config": config})
+	status, resp := makeAPIRequestWithStatus("PATCH", "http://"+domainURL+"/api/config-profiles", token, string(body))
+	if status < 200 || status >= 300 {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_UPDATE_PROFILE"), ui.ColorReset)
+		return fmt.Errorf("update config profile failed with status %d: %s", status, resp)
+	}
+	return nil
+}
+
+// a node can turn on later (see internal/menu's node-profile picker).
+type ConfigProfileInbounds struct {
+	Raw       bool
+	Hysteria2 bool
+	XHTTP     bool
+}
+
+// buildInboundConfig returns the Xray inbounds array for the requested
+// ConfigProfileInbounds selection, reusing existingByTag's settings for
+// any inbound kind that was already present under that tag (so toggling
+// Hysteria2/XHTTP on or off later doesn't rotate the Raw inbound's
+// privateKey/shortIds and silently break every client already using
+// it), and generating fresh secrets only for a kind that's being turned
+// on for the first time. existingByTag may be nil.
+func buildInboundConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, certFullchain, certPrivkey string, existingByTag map[string]map[string]any) []map[string]any {
+	var inbounds []map[string]any
+
+	if sel.Raw {
+		if existing, ok := existingByTag[rawTag]; ok {
+			inbounds = append(inbounds, existing)
+		} else {
+			shortID := randHex(8)
+			inbounds = append(inbounds, map[string]any{
+				"tag":      rawTag,
+				"port":     443,
+				"protocol": "vless",
+				"settings": map[string]any{"clients": []any{}, "decryption": "none"},
+				"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
+				"streamSettings": map[string]any{
+					"network":  "tcp",
+					"security": "reality",
+					"realitySettings": map[string]any{
+						"show":        false,
+						"xver":        1,
+						"dest":        "/dev/shm/nginx.sock",
+						"spiderX":     "",
+						"shortIds":    []string{shortID},
+						"privateKey":  privateKey,
+						"serverNames": []string{domain},
 					},
 				},
-			},
-			"outbounds": []map[string]any{
-				{"tag": "DIRECT", "protocol": "freedom"},
-				{"tag": "BLOCK", "protocol": "blackhole"},
-			},
-			"routing": map[string]any{
-				"rules": []map[string]any{
-					{"ip": []string{"geoip:private"}, "type": "field", "outboundTag": "BLOCK"},
-					{"type": "field", "protocol": []string{"bittorrent"}, "outboundTag": "BLOCK"},
+			})
+		}
+	}
+
+	if sel.Hysteria2 {
+		if existing, ok := existingByTag["HYSTERIA-BBR"]; ok {
+			inbounds = append(inbounds, existing)
+		} else {
+			salamanderPassword := randHex(8)
+			inbounds = append(inbounds, map[string]any{
+				"tag":      "HYSTERIA-BBR",
+				"port":     443,
+				"listen":   "0.0.0.0",
+				"protocol": "hysteria",
+				"settings": map[string]any{"clients": []any{}, "version": 2},
+				"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
+				"streamSettings": map[string]any{
+					"network":  "hysteria",
+					"security": "tls",
+					"finalmask": map[string]any{
+						"udp": []map[string]any{
+							{"type": "salamander", "settings": map[string]any{"password": salamanderPassword}},
+						},
+						"quicParams": map[string]any{
+							"debug":           false,
+							"bbrProfile":      "standard",
+							"congestion":      "bbr",
+							"maxIdleTimeout":  90,
+							"keepAlivePeriod": 20,
+						},
+					},
+					"tlsSettings": map[string]any{
+						"alpn": []string{"h3"},
+						"certificates": []map[string]any{
+							{"keyFile": certPrivkey, "certificateFile": certFullchain},
+						},
+					},
+					"hysteriaSettings": map[string]any{
+						"version": 2,
+						"masquerade": map[string]any{
+							"type": "proxy",
+							"proxy": map[string]any{
+								"url":         "https://" + domain,
+								"rewriteHost": true,
+							},
+						},
+						"udpIdleTimeout":        90,
+						"ignoreClientBandwidth": true,
+					},
 				},
+			})
+		}
+	}
+
+	if sel.XHTTP {
+		if existing, ok := existingByTag["XHTTP-TLS"]; ok {
+			inbounds = append(inbounds, existing)
+		} else {
+			inbounds = append(inbounds, map[string]any{
+				"tag":      "XHTTP-TLS",
+				"port":     0,
+				"listen":   "/dev/shm/xhttp.sock,0666",
+				"protocol": "vless",
+				"settings": map[string]any{"clients": []any{}, "decryption": "none"},
+				"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
+				"streamSettings": map[string]any{
+					"network":  "xhttp",
+					"security": "none",
+					"xhttpSettings": map[string]any{
+						"host": domain,
+						"path": "/api/v2/stream-events",
+					},
+				},
+			})
+		}
+	}
+
+	return inbounds
+}
+
+func buildProfileConfig(inbounds []map[string]any) map[string]any {
+	return map[string]any{
+		"log": map[string]any{"loglevel": "warning"},
+		"dns": map[string]any{
+			"queryStrategy": "UseIPv4",
+			"servers": []map[string]any{
+				{"address": "https://dns.google/dns-query", "skipFallback": false},
 			},
 		},
+		"inbounds": inbounds,
+		"outbounds": []map[string]any{
+			{"tag": "DIRECT", "protocol": "freedom"},
+			{"tag": "BLOCK", "protocol": "blackhole"},
+		},
+		"routing": map[string]any{
+			"rules": []map[string]any{
+				{"type": "field", "domain": []string{"geosite:private", "geosite:category-ru"}, "outboundTag": "BLOCK"},
+				{"ip": []string{"geoip:private", "geoip:ru"}, "type": "field", "outboundTag": "BLOCK"},
+				{"type": "field", "protocol": []string{"bittorrent"}, "outboundTag": "BLOCK"},
+			},
+		},
+	}
+}
+
+// BuildProfileConfig builds a full profile config document for the
+// given inbound selection, reusing existingByTag's settings for any
+// inbound kind already present under its tag (existingByTag may be
+// nil). Exported for internal/nodeprofile, which builds a replacement
+// config for an already-existing profile before calling
+// UpdateConfigProfile.
+func BuildProfileConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, certFullchain, certPrivkey string, existingByTag map[string]map[string]any) map[string]any {
+	return buildProfileConfig(buildInboundConfig(sel, domain, privateKey, rawTag, certFullchain, certPrivkey, existingByTag))
+}
+
+// CreateConfigProfile creates a config profile. By default (inbounds
+// left as its zero value) it carries only the stock Raw (VLESS+Reality)
+// inbound; the panel's config-profiles menu can add Hysteria2 and/or
+// XHTTP to it later via UpdateConfigProfileInbounds. See
+// ConfigProfileInbounds and buildInboundConfig for what each inbound
+// needs.
+func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag, certFullchain, certPrivkey string, inbounds ConfigProfileInbounds) (string, string) {
+	if inboundTag == "" {
+		inboundTag = "Raw"
+	}
+	if !inbounds.Raw && !inbounds.Hysteria2 && !inbounds.XHTTP {
+		inbounds.Raw = true
+	}
+
+	requestBody := map[string]any{
+		"name":   name,
+		"config": buildProfileConfig(buildInboundConfig(inbounds, domain, privateKey, inboundTag, certFullchain, certPrivkey, nil)),
 	}
 	body, _ := json.Marshal(requestBody)
 
@@ -486,6 +671,7 @@ func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag 
 			UUID     string `json:"uuid"`
 			Inbounds []struct {
 				UUID string `json:"uuid"`
+				Tag  string `json:"tag"`
 			} `json:"inbounds"`
 		} `json:"response"`
 	}
@@ -495,8 +681,19 @@ func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag 
 	}
 
 	configUUID := parsed.Response.UUID
+	// Match the primary inbound by tag rather than assuming it's first
+	// in the response: nothing guarantees the panel echoes inbounds
+	// back in submission order, and getting this wrong would silently
+	// hand CreateNode/CreateHost/UpdateSquad a Hysteria2 or XHTTP
+	// inbound's UUID instead of Raw's.
 	var inboundUUID string
-	if len(parsed.Response.Inbounds) > 0 {
+	for _, ib := range parsed.Response.Inbounds {
+		if ib.Tag == inboundTag {
+			inboundUUID = ib.UUID
+			break
+		}
+	}
+	if inboundUUID == "" && len(parsed.Response.Inbounds) > 0 {
 		inboundUUID = parsed.Response.Inbounds[0].UUID
 	}
 	if configUUID == "" || inboundUUID == "" {

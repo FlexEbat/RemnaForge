@@ -4,9 +4,11 @@
 // server. This mirrors internal/panelfull (nginx), the "panel + node on
 // one server" installer.
 //
-// Like internal/caddynode, this never calls internal/certs: Caddy issues
-// and renews its own TLS certificate via its built-in ACME client, so
-// there's no certbot step anywhere in this package.
+// Like internal/caddynode, this never runs certbot: Caddy issues and
+// renews its own TLS certificate via its built-in ACME client. It does
+// import internal/certs for CaddyCertPaths, the path convention for
+// reading that Caddy-issued certificate directly (used by the
+// co-located node's Hysteria2 inbound).
 package caddypanelfull
 
 import (
@@ -18,6 +20,7 @@ import (
 	"time"
 
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/api"
+	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/domain"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/genutil"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
@@ -106,14 +109,13 @@ POSTGRES_PASSWORD=postgres
 POSTGRES_DB=postgres
 `
 
-// dockerComposeTemplate mirrors install_panel_node.sh:153-318, with the
-// same backend:2 -> backend:3 fix as dotEnvTemplate above. Like
-// internal/caddynode and unlike internal/panelfull (nginx), this needs
-// no head/tail split: no certbot step gates any part of the file, so
-// everything is known upfront and written in one pass. The remnanode
-// SECRET_KEY placeholder is kept as the exact literal string the
-// original writes and internal/api.GetPublicKey's replaceInFile call
-// expects to find and patch after registration.
+// dockerComposeTemplate is the combined panel+node docker-compose.yml.
+// Like internal/caddynode and unlike internal/panelfull (nginx), this
+// needs no head/tail split: no certbot step gates any part of the
+// file, so everything is known upfront and written in one pass. The
+// remnanode SECRET_KEY placeholder is kept as the exact literal string
+// internal/api.GetPublicKey's replaceInFile call expects to find and
+// patch after registration.
 const dockerComposeTemplate = `x-common: &common
   ulimits:
     nofile:
@@ -255,6 +257,7 @@ services:
       - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
     volumes:
       - /dev/shm:/dev/shm:rw
+      - caddy_data:/data:ro
 
 networks:
   remnawave-network:
@@ -280,12 +283,11 @@ volumes:
     external: false
 `
 
-// caddyfileTemplate mirrors install_panel_node.sh:320-417. As in
-// internal/caddynode and internal/caddypanelonly, the {$VAR} domain
-// references stay literal (resolved by Caddy from the container
-// environment at runtime), while %[1]s/%[2]s substitute the actual
-// generated cookie name/value at file-creation time, matching the
-// original's unescaped $cookies_random1/$cookies_random2 in its heredoc.
+// caddyfileTemplate is the panel+node Caddyfile. As in internal/caddynode
+// and internal/caddypanelonly, the {$VAR} domain references stay literal
+// (resolved by Caddy from the container environment at runtime), while
+// %[1]s/%[2]s substitute the actual generated cookie name/value at
+// file-creation time.
 const caddyfileTemplate = `{
     admin off
     servers {
@@ -304,9 +306,18 @@ http://{$SELF_STEAL_DOMAIN} {
 
 https://{$SELF_STEAL_DOMAIN} {
     bind unix/{$CADDY_SOCKET_PATH}
-    root * /var/www/html
-    try_files {path} /index.html
-    file_server
+
+    handle /api/v2/stream-events {
+        reverse_proxy unix//dev/shm/xhttp.sock {
+            header_up Connection ""
+        }
+    }
+
+    handle {
+        root * /var/www/html
+        try_files {path} /index.html
+        file_server
+    }
 }
 
 http://{$PANEL_DOMAIN} {
@@ -536,7 +547,11 @@ func InstallationPanelNode() error {
 
 	// Create our config profile.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, "")
+	// The node is co-located here, so its Hysteria2 inbound reads the
+	// same certificate Caddy itself obtained via ACME, out of the
+	// caddy_data volume both containers share (see certs.CaddyCertPaths).
+	nodeCertFullchain, nodeCertPrivkey := certs.CaddyCertPaths(st.selfstealDomain)
+	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, "", nodeCertFullchain, nodeCertPrivkey, api.ConfigProfileInbounds{Raw: true})
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
 	// Create the node without a node_address override (unlike
