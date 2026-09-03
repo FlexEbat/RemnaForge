@@ -102,8 +102,8 @@ func runInstall(reinstallOption string) {
 // 2=panel only, 3=node only), routed to the Caddy install packages
 // instead of the Nginx ones.
 func runInstallCaddy(reinstallOption string) {
-	if (reinstallOption == "1" || reinstallOption == "3") && !confirmCaddyProxyProtocolWarning() {
-		return
+	if reinstallOption == "1" || reinstallOption == "3" {
+		noteCaddyBuild()
 	}
 	var err error
 	switch reinstallOption {
@@ -119,21 +119,14 @@ func runInstallCaddy(reinstallOption string) {
 	}
 }
 
-// confirmCaddyProxyProtocolWarning warns about a known issue before an
-// install flow that co-locates a node with Caddy: the stock caddy
-// Docker image this project uses doesn't include the proxy_protocol
-// listener module the Caddyfile needs, so Caddy fails to start (see
-// TECH.md). Returns true if the operator wants to proceed anyway.
-// Duplicated from internal/menu's identical helper rather than shared,
-// the same pattern isValidIPv4's duplication follows elsewhere in this
-// codebase.
-func confirmCaddyProxyProtocolWarning() bool {
+// noteCaddyBuild tells the operator the Caddy image is being built
+// locally (not just pulled), so a longer wait before containers come
+// up is expected. See the identical helper in internal/menu for why.
+// Duplicated rather than shared, the same pattern isValidIPv4's
+// duplication follows elsewhere in this codebase.
+func noteCaddyBuild() {
 	fmt.Println()
-	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("WARNING_LABEL"), ui.ColorReset)
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CADDY_PROXY_PROTOCOL_WARNING"), ui.ColorReset)
-	fmt.Println()
-	confirm := ui.Reading(i18n.T("CONFIRM_CONTINUE"))
-	return confirm == "y" || confirm == "Y"
+	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CADDY_BUILD_NOTE"), ui.ColorReset)
 }
 
 // reinstallRemnawave tears down any existing panel or node stack before

@@ -47,7 +47,14 @@ x-logging: &logging
 
 services:
     caddy:
-      image: caddy:2.11.2
+      build:
+        context: .
+        dockerfile_inline: |
+          FROM caddy:2.11.2-builder AS builder
+          RUN xcaddy build --with github.com/mastercactapus/caddy2-proxyprotocol
+          FROM caddy:2.11.2
+          COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+      image: remnaforge-caddy-proxyprotocol:2.11.2
       container_name: caddy-remnawave
       hostname: caddy-remnawave
       <<: [*common, *logging]
@@ -257,7 +264,7 @@ func InstallationNode() error {
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_NODE"), ui.ColorReset)
 	time.Sleep(3 * time.Second)
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	upCmd := exec.Command("docker", "compose", "up", "-d")
+	upCmd := exec.Command("docker", "compose", "up", "-d", "--build")
 	upCmd.Dir = nodeDir
 	_ = upCmd.Run()
 

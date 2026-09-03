@@ -37,11 +37,11 @@ RemnaForge генерирует конфигурацию для [Xray-core](http
 
 ## Известные проблемы
 
-**Caddy не запускается при установке ноды (co-located или отдельной).** `internal/caddynode` и `internal/caddypanelfull` пишут в Caddyfile `listener_wrappers { proxy_protocol; tls }`, но используемый здесь стоковый Docker-образ `caddy` не включает модуль `proxy_protocol` (`github.com/mastercactapus/caddy2-proxyprotocol`) — это сторонний плагин, требующий сборки через `xcaddy`. Без него Caddy падает при старте с `module not registered: caddy.listeners.proxy_protocol`. Проверено локально через `caddy validate` на реально сгенерированном конфиге.
+Активных известных багов сейчас нет.
 
-Затронуты: «panel+node за Caddy» и «node only за Caddy» (пункты 1 и 4 меню установки, вариант Caddy). **Не затронут**: «panel only за Caddy» (там нет локальной ноды и, соответственно, `proxy_protocol`).
+**Caddy-установки с нодой (co-located или отдельной) собирают свой образ Caddy при первом запуске**, а не используют готовый: Xray заворачивает fallback-трафик Reality в PROXY protocol на unix-сокет, где Caddy слушает все свои домены, а официальный образ `caddy` не включает нужный для этого модуль (`github.com/mastercactapus/caddy2-proxyprotocol`). `docker-compose.yml` для `internal/caddynode`/`internal/caddypanelfull` теперь собирает его сам через `xcaddy` (`docker compose up -d --build`), поэтому первый запуск занимает на пару минут дольше обычного — Docker собирает образ, а не просто скачивает его.
 
-Сейчас инструмент перед запуском одного из затронутых вариантов показывает предупреждение с этим текстом и просит явного подтверждения продолжить. Постоянного фикса пока нет — подробности и варианты решения в TECH.md, раздел 5.
+Эта сборка проверена только на синтаксическую корректность (`yaml.safe_load`, паттерн сборки сверен с официальной документацией Caddy). Реальная компиляция образа на настоящем сервере с доступом в интернет пока не подтверждена.
 
 ## Возможности
 

@@ -122,18 +122,16 @@ func showWebserverSelect() string {
 	return ui.Reading(i18n.T("SELECT_WEBSERVER_PROMPT"))
 }
 
-// confirmCaddyProxyProtocolWarning warns about a known issue before an
-// install flow that co-locates a node with Caddy: the stock caddy
-// Docker image this project uses doesn't include the proxy_protocol
-// listener module the Caddyfile needs, so Caddy fails to start (see
-// TECH.md). Returns true if the operator wants to proceed anyway.
-func confirmCaddyProxyProtocolWarning() bool {
+// noteCaddyBuild tells the operator the Caddy image is being built
+// locally (not just pulled), so a longer wait before containers come
+// up is expected. internal/caddynode and internal/caddypanelfull's
+// docker-compose.yml build a custom Caddy image with the
+// proxy_protocol module compiled in (see TECH.md): the stock caddy
+// image doesn't include it, and every domain those flows serve through
+// Caddy needs it for a correct client IP.
+func noteCaddyBuild() {
 	fmt.Println()
-	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("WARNING_LABEL"), ui.ColorReset)
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CADDY_PROXY_PROTOCOL_WARNING"), ui.ColorReset)
-	fmt.Println()
-	confirm := ui.Reading(i18n.T("CONFIRM_CONTINUE"))
-	return confirm == "y" || confirm == "Y"
+	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CADDY_BUILD_NOTE"), ui.ColorReset)
 }
 
 func showInstallMenu() {
@@ -178,10 +176,7 @@ func manageInstall() {
 					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 				}
 			case "2":
-				if !confirmCaddyProxyProtocolWarning() {
-					_ = ui.LogClear()
-					continue
-				}
+				noteCaddyBuild()
 				if err := caddypanelfull.InstallationPanelNode(); err != nil {
 					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 				}
@@ -233,10 +228,7 @@ func manageInstall() {
 					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 				}
 			case "2":
-				if !confirmCaddyProxyProtocolWarning() {
-					_ = ui.LogClear()
-					continue
-				}
+				noteCaddyBuild()
 				if err := caddynode.InstallationNode(); err != nil {
 					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 				}
