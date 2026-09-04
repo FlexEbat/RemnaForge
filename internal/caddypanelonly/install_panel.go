@@ -5,9 +5,7 @@
 // alone" installer for the Nginx flow.
 //
 // Like internal/caddynode, this never runs certbot: Caddy issues and
-// renews its own TLS certificate via its built-in ACME client. It does
-// import internal/certs for CaddyCertPaths, the path convention for
-// referencing that Caddy-issued certificate on the remote node.
+// renews its own TLS certificate via its built-in ACME client.
 package caddypanelonly
 
 import (
@@ -19,7 +17,6 @@ import (
 	"time"
 
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/api"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/domain"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/genutil"
 	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
@@ -484,16 +481,13 @@ func InstallationPanelOnly() error {
 
 	// Create our own config profile.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
-	// This flow doesn't run the node itself (a standalone internal/caddynode
-	// install elsewhere does), so it can't read that node's Caddy-issued
-	// certificate directly. The Hysteria2 inbound's cert paths are built
-	// from the domain name alone, matching the layout Caddy's own ACME
-	// client will produce there by default (certs.CaddyCertPaths):
-	// correct as long as that install let Caddy issue via Let's Encrypt
-	// with its default storage backend, which every Caddy flow in this
-	// project does.
-	nodeCertFullchain, nodeCertPrivkey := certs.CaddyCertPaths(state.selfstealDomain)
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, "", nodeCertFullchain, nodeCertPrivkey, api.ConfigProfileInbounds{Raw: true})
+	// The initial profile only carries the stock Raw inbound; a
+	// Hysteria2 cert path isn't needed until internal/nodeprofile turns
+	// Hysteria2 on later, at which point it asks the operator directly
+	// whether the node's certificate is a wildcard (see
+	// certs.AskCertDomain) instead of guessing from here, where this
+	// flow has no way to know what internal/caddynode's install did.
+	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, "", "", "", api.ConfigProfileInbounds{Raw: true})
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
 	// Create the node, passing the selfsteal domain as its address, same

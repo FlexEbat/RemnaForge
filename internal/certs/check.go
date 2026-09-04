@@ -50,6 +50,24 @@ func CaddyCertPaths(domain string) (cert, key string) {
 		caddyCertDir + "/" + domain + "/" + domain + ".key"
 }
 
+// AskCertDomain resolves the on-disk certificate directory name for
+// domainName, for a caller that didn't issue that certificate itself
+// (internal/addnode, internal/nodeprofile) and so has no way to know
+// whether it's a per-domain certificate (the directory is domainName
+// itself) or a wildcard certificate covering domainName's base domain
+// (the directory is the base domain instead, via domain.ExtractDomain).
+// Asks the operator directly rather than guessing, since guessing
+// wrong means Xray's Hysteria2 inbound fails to find its certificate
+// files on the actual node.
+func AskCertDomain(domainName string) string {
+	fmt.Println()
+	answer := ui.Reading(fmt.Sprintf(i18n.T("ASK_WILDCARD_CERT"), domainName))
+	if answer == "y" || answer == "Y" {
+		return domain.ExtractDomain(domainName)
+	}
+	return domainName
+}
+
 // renewHookCommand is the certbot renew_hook line this project writes into
 // every domain's renewal.conf, shared by FixLetsencryptStructure (this
 // file) and fixRenewHook (handle.go).
