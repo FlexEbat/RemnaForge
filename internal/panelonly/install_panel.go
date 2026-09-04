@@ -551,17 +551,13 @@ volumes:
 
 	// Create our own config profile.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
-	// This flow doesn't run the node itself (a standalone internal/nginxnode
-	// install elsewhere does), so it can't read that node's certificate.
-	// The Hysteria2 inbound's cert paths are built from the domain name
-	// alone, matching the layout internal/nginxnode's own certbot run
-	// will produce there: correct as long as that install used a
-	// per-domain (non-wildcard) certificate for this exact domain. A
-	// wildcard certificate on the node's side would put the real files
-	// under the base domain's directory instead, which this flow has no
-	// way to know from here.
-	nodeCertFullchain, nodeCertPrivkey := certs.NginxCertPaths(state.selfstealDomain)
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, "", nodeCertFullchain, nodeCertPrivkey, api.ConfigProfileInbounds{Raw: true})
+	// The initial profile only carries the stock Raw inbound; a
+	// Hysteria2 cert path isn't needed until internal/nodeprofile turns
+	// Hysteria2 on later, at which point it asks the operator directly
+	// whether the node's certificate is a wildcard (see
+	// certs.AskCertDomain) instead of guessing from here, where this
+	// flow has no way to know what internal/nginxnode's install did.
+	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, "", "", "", api.ConfigProfileInbounds{Raw: true})
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
 	// Create the node.
