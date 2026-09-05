@@ -334,6 +334,7 @@ http://{$PANEL_DOMAIN} {
 
 https://{$PANEL_DOMAIN} {
     bind unix/{$CADDY_SOCKET_PATH}
+    encode zstd gzip
 
     @has_token_param {
         query %[1]s=%[2]s
@@ -388,6 +389,7 @@ http://{$SUB_DOMAIN} {
 
 https://{$SUB_DOMAIN} {
     bind unix/{$CADDY_SOCKET_PATH}
+    encode zstd gzip
     handle {
         reverse_proxy {$SUB_BACKEND_URL} {
             header_up X-Real-IP {remote}

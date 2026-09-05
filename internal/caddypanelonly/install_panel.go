@@ -278,6 +278,7 @@ http://{$PANEL_DOMAIN} {
 }
 
 https://{$PANEL_DOMAIN} {
+    encode zstd gzip
 
     @has_token_param {
         query %[1]s=%[2]s
@@ -324,6 +325,7 @@ https://{$PANEL_DOMAIN} {
 }
 
 https://{$SUB_DOMAIN} {
+    encode zstd gzip
     handle {
         reverse_proxy {$SUB_BACKEND_URL} {
             header_up X-Real-IP {remote}

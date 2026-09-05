@@ -35,6 +35,8 @@ RemnaForge генерирует конфигурацию для [Xray-core](http
 
 Если формулировки в этих источниках противоречат тому, что делает RemnaForge, доверяйте источникам, не этому README, и открывайте issue.
 
+**Держите панель и ноду обновлёнными.** `docker-compose.yml`, который пишет RemnaForge, использует плавающий тег образа (`remnawave/backend:3`, `remnawave/node:latest`), поэтому `docker compose pull && docker compose up -d` (пункт меню «Manage Panel/Node» → Update) подтягивает последний патч мажорной ветки без переустановки. У панели и ноды есть собственные каналы анонсов с описанием критичных исправлений, в том числе security-фиксов: [announces](https://f.docs.rw/c/announces/14), [панель](https://f.docs.rw/c/announces/rw-panel/16), [нода](https://f.docs.rw/c/announces/rw-node/17). Проверяйте их периодически — RemnaForge не отслеживает и не уведомляет о них сам.
+
 ## Известные проблемы
 
 Активных известных багов сейчас нет.
@@ -94,12 +96,12 @@ sudo remnaforge
 2. Reinstall panel/node            — снести текущий стек и поставить заново
 3. Manage Panel/Node                — старт/стоп/обновление/логи/CLI/временный доступ на 8443
 4. Install random template          — сменить selfsteal-шаблон на ноде
-5. WARP Native                      — не реализовано
+5. WARP Native
 6. Backup and Restore                — сторонний distillium/remnawave-backup-restore
 7. Manage IPv6                       — включить/выключить IPv6
 8. Manage certificates domain        — обновить или перевыпустить сертификат вручную
 9. Manage Node Profile               — включить/выключить Hysteria2/XHTTP на inbound'ах уже зарегистрированной ноды
-10. Check for updates script         — не реализовано
+10. Check for updates script
 11. Remove script                    — удалить RemnaForge и/или установленный стек
 0. Exit
 ```
@@ -126,6 +128,7 @@ sudo remnaforge
 
 ```text
 cmd/remnawave/          точка входа: логирование, выбор языка, проверка ОС и root, главное меню
+templates/               готовые Xray JSON шаблоны подписки для панели (не устанавливаются автоматически, см. templates/README.md)
 internal/
   addnode/               добавление ноды к панели через API
   api/                    HTTP-клиент Remnawave API
@@ -141,6 +144,7 @@ internal/
   managepanel/            управление установленной панелью и нодой
   menu/                   главное меню и диспетчеризация
   nginxnode/              установка ноды за Nginx
+  nodeprofile/            включение/выключение Hysteria2/XHTTP на конфиг-профиле ноды
   oscheck/                проверка версии ОС и прав root
   panelfull/              установка панели с совмещённой нодой за Nginx
   panelonly/              установка панели без ноды за Nginx
