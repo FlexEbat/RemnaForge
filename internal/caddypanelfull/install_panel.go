@@ -203,7 +203,14 @@ services:
       retries: 3
 
   remnawave-caddy:
-      image: caddy:2.11.2
+      build:
+        context: .
+        dockerfile_inline: |
+          FROM caddy:2.11.2-builder AS builder
+          RUN xcaddy build --with github.com/mastercactapus/caddy2-proxyprotocol
+          FROM caddy:2.11.2
+          COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+      image: remnaforge-caddy-proxyprotocol:2.11.2
       container_name: remnawave-caddy
       hostname: remnawave-caddy
       <<: [*common, *logging]
@@ -327,6 +334,7 @@ http://{$PANEL_DOMAIN} {
 
 https://{$PANEL_DOMAIN} {
     bind unix/{$CADDY_SOCKET_PATH}
+    encode zstd gzip
 
     @has_token_param {
         query %[1]s=%[2]s
@@ -381,6 +389,7 @@ http://{$SUB_DOMAIN} {
 
 https://{$SUB_DOMAIN} {
     bind unix/{$CADDY_SOCKET_PATH}
+    encode zstd gzip
     handle {
         reverse_proxy {$SUB_BACKEND_URL} {
             header_up X-Real-IP {remote}
@@ -482,7 +491,7 @@ func InstallationPanelNode() error {
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL_NODE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	_ = exec.Command("ufw", "allow", "80/tcp", "comment", "HTTP").Run()
-	upCmd := exec.Command("docker", "compose", "up", "-d")
+	upCmd := exec.Command("docker", "compose", "up", "-d", "--build")
 	upCmd.Dir = panelDir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 	_ = upCmd.Run()
@@ -589,7 +598,7 @@ func InstallationPanelNode() error {
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL_NODE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
-	upCmd2 := exec.Command("docker", "compose", "up", "-d")
+	upCmd2 := exec.Command("docker", "compose", "up", "-d", "--build")
 	upCmd2.Dir = panelDir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 	_ = upCmd2.Run()

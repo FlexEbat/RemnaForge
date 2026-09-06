@@ -214,10 +214,16 @@ func ManageNodeProfile() {
 		// already-active Hysteria2 inbound is reused verbatim by
 		// api.BuildProfileConfig, so asking here would be a pointless
 		// prompt whose answer gets thrown away.
+		//
+		// This flow doesn't provision the node's files itself, so it
+		// can't tell a per-domain certificate from a wildcard one on
+		// its own; certs.AskCertDomain asks the operator instead of
+		// guessing.
+		certDomain := certs.AskCertDomain(domainName)
 		if selectWebserver() == "1" {
-			certFullchain, certPrivkey = certs.NginxCertPaths(domainName)
+			certFullchain, certPrivkey = certs.NginxCertPaths(certDomain)
 		} else {
-			certFullchain, certPrivkey = certs.CaddyCertPaths(domainName)
+			certFullchain, certPrivkey = certs.CaddyCertPaths(certDomain)
 		}
 	}
 
