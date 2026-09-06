@@ -1,0 +1,145 @@
+{
+  "remnawave": {
+    "injectHosts": [
+      {
+        "selector": { "type": "sameTagAsRecipient" },
+        "tagPrefix": "proxy"
+      }
+    ]
+  },
+  "dns": {
+    "tag": "dns_out",
+    "servers": [
+      {
+        "address": "77.88.8.8",
+        "domains": [
+          "geosite:private",
+          "geosite:apple",
+          "geosite:apple-pki",
+          "geosite:huawei",
+          "geosite:xiaomi",
+          "geosite:category-android-app-download",
+          "geosite:f-droid",
+          "geosite:twitch",
+          "geosite:category-ru"
+        ],
+        "skipFallback": false
+      },
+      {
+        "address": "77.88.8.1",
+        "domains": [
+          "geosite:private",
+          "geosite:apple",
+          "geosite:apple-pki",
+          "geosite:huawei",
+          "geosite:xiaomi",
+          "geosite:category-android-app-download",
+          "geosite:f-droid",
+          "geosite:twitch",
+          "geosite:category-ru"
+        ],
+        "skipFallback": false
+      },
+      {
+        "address": "https://dns.google/dns-query",
+        "skipFallback": false
+      }
+    ],
+    "queryStrategy": "IPIfNonMatch"
+  },
+  "log": {
+    "loglevel": "warning"
+  },
+  "stats": {},
+  "policy": {
+    "system": {
+      "statsOutboundUplink": true,
+      "statsOutboundDownlink": true
+    }
+  },
+  "routing": {
+    "rules": [
+      {
+        "domain": [
+          "habr.com",
+          "4pda.to",
+          "4pda.ru",
+          "jut.su"
+        ],
+        "outboundTag": "proxy"
+      },
+      {
+        "domain": [
+          "geosite:private",
+          "geosite:apple",
+          "geosite:apple-pki",
+          "geosite:huawei",
+          "geosite:xiaomi",
+          "geosite:category-android-app-download",
+          "geosite:f-droid",
+          "geosite:twitch",
+          "geosite:category-ru"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "ip": [
+          "geoip:ru",
+          "geoip:private"
+        ],
+        "outboundTag": "direct"
+      }
+    ],
+    "domainStrategy": "IPIfNonMatch"
+  },
+  "inbounds": [
+    {
+      "tag": "socks",
+      "port": 10808,
+      "protocol": "socks",
+      "settings": {
+        "udp": true,
+        "auth": "password",
+        "accounts": [
+          {
+            "pass": "CHANGE_ME",
+            "user": "CHANGE_ME"
+          }
+        ],
+        "userLevel": 8
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "fakedns"
+        ]
+      }
+    },
+    {
+      "tag": "http",
+      "port": 10809,
+      "protocol": "http",
+      "settings": {
+        "accounts": [
+          {
+            "pass": "CHANGE_ME",
+            "user": "CHANGE_ME"
+          }
+        ],
+        "userLevel": 8
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": "freedom"
+    },
+    {
+      "tag": "block",
+      "protocol": "blackhole"
+    }
+  ]
+}
