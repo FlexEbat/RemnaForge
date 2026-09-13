@@ -79,8 +79,8 @@ func makeAPIRequestWithStatus(method, url, token, data string) (statusCode int, 
 // RegisterRemnawave registers the initial superadmin account on a
 // freshly installed panel.
 func RegisterRemnawave(domainURL, username, password, token string) string {
-	registerData := fmt.Sprintf(`{"username":"%s","password":"%s"}`, username, password)
-	resp := MakeAPIRequest("POST", "http://"+domainURL+"/api/auth/register", token, registerData)
+	registerBody, _ := json.Marshal(map[string]string{"username": username, "password": password})
+	resp := MakeAPIRequest("POST", "http://"+domainURL+"/api/auth/register", token, string(registerBody))
 
 	if len(resp) == 0 {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_EMPTY_RESPONSE_REGISTER"), ui.ColorReset)
