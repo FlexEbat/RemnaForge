@@ -489,7 +489,10 @@ func UpdateConfigProfile(domainURL, token, profileUUID string, config map[string
 	return nil
 }
 
-// a node can turn on later (see internal/menu's node-profile picker).
+// ConfigProfileInbounds selects which inbounds a config profile's
+// config carries. Raw (VLESS+Reality) is this project's stock,
+// always-available inbound; Hysteria2 and XHTTP are optional additions
+// a node can turn on later (see internal/nodeprofile).
 type ConfigProfileInbounds struct {
 	Raw       bool
 	Hysteria2 bool
@@ -646,10 +649,9 @@ func BuildProfileConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, c
 
 // CreateConfigProfile creates a config profile. By default (inbounds
 // left as its zero value) it carries only the stock Raw (VLESS+Reality)
-// inbound; the panel's config-profiles menu can add Hysteria2 and/or
-// XHTTP to it later via UpdateConfigProfileInbounds. See
-// ConfigProfileInbounds and buildInboundConfig for what each inbound
-// needs.
+// inbound; internal/nodeprofile can add Hysteria2 and/or XHTTP to it
+// later via UpdateConfigProfile. See ConfigProfileInbounds and
+// buildInboundConfig for what each inbound needs.
 func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag, certFullchain, certPrivkey string, inbounds ConfigProfileInbounds) (string, string) {
 	if inboundTag == "" {
 		inboundTag = "Raw"
