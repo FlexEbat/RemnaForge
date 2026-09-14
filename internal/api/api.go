@@ -79,8 +79,8 @@ func makeAPIRequestWithStatus(method, url, token, data string) (statusCode int, 
 // RegisterRemnawave registers the initial superadmin account on a
 // freshly installed panel.
 func RegisterRemnawave(domainURL, username, password, token string) string {
-	registerData := fmt.Sprintf(`{"username":"%s","password":"%s"}`, username, password)
-	resp := MakeAPIRequest("POST", "http://"+domainURL+"/api/auth/register", token, registerData)
+	registerBody, _ := json.Marshal(map[string]string{"username": username, "password": password})
+	resp := MakeAPIRequest("POST", "http://"+domainURL+"/api/auth/register", token, string(registerBody))
 
 	if len(resp) == 0 {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_EMPTY_RESPONSE_REGISTER"), ui.ColorReset)
@@ -489,7 +489,10 @@ func UpdateConfigProfile(domainURL, token, profileUUID string, config map[string
 	return nil
 }
 
-// a node can turn on later (see internal/menu's node-profile picker).
+// ConfigProfileInbounds selects which inbounds a config profile's
+// config carries. Raw (VLESS+Reality) is this project's stock,
+// always-available inbound; Hysteria2 and XHTTP are optional additions
+// a node can turn on later (see internal/nodeprofile).
 type ConfigProfileInbounds struct {
 	Raw       bool
 	Hysteria2 bool
@@ -646,10 +649,9 @@ func BuildProfileConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, c
 
 // CreateConfigProfile creates a config profile. By default (inbounds
 // left as its zero value) it carries only the stock Raw (VLESS+Reality)
-// inbound; the panel's config-profiles menu can add Hysteria2 and/or
-// XHTTP to it later via UpdateConfigProfileInbounds. See
-// ConfigProfileInbounds and buildInboundConfig for what each inbound
-// needs.
+// inbound; internal/nodeprofile can add Hysteria2 and/or XHTTP to it
+// later via UpdateConfigProfile. See ConfigProfileInbounds and
+// buildInboundConfig for what each inbound needs.
 func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag, certFullchain, certPrivkey string, inbounds ConfigProfileInbounds) (string, string) {
 	if inboundTag == "" {
 		inboundTag = "Raw"

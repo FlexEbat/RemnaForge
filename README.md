@@ -1,76 +1,78 @@
+**English** | [Русский](README.ru.md) | [中文](README.zh.md) | [فارسی](README.fa.md)
+
 # RemnaForge
 
-> RemnaForge - это бывший Remnawave Easy-Install (fork eGames). Проект переименован и продолжает развиваться как независимый форк [remnawave-reverse-proxy](https://github.com/eGamesAPI/remnawave-reverse-proxy).
+> RemnaForge is the former Remnawave Easy-Install (fork eGames). The project is renamed and continues development as an independent fork of [remnawave-reverse-proxy](https://github.com/eGamesAPI/remnawave-reverse-proxy).
 
-RemnaForge ставит и обслуживает [Remnawave](https://docs.rw/) на сервере через интерактивное текстовое меню: панель, ноду или обе части сразу, за Nginx или за Caddy. Написан на Go, распространяется одним бинарником без внешнего рантайма.
+RemnaForge installs and maintains [Remnawave](https://docs.rw/) on a server through an interactive text menu: the panel, a node, or both at once, behind Nginx or Caddy. Written in Go, ships as a single binary with no external runtime.
 
-## Оглавление
+## Table of contents
 
-- [Перед установкой: обязательно прочитайте это](#перед-установкой-обязательно-прочитайте-это)
-- [Известные проблемы](#известные-проблемы)
-- [Возможности](#возможности)
-- [Требования](#требования)
-- [Установка](#установка)
-- [Первый запуск](#первый-запуск)
-- [Меню и что оно делает](#меню-и-что-оно-делает)
-- [Файлы, которые инструмент создаёт и трогает](#файлы-которые-инструмент-создаёт-и-трогает)
-- [Логи](#логи)
-- [Структура репозитория](#структура-репозитория)
-- [Сборка и тесты](#сборка-и-тесты)
-- [Участие в разработке](#участие-в-разработке)
-- [Лицензия](#лицензия)
+- [Read this before you install](#read-this-before-you-install)
+- [Known issues](#known-issues)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [First run](#first-run)
+- [Menu reference](#menu-reference)
+- [Files this tool creates and touches](#files-this-tool-creates-and-touches)
+- [Logs](#logs)
+- [Repository structure](#repository-structure)
+- [Build and test](#build-and-test)
+- [Contributing](#contributing)
+- [License](#license)
 
-## Перед установкой: обязательно прочитайте это
+## Read this before you install
 
-RemnaForge генерирует конфигурацию для [Xray-core](https://github.com/XTLS/Xray-core) (протокол VLESS, TLS/REALITY, шифрование транспорта) и для панели [Remnawave](https://github.com/remnawave/panel), но не является ни тем, ни другим и не проверяет содержательную корректность и актуальность генерируемых настроек безопасности сверх того, что нужно панели и ноде, чтобы запуститься.
+RemnaForge generates configuration for [Xray-core](https://github.com/XTLS/Xray-core) (VLESS, TLS/REALITY, transport encryption) and for the [Remnawave](https://github.com/remnawave/panel) panel, but is neither, and doesn't validate the substantive correctness or currency of the security settings it generates beyond what the panel and node need to start.
 
-Протокол VLESS и связанные с ним механизмы (XTLS, REALITY, VLESS Encryption) активно развиваются, конфигурационный формат и рекомендации по безопасной настройке меняются от релиза к релизу. Значение по умолчанию, которое было безопасным вчера, может оказаться недостаточным сегодня. Прежде чем вводить сервер в эксплуатацию, особенно если на нём будут реальные пользователи, а не тестовый стенд, изучите:
+VLESS and its related mechanisms (XTLS, REALITY, VLESS Encryption) evolve fast. Configuration format and safe-defaults guidance change from release to release. A default that was safe yesterday may not be enough today. Before putting a server into production, especially with real users rather than a test box, read:
 
-- Официальный FAQ по VLESS Encryption: [xraycore.org/en/misc/vless-encryption](https://web.archive.org/web/20260323081134/https://xraycore.org/en/misc/vless-encryption/) (ссылка на архивную копию: сайт периодически переезжает).
-- Обсуждение миграции на VLESS Encryption в самом Xray-core: [github.com/XTLS/Xray-core/discussions/4113](https://github.com/XTLS/Xray-core/discussions/4113).
-- Исходный код Xray-core: [github.com/XTLS/Xray-core](https://github.com/XTLS/Xray-core), включая открытые [pull request'ы](https://github.com/XTLS/Xray-core/pulls) и [issues](https://github.com/XTLS/Xray-core/issues) — там обсуждаются актуальные проблемы конфигурации и известные ограничения раньше, чем они попадают в документацию.
-- Официальную инструкцию по установке и настройке: [xtls.github.io/en/document/install.html](https://xtls.github.io/en/document/install.html).
-- Разбор формата `transport_method` прямо в исходном коде, если формат непонятен по документации: [infra/conf/transport_method.go#L454](https://github.com/XTLS/Xray-core/blob/7d214f8b094f75322fa3990f8aadad1c912f24f5/infra/conf/transport_method.go#L454).
-- Документацию и исходный код самой панели: [github.com/remnawave/panel](https://github.com/remnawave/panel), [docs.rw](https://docs.rw).
+- The official VLESS Encryption FAQ: [xraycore.org/en/misc/vless-encryption](https://web.archive.org/web/20260323081134/https://xraycore.org/en/misc/vless-encryption/) (archive.org snapshot, since the site relocates periodically).
+- The Xray-core discussion tracking the VLESS Encryption migration: [github.com/XTLS/Xray-core/discussions/4113](https://github.com/XTLS/Xray-core/discussions/4113).
+- Xray-core's source: [github.com/XTLS/Xray-core](https://github.com/XTLS/Xray-core), including open [pull requests](https://github.com/XTLS/Xray-core/pulls) and [issues](https://github.com/XTLS/Xray-core/issues) — current configuration problems and known limitations show up there before they reach the docs.
+- The official install and setup guide: [xtls.github.io/en/document/install.html](https://xtls.github.io/en/document/install.html).
+- The `transport_method` format straight from source, when the docs alone aren't enough: [infra/conf/transport_method.go#L454](https://github.com/XTLS/Xray-core/blob/7d214f8b094f75322fa3990f8aadad1c912f24f5/infra/conf/transport_method.go#L454).
+- The panel's own docs and source: [github.com/remnawave/panel](https://github.com/remnawave/panel), [docs.rw](https://docs.rw).
 
-Если формулировки в этих источниках противоречат тому, что делает RemnaForge, доверяйте источникам, не этому README, и открывайте issue.
+If anything in this README contradicts those sources, trust the sources, not this README, and open an issue.
 
-**Держите панель и ноду обновлёнными.** `docker-compose.yml`, который пишет RemnaForge, использует плавающий тег образа (`remnawave/backend:3`, `remnawave/node:latest`), поэтому `docker compose pull && docker compose up -d` (пункт меню «Manage Panel/Node» → Update) подтягивает последний патч мажорной ветки без переустановки. У панели и ноды есть собственные каналы анонсов с описанием критичных исправлений, в том числе security-фиксов: [announces](https://f.docs.rw/c/announces/14), [панель](https://f.docs.rw/c/announces/rw-panel/16), [нода](https://f.docs.rw/c/announces/rw-node/17). Проверяйте их периодически — RemnaForge не отслеживает и не уведомляет о них сам.
+**Keep the panel and node updated.** The `docker-compose.yml` RemnaForge writes uses floating image tags (`remnawave/backend:3`, `remnawave/node:latest`), so `docker compose pull && docker compose up -d` (menu item "Manage Panel/Node" → Update) pulls the latest patch on the major branch without reinstalling. The panel and node have their own announcement channels covering critical fixes, including security fixes: [announces](https://f.docs.rw/c/announces/14), [panel](https://f.docs.rw/c/announces/rw-panel/16), [node](https://f.docs.rw/c/announces/rw-node/17). Check them periodically — RemnaForge doesn't track or notify about them itself.
 
-## Известные проблемы
+## Known issues
 
-Активных известных багов сейчас нет.
+No active known bugs right now.
 
-**Caddy-установки с нодой (co-located или отдельной) собирают свой образ Caddy при первом запуске**, а не используют готовый: Xray заворачивает fallback-трафик Reality в PROXY protocol на unix-сокет, где Caddy слушает все свои домены, а официальный образ `caddy` не включает нужный для этого модуль (`github.com/mastercactapus/caddy2-proxyprotocol`). `docker-compose.yml` для `internal/caddynode`/`internal/caddypanelfull` теперь собирает его сам через `xcaddy` (`docker compose up -d --build`), поэтому первый запуск занимает на пару минут дольше обычного — Docker собирает образ, а не просто скачивает его.
+**Caddy installs with a node (co-located or standalone) build their own Caddy image on first run** instead of using a stock one: Xray wraps Reality fallback traffic in the PROXY protocol on a unix socket where Caddy listens for all its domains, and the official `caddy` image doesn't include the module that needs (`github.com/mastercactapus/caddy2-proxyprotocol`). `docker-compose.yml` for `internal/caddynode`/`internal/caddypanelfull` now builds it itself via `xcaddy` (`docker compose up -d --build`), so the first run takes a couple of minutes longer than usual — Docker is compiling the image, not just pulling it.
 
-## Возможности
+## Features
 
-- Устанавливает панель Remnawave, ноду или обе части на одном сервере.
-- Два вебсервера на выбор: Nginx или Caddy.
-- Для Nginx выпускает и продлевает TLS-сертификаты через `certbot`: Cloudflare DNS-01, ACME HTTP-01, Gcore DNS-01. Caddy выпускает и продлевает сертификаты сам, через встроенный ACME-клиент.
-- По умолчанию конфиг-профиль ноды несёт один inbound: VLESS+Reality (`Raw`). Каждая нода (co-located или отдельная) при этом уже готова принять ещё два: Hysteria2 (`HYSTERIA-BBR`, TLS терминирует сам Xray) и VLESS+XHTTP (`XHTTP-TLS` поверх `/api/v2/stream-events`) — соответствующие location/route в nginx.conf или Caddyfile и монтирование сертификата ноды в контейнер уже на месте, включаются позже через пункт меню «Manage Node Profile».
-- Добавляет ноду к уже работающей панели через её HTTP API.
-- Ставит на selfsteal-домен HTML-шаблон (случайный или выбранный вручную из нескольких источников) для маскировки трафика на неавторизованных подключениях.
-- Управляет установленным стеком: старт, стоп, обновление образов, просмотр логов `docker compose`, встроенный `remnawave` CLI внутри контейнера, временное открытие панели на порту 8443 для доступа без домена.
-- Переустанавливает панель или ноду поверх текущей установки, с тем же выбором вебсервера.
-- Включает и выключает IPv6 на уровне ОС.
-- Ставит зависимости на чистый сервер перед первой установкой: `docker`, `docker compose`, `certbot`, `ufw`, `cron`, `unattended-upgrades`, включает BBR.
-- Backup и restore панели - делегирует стороннему инструменту [distillium/remnawave-backup-restore](https://github.com/distillium/remnawave-backup-restore) (MIT), не реализует их сам.
-- Удаляет установку целиком (контейнеры, образы, тома) либо только состояние самого RemnaForge.
-- Интерфейс на английском и русском, выбор языка при первом запуске.
+- Installs the Remnawave panel, a node, or both on one server.
+- Two webservers to choose from: Nginx or Caddy.
+- For Nginx, issues and renews TLS certificates via `certbot`: Cloudflare DNS-01, ACME HTTP-01, Gcore DNS-01. Caddy issues and renews its own certificates through its built-in ACME client.
+- A node's config profile carries one inbound by default: VLESS+Reality (`Raw`). Every node (co-located or standalone) is already set up to take two more: Hysteria2 (`HYSTERIA-BBR`, TLS terminated by Xray itself) and VLESS+XHTTP (`XHTTP-TLS` over `/api/v2/stream-events`) — the matching nginx.conf/Caddyfile location/route and the node's certificate mount into the container are already in place, turned on later via the "Manage Node Profile" menu item.
+- Registers a node with an already-running panel through its HTTP API.
+- Installs an HTML template (random, or picked manually from several sources) on the selfsteal domain to disguise unauthorized connections.
+- Manages an installed stack: start, stop, update images, tail `docker compose` logs, the `remnawave` CLI inside the container, temporarily opening the panel on port 8443 for domain-less access.
+- Reinstalls the panel or node over the current install, with the same webserver choice.
+- Turns IPv6 on and off at the OS level.
+- Installs dependencies on a fresh server before the first install: `docker`, `docker compose`, `certbot`, `ufw`, `cron`, `unattended-upgrades`, enables BBR.
+- Panel backup and restore — delegates to the third-party [distillium/remnawave-backup-restore](https://github.com/distillium/remnawave-backup-restore) (MIT) rather than implementing it itself.
+- Removes the install entirely (containers, images, volumes) or just RemnaForge's own state.
+- English and Russian interface, language chosen on first run.
 
-## Требования
+## Requirements
 
-- Debian 11 или новее, либо Ubuntu 22.04 LTS или новее. Версия ОС определяется по `/etc/os-release`, а не по списку кодовых имён, поэтому новый минорный релиз Debian или Ubuntu не требует обновления RemnaForge.
-- Права root (проверяется при старте).
-- Домен(ы), которые уже указывают на IP сервера — для установки панели или ноды за Nginx. За Caddy сертификат получает сам Caddy, но домен всё равно должен резолвиться на сервер.
-- Go 1.22+ - только для сборки из исходников, на целевом сервере не нужен.
+- Debian 11 or newer, or Ubuntu 22.04 LTS or newer. OS version is read from `/etc/os-release`, not a fixed codename list, so a new Debian or Ubuntu minor release doesn't need a RemnaForge update.
+- Root (checked at startup).
+- Domain(s) already pointing at the server's IP, for installing the panel or a node behind Nginx. Behind Caddy the certificate is issued by Caddy itself, but the domain still has to resolve to the server.
+- Go 1.22+ — only to build from source, not needed on the target server.
 
-Docker, `docker compose`, `certbot` и `ufw` ставить заранее не нужно: RemnaForge сам ставит недостающее при первом обращении к любому install-флоу.
+No need to install Docker, `docker compose`, `certbot`, or `ufw` ahead of time: RemnaForge installs whatever's missing the first time any install flow needs it.
 
-## Установка
+## Installation
 
-Готовых бинарников и пакетов пока нет.
+No prebuilt binaries or packages yet.
 
 ```bash
 git clone https://github.com/FlexEbat/RemnaForge.git
@@ -79,101 +81,101 @@ go build -o remnaforge ./cmd/remnawave
 sudo mv remnaforge /usr/local/bin/
 ```
 
-Единственная внешняя зависимость в `go.mod` - `golang.org/x/net` (пакет `publicsuffix`, для правильного определения базового домена под многоуровневыми публичными суффиксами вроде `.co.uk`). Всё остальное - стандартная библиотека Go.
+The only external dependency in `go.mod` is `golang.org/x/net` (the `publicsuffix` package, for correctly resolving the base domain under multi-label public suffixes like `.co.uk`). Everything else is Go's standard library.
 
-## Первый запуск
+## First run
 
 ```bash
 sudo remnaforge
 ```
 
-При самом первом запуске инструмент спросит язык интерфейса (English/Русский) и сохранит выбор в `/usr/local/remnawave_reverse/selected_language`. Дальше запускается сразу в выбранном языке.
+On the very first run the tool asks for an interface language (English/Русский) and saves the choice to `/usr/local/remnawave_reverse/selected_language`. Later runs start directly in that language.
 
-## Меню и что оно делает
+## Menu reference
 
 ```
-1. Install Remnawave Components   — установка: панель+нода, только панель, добавить ноду, только нода
-2. Reinstall panel/node            — снести текущий стек и поставить заново
-3. Manage Panel/Node                — старт/стоп/обновление/логи/CLI/временный доступ на 8443
-4. Install random template          — сменить selfsteal-шаблон на ноде
+1. Install Remnawave Components   — install: panel+node, panel only, add a node, node only
+2. Reinstall panel/node            — tear down the current stack and reinstall
+3. Manage Panel/Node                — start/stop/update/logs/CLI/temporary access on 8443
+4. Install random template          — change the selfsteal template on a node
 5. WARP Native
-6. Backup and Restore                — сторонний distillium/remnawave-backup-restore
-7. Manage IPv6                       — включить/выключить IPv6
-8. Manage certificates domain        — обновить или перевыпустить сертификат вручную
-9. Manage Node Profile               — включить/выключить Hysteria2/XHTTP на inbound'ах уже зарегистрированной ноды
+6. Backup and Restore                — third-party distillium/remnawave-backup-restore
+7. Manage IPv6                       — turn IPv6 on or off
+8. Manage certificates domain        — renew or reissue a certificate manually
+9. Manage Node Profile               — turn Hysteria2/XHTTP on or off on an already-registered node
 10. Check for updates script
-11. Remove script                    — удалить RemnaForge и/или установленный стек
+11. Remove script                    — remove RemnaForge and/or the installed stack
 0. Exit
 ```
 
-Пункт 1 после выбора типа установки (панель+нода / только панель / добавить ноду к существующей панели / только нода) спрашивает Nginx или Caddy, затем интерактивно запрашивает всё остальное: домены, IP панели при установке отдельной ноды, метод выпуска сертификата.
+Item 1, after the install type is chosen (panel+node / panel only / add a node to an existing panel / node only), asks Nginx or Caddy, then asks everything else interactively: domains, the panel's IP when installing a standalone node, the certificate issuance method.
 
-Пункт 9 работает как пункт 1 → «добавить ноду»: спрашивает URL панели, API-токен и имя конфиг-профиля напрямую, не полагаясь на локальный `.env` — профиль может принадлежать любой панели, а не только той, что установлена на этой машине. По умолчанию нода несёт только `Raw` (VLESS+Reality); этот пункт добавляет или убирает `Hysteria2`/`XHTTP` через чекбокс-меню (номер — отметить, Enter — применить), не трогая уже выданные секреты уже включённых inbound'ов. При включении `Hysteria2` спросит, был ли сертификат ноды выпущен как wildcard — этот пункт меню не устанавливал ноду сам и не может определить это иначе.
+Item 9 works like item 1's "add a node" flow: it asks for the panel URL, API token, and config profile name directly, rather than reading a local `.env` — the profile can belong to any panel, not just the one installed on this machine. A node carries only `Raw` (VLESS+Reality) by default; this item adds or removes `Hysteria2`/`XHTTP` through a checkbox menu (a number toggles it, Enter applies the selection) without touching the already-issued secrets of inbounds that stay on. Turning on `Hysteria2` asks whether the node's certificate was issued as a wildcard — this menu item didn't install the node itself and has no other way to know.
 
-## Файлы, которые инструмент создаёт и трогает
+## Files this tool creates and touches
 
-- `/opt/remnawave/` или `/opt/remnanode/` - `docker-compose.yml`, `.env`, `nginx.conf` или `Caddyfile` установленного стека.
-- `/usr/local/remnawave_reverse/` - собственное состояние RemnaForge: выбранный язык, лог-файл, отметка об уже выполненной установке зависимостей.
-- `/etc/letsencrypt/` - сертификаты и конфигурация продления, если выбран Nginx с certbot.
-- `/etc/sysctl.conf`, правила `ufw` — при включении/выключении IPv6 и при первичной установке зависимостей.
-- `/var/www/html/` - HTML-шаблон selfsteal-домена.
+- `/opt/remnawave/` or `/opt/remnanode/` — the installed stack's `docker-compose.yml`, `.env`, `nginx.conf` or `Caddyfile`.
+- `/usr/local/remnawave_reverse/` — RemnaForge's own state: the chosen language, the log file, a marker that dependencies are already installed.
+- `/etc/letsencrypt/` — certificates and renewal configuration, if Nginx with certbot was chosen.
+- `/etc/sysctl.conf`, `ufw` rules — when turning IPv6 on/off and during the initial dependency install.
+- `/var/www/html/` — the selfsteal domain's HTML template.
 
-Полное удаление (пункт 10 меню, "wipe everything") сносит `/opt/remnawave` или `/opt/remnanode` вместе с контейнерами, образами и томами. `/etc/letsencrypt` не трогает - сертификаты остаются на диске.
+A full removal (menu item 11, "wipe everything") tears down `/opt/remnawave` or `/opt/remnanode` along with its containers, images, and volumes. It leaves `/etc/letsencrypt` alone — certificates stay on disk.
 
-## Логи
+## Logs
 
-Весь вывод, включая вывод дочерних процессов (`docker`, `certbot`, `ufw`), одновременно идёт на экран и пишется в `/usr/local/remnawave_reverse/remnawave_reverse.log`.
+All output, including from child processes (`docker`, `certbot`, `ufw`), goes to the screen and to `/usr/local/remnawave_reverse/remnawave_reverse.log` at the same time.
 
-## Структура репозитория
+## Repository structure
 
 ```text
-cmd/remnawave/          точка входа: логирование, выбор языка, проверка ОС и root, главное меню
-templates/               готовые Xray JSON шаблоны подписки для панели (не устанавливаются автоматически, см. templates/README.md)
+cmd/remnawave/          entry point: file logging, language choice, OS/root checks, main menu
+templates/               ready-made Xray JSON subscription templates for the panel (not installed automatically, see templates/README.md)
 internal/
-  addnode/               добавление ноды к панели через API
-  api/                    HTTP-клиент Remnawave API
-  backuprestore/          загрузка и запуск стороннего backup/restore
-  caddynode/              установка ноды за Caddy
-  caddypanelfull/         установка панели с совмещённой нодой за Caddy
-  caddypanelonly/         установка панели без ноды за Caddy
-  certs/                  выпуск и обновление TLS-сертификатов для Nginx (certbot)
-  domain/                 извлечение базового домена, проверка DNS, детект Cloudflare
-  genutil/                генерация паролей, логинов, секретов
-  i18n/                   строки интерфейса EN/RU, выбор и сохранение языка
-  ipv6/                   включение и отключение IPv6 на уровне ОС
-  managepanel/            управление установленной панелью и нодой
-  menu/                   главное меню и диспетчеризация
-  nginxnode/              установка ноды за Nginx
-  nodeprofile/            включение/выключение Hysteria2/XHTTP на конфиг-профиле ноды
-  oscheck/                проверка версии ОС и прав root
-  panelfull/              установка панели с совмещённой нодой за Nginx
-  panelonly/              установка панели без ноды за Nginx
-  preflight/              установка docker/certbot/ufw/cron перед первым запуском
-  reinstall/              переустановка панели или ноды поверх текущей
-  selfsteal/              HTML-шаблоны для selfsteal-домена
-  uninstall/              удаление RemnaForge и/или установленного стека
-  ui/                     цвета терминала, чтение ввода, логирование в файл
+  addnode/               registers a node with the panel over its API
+  api/                    Remnawave panel HTTP client
+  backuprestore/          downloads and runs the third-party backup/restore tool
+  caddynode/              installs a standalone node behind Caddy
+  caddypanelfull/         installs the panel with a co-located node behind Caddy
+  caddypanelonly/         installs the panel without a node behind Caddy
+  certs/                  issues and renews TLS certificates for Nginx (certbot)
+  domain/                 base-domain extraction, DNS checks, Cloudflare detection
+  genutil/                password, username, and secret generation
+  i18n/                   EN/RU interface strings, language choice and persistence
+  ipv6/                   turns IPv6 on and off at the OS level
+  managepanel/            manages an installed panel and node
+  menu/                   main menu and dispatch
+  nginxnode/              installs a standalone node behind Nginx
+  nodeprofile/            turns Hysteria2/XHTTP on or off on a node's config profile
+  oscheck/                OS version and root checks
+  panelfull/              installs the panel with a co-located node behind Nginx
+  panelonly/              installs the panel without a node behind Nginx
+  preflight/              installs docker/certbot/ufw/cron before the first run
+  reinstall/              reinstalls the panel or node over the current install
+  selfsteal/              HTML templates for the selfsteal domain
+  uninstall/              removes RemnaForge and/or the installed stack
+  ui/                     terminal colors, input, file logging
 ```
 
-## Сборка и тесты
+## Build and test
 
 ```bash
 go build ./...
 go vet ./...
-gofmt -l .      # пустой вывод — форматирование в порядке
+gofmt -l .      # empty output means formatting is fine
 go test ./...
 ```
 
-Часть проверок требует реальной среды, которой нет на машине разработчика: настоящий Docker-демон, `systemd`, `apt`, `ufw`. Они помечены тегом сборки `integration`, не входят в обычный `go test ./...` и гоняются в CI (`.github/workflows/ci.yml`) на одноразовой Ubuntu-машине GitHub Actions при каждом пуше и PR в `main` и `dev`. Запустить вручную:
+Some checks need a real environment the development machine doesn't have: an actual Docker daemon, `systemd`, `apt`, `ufw`. They're tagged `integration`, excluded from a plain `go test ./...`, and run in CI (`.github/workflows/ci.yml`) on a disposable Ubuntu GitHub Actions machine on every push and PR to `main` and `dev`. Run them manually with:
 
 ```bash
 go test -tags=integration ./internal/preflight/...
 ```
 
-## Участие в разработке
+## Contributing
 
-Стиль кода, коммитов и комментариев - в [CONTRIBUTING.md](CONTRIBUTING.md). Внутренняя техническая документация (статус реализации по модулям, зафиксированные архитектурные решения) - в [TECH.md](TECH.md).
+Code, commit, and comment style live in [CONTRIBUTING.md](CONTRIBUTING.md). Internal technical documentation (per-module implementation status, recorded architecture decisions) lives in [TECH.md](TECH.md).
 
-## Лицензия
+## License
 
 [GNU GPLv3](LICENSE).
