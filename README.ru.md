@@ -2,8 +2,6 @@
 
 # RemnaForge
 
-> RemnaForge — это бывший Remnawave Easy-Install (fork eGames). Проект переименован и продолжает развиваться как независимый форк [remnawave-reverse-proxy](https://github.com/eGamesAPI/remnawave-reverse-proxy).
-
 RemnaForge ставит и обслуживает [Remnawave](https://docs.rw/) на сервере через интерактивное текстовое меню: панель, ноду или обе части сразу, за Nginx или за Caddy. Написан на Go, распространяется одним бинарником без внешнего рантайма.
 
 ## Оглавление
