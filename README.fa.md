@@ -2,8 +2,6 @@
 
 # RemnaForge
 
-> RemnaForge نسخه‌ی تغییرنام‌یافته‌ی Remnawave Easy-Install (فورک eGames) است. این پروژه تغییرنام یافته و به‌عنوان یک فورک مستقل از [remnawave-reverse-proxy](https://github.com/eGamesAPI/remnawave-reverse-proxy) توسعه‌اش ادامه دارد.
-
 RemnaForge از طریق یک منوی متنی تعاملی، [Remnawave](https://docs.rw/) را روی سرور نصب و نگهداری می‌کند: پنل، یک نود، یا هر دو با هم، پشت Nginx یا Caddy. با Go نوشته شده و به‌صورت یک باینری واحد بدون نیاز به ران‌تایم جانبی عرضه می‌شود.
 
 ## فهرست مطالب
