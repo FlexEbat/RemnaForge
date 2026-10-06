@@ -25,8 +25,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -53,7 +53,7 @@ func ExtractDomain(subdomain string) string {
 	return subdomain
 }
 
-// CheckResult mirrors the three bash return codes from check_domain():
+// CheckResult is the outcome of a domain check:
 // 0 = domain resolves straight to this server, 1 = mismatch/unresolvable
 // but proceeding anyway, 2 = user aborted.
 type CheckResult int
@@ -140,7 +140,7 @@ func ipInRanges(ipStr string, ranges []*net.IPNet) bool {
 	return false
 }
 
-// showWarning/allowCFProxy default to true, matching bash's ${2:-true}/${3:-true}.
+// showWarning and allowCFProxy default to true.
 func CheckDomain(domainName string, showWarning, allowCFProxy bool) CheckResult {
 	domainIP := resolveA(domainName)
 	serverIP := publicServerIP()

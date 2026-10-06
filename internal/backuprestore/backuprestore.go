@@ -1,13 +1,10 @@
 // Package backuprestore implements the "Backup and Restore" menu item.
 //
-// This project doesn't implement backup/restore itself. It downloads
-// and runs a separate, independently maintained tool:
-// https://github.com/distillium/remnawave-backup-restore (MIT license,
-// ~3600 lines of bash: Google Drive/S3 upload, Telegram notifications,
-// its own cron scheduling, its own translations). Reimplementing that
-// tool in Go would mean forking and maintaining a second, unrelated
-// project inside this one. Instead, this package fetches the script if
-// it isn't cached yet, then hands off to it interactively.
+// Backup and restore are handled by a separate, independently
+// maintained tool, https://github.com/distillium/remnawave-backup-restore
+// (MIT license; Google Drive/S3 upload, Telegram notifications, cron
+// scheduling). This package fetches its script if it is not present yet
+// and hands off to it interactively.
 package backuprestore
 
 import (
@@ -19,8 +16,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 // scriptURL is the community backup/restore tool this package fetches.
@@ -38,8 +35,11 @@ func Run() error {
 	}
 	scriptPath := filepath.Join(home, "backup-restore.sh")
 
-	if _, statErr := os.Stat(scriptPath); statErr == nil {
+	if _, lookErr := exec.LookPath("rw-backup"); lookErr == nil {
 		return runInteractive("rw-backup")
+	}
+	if _, statErr := os.Stat(scriptPath); statErr == nil {
+		return runInteractive(scriptPath)
 	}
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.DownloadingBackupRestore(), ui.ColorReset)
@@ -54,6 +54,9 @@ func Run() error {
 	return runInteractive(scriptPath)
 }
 
+// downloadScript writes the script to a temporary file next to dest and
+// renames it into place only once the download has completed, so an
+// interrupted download never leaves a truncated script behind.
 func downloadScript(dest string) error {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(scriptURL)
@@ -65,14 +68,20 @@ func downloadScript(dest string) error {
 		return fmt.Errorf("unexpected status %d fetching %s", resp.StatusCode, scriptURL)
 	}
 
-	out, err := os.Create(dest)
+	tmp, err := os.CreateTemp(filepath.Dir(dest), ".backup-restore-*")
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer os.Remove(tmp.Name())
 
-	_, err = io.Copy(out, resp.Body)
-	return err
+	if _, err := io.Copy(tmp, io.LimitReader(resp.Body, 5<<20)); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), dest)
 }
 
 // runInteractive runs name (a full path or something on $PATH) with its

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/domain"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/domain"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 const letsencryptLive = "/etc/letsencrypt/live"
@@ -72,15 +72,9 @@ func AskCertDomain(domainName string) string {
 // every domain's renewal.conf, shared by FixLetsencryptStructure (this
 // file) and fixRenewHook (handle.go).
 //
-// FIXED: these two call sites used to hardcode two *different*
-// renew_hook strings for this exact same purpose - one included a
-// trailing "docker compose exec remnawave-nginx nginx -s reload", the
-// other didn't. Depending on which of the two ran last, a server could
-// end up with either hook, silently. Both now share this single
-// constant, using the more complete variant (the extra reload is a
-// harmless no-op immediately after `docker compose up -d`, and a real
-// safety net if that ever changes to not force a full container
-// restart).
+// The trailing nginx reload is a harmless no-op right after
+// `docker compose up -d`, and a safety net should that ever stop
+// restarting the container.
 const renewHookCommand = `renew_hook = sh -c 'cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx && docker compose exec remnawave-nginx nginx -s reload'`
 
 // latestMatchingDir returns the highest natural-sort-ordered directory

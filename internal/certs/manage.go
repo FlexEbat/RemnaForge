@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/preflight"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 // ensureCertbot reports an error if certbot isn't installed, rather
@@ -20,10 +20,7 @@ func ensureCertbot() error {
 	return preflight.CheckCertbot()
 }
 
-// FIXED: this submenu's title used to be i18n.T("MENU_8") ("Manage IPv6"),
-// wrong for a certificates menu. Uses i18n.T("MENU_9") ("Manage
-// certificates domain") instead, this feature's actual label in the
-// parent menu.
+// showManageCertificates prints the certificates submenu.
 func showManageCertificates() {
 	fmt.Println()
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("MENU_9"), ui.ColorReset)

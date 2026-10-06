@@ -12,14 +12,15 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/api"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/domain"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/genutil"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/preflight"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/selfsteal"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/api"
+	"github.com/FlexEbat/RemnaForge/internal/certs"
+	"github.com/FlexEbat/RemnaForge/internal/domain"
+	"github.com/FlexEbat/RemnaForge/internal/genutil"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
+	"github.com/FlexEbat/RemnaForge/internal/stack"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 const panelDir = "/opt/remnawave"
@@ -251,10 +252,15 @@ func installPanelNodeNginx() (*state, error) {
 		st.panelDomain, st.subDomain,
 		st.metricsUser, st.metricsPass,
 	)
+	dotEnv = genutil.HardenEnv(dotEnv)
+	if stack.VolumeExists("remnawave-db-data") {
+		fmt.Printf("%s"+i18n.T("DB_VOLUME_EXISTS")+"%s\n", ui.ColorRed, "remnawave-db-data", ui.ColorReset)
+		return nil, fmt.Errorf("existing database volume")
+	}
 	if err := os.WriteFile(filepath.Join(panelDir, ".env"), []byte(dotEnv), 0600); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(filepath.Join(panelDir, "docker-compose.yml"), []byte(dockerComposeHead), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(panelDir, "docker-compose.yml"), []byte(dockerComposeHead), 0600); err != nil {
 		return nil, err
 	}
 
@@ -303,7 +309,7 @@ map $http_upgrade $connection_upgrade {
 
 map $http_cookie $auth_cookie {
     default 0;
-    "~*%[1]s=%[2]s" 1;
+    "~%[1]s=%[2]s" 1;
 }
 
 map $arg_%[1]s $auth_query {
@@ -354,8 +360,8 @@ server {
         proxy_set_header Host $host;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $proxy_protocol_addr;
+        proxy_set_header X-Forwarded-For $proxy_protocol_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Port $server_port;
@@ -380,8 +386,8 @@ server {
         proxy_set_header Host $host;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $proxy_protocol_addr;
+        proxy_set_header X-Forwarded-For $proxy_protocol_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Port $server_port;
@@ -539,6 +545,9 @@ func InstallationPanelNode() error {
     environment:
       - NODE_PORT=2222
       - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
+      # Optional node settings (node 3.4+); uncomment to change:
+      # - SNI_VERIFICATION=true
+      # - NFTABLES_LOGGING=true
     volumes:
       - /dev/shm:/dev/shm:rw
       - %s:%s:ro
@@ -565,7 +574,7 @@ volumes:
 `, certFullchain, certFullchain, certPrivkey, certPrivkey)
 	composePath := filepath.Join(panelDir, "docker-compose.yml")
 	existing, _ := os.ReadFile(composePath)
-	if err := os.WriteFile(composePath, append(existing, []byte(composeTail)...), 0644); err != nil {
+	if err := os.WriteFile(composePath, append(existing, []byte(composeTail)...), 0600); err != nil {
 		return err
 	}
 
@@ -576,7 +585,7 @@ volumes:
 		st.subDomain, subCertDomain,
 		st.selfstealDomain, nodeCertDomain,
 	)
-	if err := os.WriteFile(filepath.Join(panelDir, "nginx.conf"), []byte(nginxConf), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(panelDir, "nginx.conf"), []byte(nginxConf), 0600); err != nil {
 		return err
 	}
 
@@ -586,7 +595,10 @@ volumes:
 	upCmd := exec.Command("docker", "compose", "up", "-d")
 	upCmd.Dir = panelDir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	_ = upCmd.Run()
+	if err := upCmd.Run(); err != nil {
+		fmt.Printf("%sdocker compose up: %v%s\n", ui.ColorRed, err, ui.ColorReset)
+		return err
+	}
 
 	// Allow the co-located node's docker subnet to reach itself on 2222
 	// (best-effort: nice-to-have hardening, not worth failing the whole
@@ -598,11 +610,10 @@ volumes:
 	api.PanelDomain = st.panelDomain
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("REGISTERING_REMNAWAVE"), ui.ColorReset)
-	time.Sleep(20 * time.Second)
 
 	// Wait for the panel API to answer.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CHECK_CONTAINERS"), ui.ColorReset)
-	const maxAttempts = 5
+	const maxAttempts = 40
 	client := &http.Client{Timeout: 30 * time.Second}
 	for attempt := 1; ; {
 		req, _ := http.NewRequest("GET", "http://"+domainURL+"/api/auth/status", nil)
@@ -622,12 +633,15 @@ volumes:
 			return fmt.Errorf(i18n.T("CONTAINERS_TIMEOUT"), maxAttempts)
 		}
 		fmt.Printf(ui.ColorRed+i18n.T("CONTAINERS_NOT_READY_ATTEMPT")+ui.ColorReset+"\n", attempt, maxAttempts)
-		time.Sleep(60 * time.Second)
+		time.Sleep(8 * time.Second)
 		attempt++
 	}
 
 	// Register the superadmin account.
 	token := api.RegisterRemnawave(domainURL, st.superadminUser, st.superadminPass, "")
+	if token == "" {
+		return fmt.Errorf("%s", i18n.T("ERROR_REGISTER"))
+	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("REGISTRATION_SUCCESS"), ui.ColorReset)
 
 	// Fetch the real public key and patch it into
@@ -636,12 +650,17 @@ volumes:
 	// needs its real key, not just a config-profile record.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_PUBLIC_KEY"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
-	api.GetPublicKey(domainURL, token, targetDir)
+	if err := api.GetPublicKey(domainURL, token, targetDir); err != nil {
+		return err
+	}
 
 	// Generate xray keys.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GENERATE_KEYS"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	privateKey := api.GenerateXrayKeys(domainURL, token)
+	if privateKey == "" {
+		return fmt.Errorf("%s", i18n.T("ERROR_GENERATE_KEYS"))
+	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GENERATE_KEYS_SUCCESS"), ui.ColorReset)
 
 	// Delete the default config profile.
@@ -650,6 +669,9 @@ volumes:
 	// Create our config profile.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
 	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, "", certFullchain, certPrivkey, api.ConfigProfileInbounds{Raw: true})
+	if configProfileUUID == "" || inboundUUID == "" {
+		return fmt.Errorf("%s", i18n.T("ERROR_CREATE_CONFIG_PROFILE"))
+	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
 	// Create the node without node_address/node_name overrides, unlike
@@ -657,11 +679,15 @@ volumes:
 	// CreateNode's own defaults (172.30.0.1 / "Steal"). Those defaults
 	// match the co-located node's actual docker-network address.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_NODE"), ui.ColorReset)
-	api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, "", "")
+	if err := api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, "", ""); err != nil {
+		return err
+	}
 
 	// Create the host.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_HOST"), ui.ColorReset)
-	api.CreateHost(domainURL, token, inboundUUID, st.selfstealDomain, configProfileUUID, "")
+	if err := api.CreateHost(domainURL, token, inboundUUID, st.selfstealDomain, configProfileUUID, ""); err != nil {
+		return err
+	}
 
 	// Default squad.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_DEFAULT_SQUAD"), ui.ColorReset)
@@ -673,7 +699,9 @@ volumes:
 
 	// Subscription-page API token.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_API_TOKEN"), ui.ColorReset)
-	_ = api.CreateAPIToken(domainURL, token, targetDir, "")
+	if err := api.CreateAPIToken(domainURL, token, targetDir, ""); err != nil {
+		return err
+	}
 
 	// Restart the whole stack so remnanode picks up its
 	// real SECRET_KEY and the subscription page picks up its API token.
@@ -689,7 +717,10 @@ volumes:
 	upCmd2 := exec.Command("docker", "compose", "up", "-d")
 	upCmd2.Dir = panelDir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	_ = upCmd2.Run()
+	if err := upCmd2.Run(); err != nil {
+		fmt.Printf("%sdocker compose up: %v%s\n", ui.ColorRed, err, ui.ColorReset)
+		return err
+	}
 
 	// Install a random selfsteal template for the co-located node.
 	if err := selfsteal.RandomHTML(""); err != nil {

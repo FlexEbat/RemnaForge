@@ -11,9 +11,10 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 // DirRemnawave is this tool's own config/state directory.
@@ -25,9 +26,8 @@ var PanelDomain string
 
 var uuidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// httpClient is reused across requests rather than constructed fresh
-// each time.
-var httpClient = &http.Client{}
+// httpClient is shared by all panel API calls.
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // MakeAPIRequest sends an HTTP request to the panel's API with the
 // standard set of headers (bearer token, content type, and the
@@ -59,12 +59,13 @@ func makeAPIRequestWithStatus(method, url, token, data string) (statusCode int, 
 
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Forwarded-For", strings.TrimPrefix(url, "http://"))
+	req.Header.Set("X-Forwarded-For", "127.0.0.1")
 	req.Header.Set("X-Forwarded-Proto", "https")
 	req.Header.Set("X-Remnawave-Client-Type", "browser")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		fmt.Printf("%s%v%s\n", ui.ColorRed, err, ui.ColorReset)
 		return 0, nil
 	}
 	defer resp.Body.Close()
@@ -80,7 +81,7 @@ func makeAPIRequestWithStatus(method, url, token, data string) (statusCode int, 
 // freshly installed panel.
 func RegisterRemnawave(domainURL, username, password, token string) string {
 	registerBody, _ := json.Marshal(map[string]string{"username": username, "password": password})
-	resp := MakeAPIRequest("POST", "http://"+domainURL+"/api/auth/register", token, string(registerBody))
+	resp := MakeAPIRequest("POST", BaseURL(domainURL)+"/api/auth/register", token, string(registerBody))
 
 	if len(resp) == 0 {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_EMPTY_RESPONSE_REGISTER"), ui.ColorReset)
@@ -106,7 +107,7 @@ func GetPanelToken() (string, error) {
 	domainURL := "127.0.0.1:3000"
 
 	// local auth_status=$(make_api_request "GET" "http://${domain_url}/api/auth/status" "")
-	authStatus := MakeAPIRequest("GET", "http://"+domainURL+"/api/auth/status", "", "")
+	authStatus := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/auth/status", "", "")
 	oauthEnabled := false
 
 	if len(authStatus) > 0 {
@@ -138,7 +139,7 @@ func GetPanelToken() (string, error) {
 	if data, err := os.ReadFile(tokenFile); err == nil {
 		token = strings.TrimSpace(string(data))
 		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("USING_SAVED_TOKEN"), ui.ColorReset)
-		testResponse := MakeAPIRequest("GET", domainURL+"/api/config-profiles", token, "")
+		testResponse := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/config-profiles", token, "")
 
 		if !hasConfigProfiles(testResponse) {
 			if bytes.Contains(testResponse, []byte(`"statusCode":401`)) || isUnauthorizedMessage(testResponse) {
@@ -162,7 +163,7 @@ func GetPanelToken() (string, error) {
 				return "", fmt.Errorf("empty token")
 			}
 
-			testResponse := MakeAPIRequest("GET", domainURL+"/api/config-profiles", token, "")
+			testResponse := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/config-profiles", token, "")
 			if !hasConfigProfiles(testResponse) {
 				fmt.Printf("%s%s: %s%s\n", ui.ColorRed, i18n.T("INVALID_SAVED_TOKEN"), string(testResponse), ui.ColorReset)
 				return "", fmt.Errorf("invalid token")
@@ -172,7 +173,7 @@ func GetPanelToken() (string, error) {
 			password := ui.Reading(i18n.T("ENTER_PANEL_PASSWORD"))
 
 			loginBody, _ := json.Marshal(map[string]string{"username": username, "password": password})
-			loginResponse := MakeAPIRequest("POST", domainURL+"/api/auth/login", "", string(loginBody))
+			loginResponse := MakeAPIRequest("POST", BaseURL(domainURL)+"/api/auth/login", "", string(loginBody))
 
 			var parsed struct {
 				Response struct {
@@ -191,13 +192,15 @@ func GetPanelToken() (string, error) {
 			}
 		}
 
-		_ = os.WriteFile(tokenFile, []byte(token), 0600)
+		if err := os.MkdirAll(DirRemnawave, 0700); err == nil {
+			_ = os.WriteFile(tokenFile, []byte(token), 0600)
+		}
 		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("TOKEN_RECEIVED_AND_SAVED"), ui.ColorReset)
 	} else {
 		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("TOKEN_USED_SUCCESSFULLY"), ui.ColorReset)
 	}
 
-	finalTestResponse := MakeAPIRequest("GET", domainURL+"/api/config-profiles", token, "")
+	finalTestResponse := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/config-profiles", token, "")
 	if !hasConfigProfiles(finalTestResponse) {
 		fmt.Printf("%s%s: %s%s\n", ui.ColorRed, i18n.T("INVALID_SAVED_TOKEN"), string(finalTestResponse), ui.ColorReset)
 		return "", fmt.Errorf("invalid token")
@@ -231,20 +234,18 @@ func isUnauthorizedMessage(resp []byte) bool {
 	return strings.Contains(strings.ToLower(parsed.Message), "unauthorized")
 }
 
-// GetPublicKey fetches the node's public key from the panel API and
+// GetPublicKey fetches the node's secret key from the panel API and
 // substitutes it into the node's docker-compose.yml, replacing the
-// placeholder SECRET_KEY value written at file-creation time.
+// placeholder SECRET_KEY value written when the file was created. The
+// file is left untouched if the key could not be fetched.
 //
-// This does not stop on error: it prints the error and falls through to
-// attempt the file edit regardless, matching every other error-reporting
-// step in this package.
-//
-// FIXED: Remnawave Panel v3.2.0 renamed the /api/keygen response field
-// from response.pubKey to response.secretKey.
-func GetPublicKey(domainURL, token, targetDir string) {
-	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/keygen", token, "")
+// Since Remnawave Panel v3.2.0 the /api/keygen response carries the key
+// in response.secretKey (it used to be response.pubKey).
+func GetPublicKey(domainURL, token, targetDir string) error {
+	resp := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/keygen", token, "")
 	if len(resp) == 0 {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_PUBLIC_KEY"), ui.ColorReset)
+		return fmt.Errorf("empty response from /api/keygen")
 	}
 
 	var parsed struct {
@@ -253,20 +254,24 @@ func GetPublicKey(domainURL, token, targetDir string) {
 		} `json:"response"`
 	}
 	_ = json.Unmarshal(resp, &parsed)
-	pubkey := parsed.Response.SecretKey
-	if pubkey == "" {
+	secretKey := parsed.Response.SecretKey
+	if secretKey == "" {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_EXTRACT_PUBLIC_KEY"), ui.ColorReset)
+		return fmt.Errorf("no secretKey in response: %s", resp)
 	}
 
-	replaceInFile(targetDir+"/docker-compose.yml",
+	if err := replaceInFile(targetDir+"/docker-compose.yml",
 		`SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"`,
-		fmt.Sprintf(`SECRET_KEY="%s"`, pubkey))
+		fmt.Sprintf(`SECRET_KEY="%s"`, secretKey)); err != nil {
+		return err
+	}
 
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("PUBLIC_KEY_SUCCESS"), ui.ColorReset)
+	return nil
 }
 
 func GenerateXrayKeys(domainURL, token string) string {
-	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/system/tools/x25519/generate", token, "")
+	resp := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/system/tools/x25519/generate", token, "")
 	if len(resp) == 0 {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_GENERATE_KEYS"), ui.ColorReset)
 		return ""
@@ -279,6 +284,7 @@ func GenerateXrayKeys(domainURL, token string) string {
 	_ = json.Unmarshal(resp, &errParsed)
 	if errParsed.ErrorCode != nil {
 		fmt.Printf("%s%s: %s%s\n", ui.ColorRed, i18n.T("ERROR_GENERATE_KEYS"), errParsed.Message, ui.ColorReset)
+		return ""
 	}
 
 	var parsed struct {
@@ -302,7 +308,7 @@ func GenerateXrayKeys(domainURL, token string) string {
 }
 
 func CheckNodeDomain(domainURL, token, domain string) error {
-	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/nodes", token, "")
+	resp := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/nodes", token, "")
 	if len(resp) == 0 {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CHECK_DOMAIN"), ui.ColorReset)
 		return fmt.Errorf("empty response")
@@ -335,7 +341,7 @@ func CheckNodeDomain(domainURL, token, domain string) error {
 	return nil
 }
 
-func CreateNode(domainURL, token, configProfileUUID, inboundUUID string, nodeAddress, nodeName string) {
+func CreateNode(domainURL, token, configProfileUUID, inboundUUID string, nodeAddress, nodeName string) error {
 	if nodeAddress == "" {
 		nodeAddress = "172.30.0.1"
 	}
@@ -361,9 +367,10 @@ func CreateNode(domainURL, token, configProfileUUID, inboundUUID string, nodeAdd
 	}
 	body, _ := json.Marshal(nodeData)
 
-	resp := MakeAPIRequest("POST", "http://"+domainURL+"/api/nodes", token, string(body))
+	resp := MakeAPIRequest("POST", BaseURL(domainURL)+"/api/nodes", token, string(body))
 	if len(resp) == 0 {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_EMPTY_RESPONSE_NODE"), ui.ColorReset)
+		return fmt.Errorf("empty response creating node")
 	}
 
 	var parsed struct {
@@ -373,13 +380,14 @@ func CreateNode(domainURL, token, configProfileUUID, inboundUUID string, nodeAdd
 	}
 	if err := json.Unmarshal(resp, &parsed); err == nil && parsed.Response.UUID != "" {
 		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("NODE_CREATED"), ui.ColorReset)
-	} else {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CREATE_NODE"), ui.ColorReset)
+		return nil
 	}
+	fmt.Printf("%s%s: %s%s\n", ui.ColorRed, i18n.T("ERROR_CREATE_NODE"), string(resp), ui.ColorReset)
+	return fmt.Errorf("create node failed: %s", resp)
 }
 
 func GetConfigProfiles(domainURL, token string) (string, error) {
-	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/config-profiles", token, "")
+	resp := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/config-profiles", token, "")
 	if len(resp) == 0 || !json.Valid(resp) {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_NO_CONFIGS"), ui.ColorReset)
 		return "", fmt.Errorf("no configs")
@@ -404,12 +412,9 @@ func GetConfigProfiles(domainURL, token string) (string, error) {
 	return "", nil
 }
 
-// FIXED: before Remnawave Panel v3.2.0, a successful DELETE returned
-// 200 with a JSON body, and an empty response body reliably meant
-// failure. Since v3.2.0, a successful DELETE returns 204 No Content
-// with an empty body instead, so checking len(resp) == 0 for failure
-// now misreports every successful deletion as an error. This checks
-// the actual HTTP status code instead.
+// DeleteConfigProfile removes a config profile. Panel 3.2.0 and later
+// answer a successful DELETE with 204 No Content and an empty body, so
+// success is decided by the HTTP status code, not the body.
 func DeleteConfigProfile(domainURL, token, profileUUID string) error {
 	if profileUUID == "" {
 		uuid, err := GetConfigProfiles(domainURL, token)
@@ -419,7 +424,7 @@ func DeleteConfigProfile(domainURL, token, profileUUID string) error {
 		profileUUID = uuid
 	}
 
-	status, resp := makeAPIRequestWithStatus("DELETE", "http://"+domainURL+"/api/config-profiles/"+profileUUID, token, "")
+	status, resp := makeAPIRequestWithStatus("DELETE", BaseURL(domainURL)+"/api/config-profiles/"+profileUUID, token, "")
 	if status < 200 || status >= 300 {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DELETE_PROFILE"), ui.ColorReset)
 		return fmt.Errorf("delete failed with status %d: %s", status, resp)
@@ -432,7 +437,7 @@ func DeleteConfigProfile(domainURL, token, profileUUID string) error {
 // profile menu to locate an existing profile before changing its
 // inbound selection.
 func FindConfigProfileByName(domainURL, token, name string) (uuid string, config map[string]any, err error) {
-	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/config-profiles", token, "")
+	resp := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/config-profiles", token, "")
 	if len(resp) == 0 || !json.Valid(resp) {
 		return "", nil, fmt.Errorf("no configs")
 	}
@@ -458,7 +463,7 @@ func FindConfigProfileByName(domainURL, token, name string) (uuid string, config
 		return "", nil, fmt.Errorf("config profile %q not found", name)
 	}
 
-	detailResp := MakeAPIRequest("GET", "http://"+domainURL+"/api/config-profiles/"+uuid, token, "")
+	detailResp := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/config-profiles/"+uuid, token, "")
 	if len(detailResp) == 0 || !json.Valid(detailResp) {
 		return uuid, nil, fmt.Errorf("empty response fetching config profile %s", uuid)
 	}
@@ -481,7 +486,7 @@ func FindConfigProfileByName(domainURL, token, name string) (uuid string, config
 // partial patch.
 func UpdateConfigProfile(domainURL, token, profileUUID string, config map[string]any) error {
 	body, _ := json.Marshal(map[string]any{"uuid": profileUUID, "config": config})
-	status, resp := makeAPIRequestWithStatus("PATCH", "http://"+domainURL+"/api/config-profiles", token, string(body))
+	status, resp := makeAPIRequestWithStatus("PATCH", BaseURL(domainURL)+"/api/config-profiles", token, string(body))
 	if status < 200 || status >= 300 {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_UPDATE_PROFILE"), ui.ColorReset)
 		return fmt.Errorf("update config profile failed with status %d: %s", status, resp)
@@ -647,6 +652,42 @@ func BuildProfileConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, c
 	return buildProfileConfig(buildInboundConfig(sel, domain, privateKey, rawTag, certFullchain, certPrivkey, existingByTag))
 }
 
+// MergeProfileConfig returns existing with its "inbounds" replaced by the
+// managed inbounds for the given selection, keeping everything else the
+// operator may have customised: log, dns, outbounds, routing and any
+// inbound whose tag this tool does not manage. A nil existing config
+// yields the stock document.
+func MergeProfileConfig(existing map[string]any, sel ConfigProfileInbounds, domain, privateKey, rawTag, certFullchain, certPrivkey string, existingByTag map[string]map[string]any) map[string]any {
+	managed := buildInboundConfig(sel, domain, privateKey, rawTag, certFullchain, certPrivkey, existingByTag)
+	if existing == nil {
+		return buildProfileConfig(managed)
+	}
+
+	managedTags := map[string]bool{rawTag: true, "HYSTERIA-BBR": true, "XHTTP-TLS": true}
+	inbounds := make([]any, 0, len(managed))
+	for _, ib := range managed {
+		inbounds = append(inbounds, ib)
+	}
+	if old, ok := existing["inbounds"].([]any); ok {
+		for _, raw := range old {
+			ib, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			if tag, _ := ib["tag"].(string); !managedTags[tag] {
+				inbounds = append(inbounds, ib)
+			}
+		}
+	}
+
+	merged := make(map[string]any, len(existing))
+	for k, v := range existing {
+		merged[k] = v
+	}
+	merged["inbounds"] = inbounds
+	return merged
+}
+
 // CreateConfigProfile creates a config profile. By default (inbounds
 // left as its zero value) it carries only the stock Raw (VLESS+Reality)
 // inbound; internal/nodeprofile can add Hysteria2 and/or XHTTP to it
@@ -666,7 +707,7 @@ func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag,
 	}
 	body, _ := json.Marshal(requestBody)
 
-	resp := MakeAPIRequest("POST", "http://"+domainURL+"/api/config-profiles", token, string(body))
+	resp := MakeAPIRequest("POST", BaseURL(domainURL)+"/api/config-profiles", token, string(body))
 
 	var parsed struct {
 		Response struct {
@@ -680,6 +721,7 @@ func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag,
 	unmarshalErr := json.Unmarshal(resp, &parsed)
 	if len(resp) == 0 || unmarshalErr != nil || parsed.Response.UUID == "" {
 		fmt.Printf("%s%s: %s%s\n", ui.ColorRed, i18n.T("ERROR_CREATE_CONFIG_PROFILE"), string(resp), ui.ColorReset)
+		return "", ""
 	}
 
 	configUUID := parsed.Response.UUID
@@ -705,7 +747,7 @@ func CreateConfigProfile(domainURL, token, name, domain, privateKey, inboundTag,
 	return configUUID, inboundUUID
 }
 
-func CreateHost(domainURL, token, inboundUUID, address, configUUID, hostRemark string) {
+func CreateHost(domainURL, token, inboundUUID, address, configUUID, hostRemark string) error {
 	if hostRemark == "" {
 		hostRemark = "Steal"
 	}
@@ -729,9 +771,10 @@ func CreateHost(domainURL, token, inboundUUID, address, configUUID, hostRemark s
 	}
 	body, _ := json.Marshal(requestBody)
 
-	resp := MakeAPIRequest("POST", "http://"+domainURL+"/api/hosts", token, string(body))
+	resp := MakeAPIRequest("POST", BaseURL(domainURL)+"/api/hosts", token, string(body))
 	if len(resp) == 0 {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_EMPTY_RESPONSE_HOST"), ui.ColorReset)
+		return fmt.Errorf("empty response creating host")
 	}
 
 	var parsed struct {
@@ -741,15 +784,16 @@ func CreateHost(domainURL, token, inboundUUID, address, configUUID, hostRemark s
 	}
 	if err := json.Unmarshal(resp, &parsed); err == nil && parsed.Response.UUID != "" {
 		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("HOST_CREATED"), ui.ColorReset)
-	} else {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CREATE_HOST"), ui.ColorReset)
+		return nil
 	}
+	fmt.Printf("%s%s: %s%s\n", ui.ColorRed, i18n.T("ERROR_CREATE_HOST"), string(resp), ui.ColorReset)
+	return fmt.Errorf("create host failed: %s", resp)
 }
 
 // Returns the list of valid squad UUIDs, filtering out anything that
 // doesn't look like a UUID.
 func GetDefaultSquad(domainURL, token string) ([]string, error) {
-	resp := MakeAPIRequest("GET", "http://"+domainURL+"/api/internal-squads", token, "")
+	resp := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/internal-squads", token, "")
 
 	var parsed struct {
 		Response struct {
@@ -798,7 +842,7 @@ func UpdateSquad(domainURL, token, squadUUID, inboundUUID string) error {
 		return fmt.Errorf("invalid inbound uuid")
 	}
 
-	squadResp := MakeAPIRequest("GET", "http://"+domainURL+"/api/internal-squads", token, "")
+	squadResp := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/internal-squads", token, "")
 	var parsed struct {
 		Response struct {
 			InternalSquads []struct {
@@ -823,13 +867,16 @@ func UpdateSquad(domainURL, token, squadUUID, inboundUUID string) error {
 		}
 	}
 
-	inboundsSet := map[string]bool{inboundUUID: true}
+	inboundsArray := append([]string{}, existingInbounds...)
+	found := false
 	for _, u := range existingInbounds {
-		inboundsSet[u] = true
+		if u == inboundUUID {
+			found = true
+			break
+		}
 	}
-	var inboundsArray []string
-	for u := range inboundsSet {
-		inboundsArray = append(inboundsArray, u)
+	if !found {
+		inboundsArray = append(inboundsArray, inboundUUID)
 	}
 
 	requestBody, _ := json.Marshal(map[string]any{
@@ -837,7 +884,7 @@ func UpdateSquad(domainURL, token, squadUUID, inboundUUID string) error {
 		"inbounds": inboundsArray,
 	})
 
-	resp := MakeAPIRequest("PATCH", "http://"+domainURL+"/api/internal-squads", token, string(requestBody))
+	resp := MakeAPIRequest("PATCH", BaseURL(domainURL)+"/api/internal-squads", token, string(requestBody))
 	var respParsed struct {
 		Response struct {
 			UUID string `json:"uuid"`
@@ -856,7 +903,7 @@ func CreateAPIToken(domainURL, token, targetDir, tokenName string) error {
 	}
 
 	tokenData, _ := json.Marshal(map[string]string{"tokenName": tokenName})
-	resp := MakeAPIRequest("POST", "http://"+domainURL+"/api/tokens", token, string(tokenData))
+	resp := MakeAPIRequest("POST", BaseURL(domainURL)+"/api/tokens", token, string(tokenData))
 
 	if len(resp) == 0 {
 		fmt.Fprintf(os.Stderr, "%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CREATE_API_TOKEN"), ui.ColorReset)
@@ -880,7 +927,10 @@ func CreateAPIToken(domainURL, token, targetDir, tokenName string) error {
 		return fmt.Errorf("%s", msg)
 	}
 
-	replaceLineInFile(targetDir+"/docker-compose.yml", "REMNAWAVE_API_TOKEN=", "REMNAWAVE_API_TOKEN="+apiToken)
+	if err := setComposeEnv(targetDir+"/docker-compose.yml", "REMNAWAVE_API_TOKEN", apiToken); err != nil {
+		fmt.Fprintf(os.Stderr, "%s%s: %v%s\n", ui.ColorRed, i18n.T("ERROR_CREATE_API_TOKEN"), err, ui.ColorReset)
+		return err
+	}
 
 	fmt.Fprintf(os.Stderr, "%s%s%s\n", ui.ColorGreen, i18n.T("API_TOKEN_ADDED"), ui.ColorReset)
 	return nil

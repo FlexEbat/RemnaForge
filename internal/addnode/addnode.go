@@ -8,9 +8,9 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/api"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/api"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 var entityNameRE = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
@@ -87,20 +87,30 @@ func AddNodeToPanel() {
 	// Generate xray keys.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GENERATE_KEYS"), ui.ColorReset)
 	privateKey := api.GenerateXrayKeys(domainURL, token)
+	if privateKey == "" {
+		return
+	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GENERATE_KEYS_SUCCESS"), ui.ColorReset)
 
 	// Create the config profile.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
 	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, entityName, selfstealDomain, privateKey, entityName, "", "", api.ConfigProfileInbounds{Raw: true})
+	if configProfileUUID == "" || inboundUUID == "" {
+		return
+	}
 	fmt.Printf("%s%s: %s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), entityName, ui.ColorReset)
 
 	// Create the node.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, fmt.Sprintf(i18n.T("CREATE_NEW_NODE"), selfstealDomain), ui.ColorReset)
-	api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, selfstealDomain, entityName)
+	if err := api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, selfstealDomain, entityName); err != nil {
+		return
+	}
 
 	// Create the host.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_HOST"), ui.ColorReset)
-	api.CreateHost(domainURL, token, inboundUUID, selfstealDomain, configProfileUUID, entityName)
+	if err := api.CreateHost(domainURL, token, inboundUUID, selfstealDomain, configProfileUUID, entityName); err != nil {
+		return
+	}
 
 	// Fetch default squads and add this inbound to each.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_DEFAULT_SQUAD"), ui.ColorReset)
@@ -131,7 +141,7 @@ func AddNodeToPanel() {
 // configProfileNameExists reports whether a config profile with the
 // given name already exists on the panel.
 func configProfileNameExists(domainURL, token, name string) (bool, error) {
-	resp := api.MakeAPIRequest("GET", "http://"+domainURL+"/api/config-profiles", token, "")
+	resp := api.MakeAPIRequest("GET", api.BaseURL(domainURL)+"/api/config-profiles", token, "")
 	if len(resp) == 0 {
 		return false, fmt.Errorf("empty response")
 	}

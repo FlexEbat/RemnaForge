@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/domain"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/domain"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 var hasUpperRE = regexp.MustCompile(`[A-Z]`)
@@ -72,8 +72,7 @@ func CheckAPI(apiKey, email string) (validAPIKey, validEmail string, err error) 
 }
 
 // runCertbot is a small os/exec wrapper: certbot's own stdout/stderr are
-// left attached to the process (matching bash's un-redirected certbot
-// calls, which the user sees directly).
+// left attached to the process so the user sees its output directly.
 func runCertbot(args ...string) error {
 	cmd := exec.Command("certbot", args...)
 	cmd.Stdout = os.Stdout

@@ -6,17 +6,17 @@ package reinstall
 import (
 	"fmt"
 	"os"
-	"os/exec"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/caddynode"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/caddypanelfull"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/caddypanelonly"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/nginxnode"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelfull"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelonly"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/preflight"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/caddynode"
+	"github.com/FlexEbat/RemnaForge/internal/caddypanelfull"
+	"github.com/FlexEbat/RemnaForge/internal/caddypanelonly"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/nginxnode"
+	"github.com/FlexEbat/RemnaForge/internal/panelfull"
+	"github.com/FlexEbat/RemnaForge/internal/panelonly"
+	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/stack"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 func showReinstallOptions() {
@@ -57,7 +57,9 @@ func ChooseReinstallType() {
 			return
 		}
 
-		reinstallRemnawave()
+		if err := reinstallRemnawave(); err != nil {
+			return
+		}
 
 		if err := preflight.EnsureInstalled(); err != nil {
 			return
@@ -132,18 +134,18 @@ func noteCaddyBuild() {
 // reinstallRemnawave tears down any existing panel or node stack before
 // a fresh install, printing a plain "please wait" message while it
 // waits for `docker compose down` to finish.
-func reinstallRemnawave() {
+func reinstallRemnawave() error {
 	for _, dir := range []string{"/opt/remnawave", "/opt/remnanode"} {
 		if _, err := os.Stat(dir); err != nil {
 			continue
 		}
+		stack.PromptBackup(dir)
 		fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-		downCmd := exec.Command("docker", "compose", "down", "-v", "--rmi", "all", "--remove-orphans")
-		downCmd.Dir = dir
-		_ = downCmd.Run()
-		_ = os.RemoveAll(dir)
+		if err := stack.Teardown(dir); err != nil {
+			fmt.Printf("%s"+i18n.T("TEARDOWN_FAILED")+"%s\n", ui.ColorRed, dir, ui.ColorReset)
+			fmt.Printf("%s%v%s\n", ui.ColorRed, err, ui.ColorReset)
+			return err
+		}
 	}
-
-	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	_ = exec.Command("docker", "system", "prune", "-a", "--volumes", "-f").Run()
+	return nil
 }

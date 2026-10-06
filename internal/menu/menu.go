@@ -7,12 +7,10 @@
 // reordering an entry doesn't require renumbering every case label by
 // hand and can't drift out of sync with the printed menu.
 //
-// Scope for this project: as of v1.1.3 all three Caddy install flows
-// (node-only via internal/caddynode, panel-only via
-// internal/caddypanelonly, panel+node via internal/caddypanelfull) are
-// wired in below, alongside their Nginx counterparts. The WARP module is
-// still out of scope and stubbed. See TECH.md for the current list of
-// what's implemented vs. stubbed.
+// Every install flow exists for both Nginx and Caddy: node-only
+// (internal/nginxnode, internal/caddynode), panel-only
+// (internal/panelonly, internal/caddypanelonly) and panel+node
+// (internal/panelfull, internal/caddypanelfull).
 package menu
 
 import (
@@ -21,27 +19,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/addnode"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/backuprestore"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/caddynode"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/caddypanelfull"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/caddypanelonly"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ipv6"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/managepanel"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/nginxnode"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/nodeprofile"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelfull"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/panelonly"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/reinstall"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/selfsteal"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/uninstall"
+	"github.com/FlexEbat/RemnaForge/internal/addnode"
+	"github.com/FlexEbat/RemnaForge/internal/backuprestore"
+	"github.com/FlexEbat/RemnaForge/internal/caddynode"
+	"github.com/FlexEbat/RemnaForge/internal/caddypanelfull"
+	"github.com/FlexEbat/RemnaForge/internal/caddypanelonly"
+	"github.com/FlexEbat/RemnaForge/internal/certs"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ipv6"
+	"github.com/FlexEbat/RemnaForge/internal/maintenance"
+	"github.com/FlexEbat/RemnaForge/internal/managepanel"
+	"github.com/FlexEbat/RemnaForge/internal/nginxnode"
+	"github.com/FlexEbat/RemnaForge/internal/nodeprofile"
+	"github.com/FlexEbat/RemnaForge/internal/panelfull"
+	"github.com/FlexEbat/RemnaForge/internal/panelonly"
+	"github.com/FlexEbat/RemnaForge/internal/reinstall"
+	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/uninstall"
 )
 
-// UpdateAvailable is always false for now: the auto-update check that
-// would flip this to true isn't implemented yet (see TECH.md).
+// UpdateAvailable marks the header with an update notice. Nothing sets
+// it yet.
 var UpdateAvailable = false
 
 // menuItem is one entry of the main menu. newGroup marks where a blank
@@ -57,20 +56,11 @@ func label(key string) func() string {
 	return func() string { return i18n.T(key) }
 }
 
-func stubAction(label string) func() bool {
-	return func() bool {
-		stub(label)
-		return false
-	}
-}
-
 var mainMenuItems = []menuItem{
 	{label: label("MENU_1"), action: func() bool { manageInstall(); return false }},
 	{label: label("MENU_2"), action: func() bool { reinstall.ChooseReinstallType(); return false }},
 	{label: label("MENU_3"), action: func() bool { managepanel.ManagePanel(); return false }},
 	{label: label("MENU_4"), newGroup: true, action: func() bool { selfsteal.ManageSelfstealTemplates(); return false }},
-	// MENU_5 ("Custom extensions by legiz") intentionally dropped from this fork.
-	{label: label("MENU_6"), action: stubAction("warp")}, // WARP: out of scope
 	{label: label("MENU_7"), action: func() bool {
 		if err := backuprestore.Run(); err != nil {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
@@ -83,7 +73,7 @@ var mainMenuItems = []menuItem{
 	}},
 	{label: label("MENU_9"), action: func() bool { certs.ManageCertificates(); return false }},
 	{label: label("MENU_10"), action: func() bool { nodeprofile.ManageNodeProfile(); return false }},
-	{label: label("MENU_11"), newGroup: true, action: stubAction("update_remnawave_reverse")},
+	{label: label("MENU_11"), newGroup: true, action: func() bool { maintenance.Menu(); return false }},
 	{label: label("MENU_12"), action: func() bool { uninstall.RemoveScript(); return true }},
 }
 
@@ -145,10 +135,6 @@ func showInstallMenu() {
 	fmt.Println()
 	fmt.Printf("%s0. %s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
 	fmt.Println()
-}
-
-func stub(label string) {
-	fmt.Printf("%s[%s] %s%s\n", ui.ColorGray, label, i18n.InDevelopment(), ui.ColorReset)
 }
 
 func manageInstall() {
@@ -216,7 +202,7 @@ func manageInstall() {
 			time.Sleep(2 * time.Second)
 			_ = ui.LogClear()
 
-		case "3": // add node to panel, fully ported (internal/addnode + internal/api)
+		case "3": // add node to panel (internal/addnode + internal/api)
 			addnode.AddNodeToPanel()
 			_ = ui.LogClear()
 			return

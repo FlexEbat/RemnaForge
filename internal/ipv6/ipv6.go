@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 const sysctlConf = "/etc/sysctl.conf"

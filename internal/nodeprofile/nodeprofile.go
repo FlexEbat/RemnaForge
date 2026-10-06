@@ -6,11 +6,12 @@ package nodeprofile
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/api"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/api"
+	"github.com/FlexEbat/RemnaForge/internal/certs"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 // selectWebserver asks which webserver the node behind this profile
@@ -176,8 +177,8 @@ func existingPrivateKey(byTag map[string]map[string]any, realityTag string) stri
 // the operator has access to, run from anywhere.
 func ManageNodeProfile() {
 	fmt.Println()
-	domainURL := ui.Reading(i18n.T("NODE_PROFILE_ENTER_PANEL_URL"))
-	token := ui.Reading(i18n.T("NODE_PROFILE_ENTER_TOKEN"))
+	domainURL := strings.TrimSpace(ui.Reading(i18n.T("NODE_PROFILE_ENTER_PANEL_URL")))
+	token := strings.TrimSpace(ui.Reading(i18n.T("NODE_PROFILE_ENTER_TOKEN")))
 	profileName := ui.Reading(i18n.T("NODE_PROFILE_ENTER_NAME"))
 
 	profileUUID, config, err := api.FindConfigProfileByName(domainURL, token, profileName)
@@ -227,7 +228,7 @@ func ManageNodeProfile() {
 		}
 	}
 
-	newConfig := api.BuildProfileConfig(selection, domainName, privateKey, rawTag, certFullchain, certPrivkey, byTag)
+	newConfig := api.MergeProfileConfig(config, selection, domainName, privateKey, rawTag, certFullchain, certPrivkey, byTag)
 	if err := api.UpdateConfigProfile(domainURL, token, profileUUID, newConfig); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NODE_PROFILE_UPDATE_FAILED"), ui.ColorReset)
 		return

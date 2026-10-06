@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/domain"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/preflight"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/selfsteal"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/certs"
+	"github.com/FlexEbat/RemnaForge/internal/domain"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 const nodeDir = "/opt/remnanode"
@@ -94,7 +94,7 @@ func installNodeNginx() (*nodeState, error) {
 
 	selfstealBaseDomain := domain.ExtractDomain(selfstealDomain)
 
-	if err := os.WriteFile(filepath.Join(nodeDir, "docker-compose.yml"), []byte(dockerComposeHead), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(nodeDir, "docker-compose.yml"), []byte(dockerComposeHead), 0600); err != nil {
 		return nil, err
 	}
 
@@ -197,6 +197,9 @@ func InstallationNode() error {
     environment:
       - NODE_PORT=2222
       - SECRET_KEY=%s
+      # Optional node settings (node 3.4+); uncomment to change:
+      # - SNI_VERIFICATION=true
+      # - NFTABLES_LOGGING=true
     volumes:
       - /dev/shm:/dev/shm:rw
       - %s:%s:ro
@@ -205,7 +208,7 @@ func InstallationNode() error {
 
 	composePath := filepath.Join(nodeDir, "docker-compose.yml")
 	existing, _ := os.ReadFile(composePath)
-	if err := os.WriteFile(composePath, append(existing, []byte(composeTail)...), 0644); err != nil {
+	if err := os.WriteFile(composePath, append(existing, []byte(composeTail)...), 0600); err != nil {
 		return err
 	}
 
@@ -291,7 +294,7 @@ server {
 }
 `, state.selfstealDomain, nodeCertDomain, nodeCertDomain, nodeCertDomain)
 
-	if err := os.WriteFile(filepath.Join(nodeDir, "nginx.conf"), []byte(nginxConf), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(nodeDir, "nginx.conf"), []byte(nginxConf), 0600); err != nil {
 		return err
 	}
 
@@ -306,7 +309,10 @@ server {
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 	upCmd := exec.Command("docker", "compose", "up", "-d")
 	upCmd.Dir = nodeDir
-	_ = upCmd.Run()
+	if err := upCmd.Run(); err != nil {
+		fmt.Printf("%sdocker compose up: %v%s\n", ui.ColorRed, err, ui.ColorReset)
+		return err
+	}
 
 	// Install a random selfsteal template.
 	if err := selfsteal.RandomHTML(""); err != nil {

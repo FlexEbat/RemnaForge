@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 // showPanelAccess uses i18n.T("ACCESS_PANEL") as this submenu's title, the
@@ -70,7 +70,7 @@ var (
 	serverNameRE         = regexp.MustCompile(`server_name\s+([^\s;]+)\s*;`)
 	proxyPassRemnawaveRE = regexp.MustCompile(`proxy_pass\s+http://remnawave\s*;`)
 	listen8443RE         = regexp.MustCompile(`[ \t]*listen[ \t]+8443[ \t]+ssl[ \t]*;[ \t]*\r?\n?`)
-	cookieLineRE         = regexp.MustCompile(`map\s+\$http_cookie\s+\$auth_cookie\s*\{[^}]*"~\*(\w+)=(\w+)"`)
+	cookieLineRE         = regexp.MustCompile(`map\s+\$http_cookie\s+\$auth_cookie\s*\{[^}]*"~\*?(\w+)=(\w+)"`)
 	caddyPanelDomainRE   = regexp.MustCompile(`PANEL_DOMAIN=(\S*)`)
 	caddyCookieLineRE    = regexp.MustCompile(`header \+Set-Cookie "([^=]+)=([^;]+)`)
 )
@@ -119,8 +119,8 @@ func findAuthCookies(conf string) (string, string) {
 // caddyPanelDomain finds the real domain value from the docker-compose.yml's
 // PANEL_DOMAIN environment entry, unlike everything else in this file's
 // Caddy branches, which pattern-match on the literal text "{$PANEL_DOMAIN}"
-// (Caddy's own env-var reference, never substituted by bash or by our
-// template's Sprintf) rather than on any actual domain string.
+// (Caddy's own env-var reference, never substituted by the shell or by
+// the template's Sprintf) rather than on any actual domain string.
 func caddyPanelDomain(compose string) string {
 	m := caddyPanelDomainRE.FindStringSubmatch(compose)
 	if m == nil {
@@ -330,13 +330,8 @@ func openPanelAccessCaddy(dir string) {
 // block first, so re-running this is idempotent, then inserting a
 // fresh one).
 //
-// FIXED: an earlier implementation found the block's end via
-// `strings.Index(conf[idx:], "\n}")`, which assumes the closing brace
-// sits alone at the start of a line with zero indentation. A
-// hand-edited nginx.conf that indents its closing braces (e.g. "    }")
-// makes this fail to find the block end, or match some other block's
-// closing brace and corrupt the file. Now uses
-// findServerBlockForDomain's brace-depth-aware boundaries instead.
+// The block's boundaries come from findServerBlockForDomain, which
+// tracks brace depth, so indented or hand-edited configs are handled.
 func addListen8443(conf, panelDomain string) (string, error) {
 	block, found := findServerBlockForDomain(conf, panelDomain)
 	if !found {
@@ -391,13 +386,8 @@ func closePanelAccess() {
 		return
 	}
 
-	// FIXED: an earlier implementation searched only a fixed 300-byte
-	// window after the server_name line for "listen 8443 ssl;". A
-	// differently-formatted or re-indented config breaks this: too small
-	// a window misses the line, and a block with enough other directives
-	// spills past it and matches the next block's line instead. Now uses
-	// the same brace-depth-aware block lookup as addListen8443, so removal
-	// is scoped to exactly the right block regardless of formatting.
+	// Removal is scoped to the domain's own server block, found with the
+	// same brace-depth-aware lookup as addListen8443.
 	block, found := findServerBlockForDomain(conf, panelDomain)
 	if found && listen8443RE.MatchString(block.Body(conf)) {
 		before := conf[:block.BodyStart+1]
@@ -439,17 +429,9 @@ func closePort8443UFW() {
 // access. As in openPanelAccessCaddy, the Caddyfile edits match the
 // literal "{$PANEL_DOMAIN}" placeholder text, not the real domain.
 //
-// FIXED: an earlier implementation always reinserted "bind
-// unix/{$CADDY_SOCKET_PATH}" unconditionally. On an
-// internal/caddypanelonly install, whose Caddyfile never had that line
-// and whose remnawave-caddy container never defines CADDY_SOCKET_PATH
-// in its environment, running open then close left behind a reference
-// to an undefined Caddy env var in the panel domain's block.
-// internal/caddypanelfull's docker-compose.yml does define
-// CADDY_SOCKET_PATH (it shares a unix socket with the co-located node),
-// so the line belongs there. The line is now only reinserted when this
-// install's docker-compose.yml actually defines CADDY_SOCKET_PATH,
-// matching whichever of the two install flows produced this directory.
+// The "bind unix/{$CADDY_SOCKET_PATH}" line is only reinserted when the
+// install's docker-compose.yml defines CADDY_SOCKET_PATH, which only
+// the panel+node flow does.
 func closePanelAccessCaddy(dir string) {
 	composeData, err := os.ReadFile(filepath.Join(dir, "docker-compose.yml"))
 	if err != nil {

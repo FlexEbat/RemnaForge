@@ -19,14 +19,15 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/api"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/certs"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/domain"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/genutil"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/preflight"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/selfsteal"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/api"
+	"github.com/FlexEbat/RemnaForge/internal/certs"
+	"github.com/FlexEbat/RemnaForge/internal/domain"
+	"github.com/FlexEbat/RemnaForge/internal/genutil"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
+	"github.com/FlexEbat/RemnaForge/internal/stack"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 const panelDir = "/opt/remnawave"
@@ -262,6 +263,9 @@ services:
     environment:
       - NODE_PORT=2222
       - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
+      # Optional node settings (node 3.4+); uncomment to change:
+      # - SNI_VERIFICATION=true
+      # - NFTABLES_LOGGING=true
     volumes:
       - /dev/shm:/dev/shm:rw
       - caddy_data:/data:ro
@@ -450,25 +454,26 @@ func installPanelNodeCaddy() (*state, error) {
 		st.panelDomain, st.subDomain,
 		st.metricsUser, st.metricsPass,
 	)
+	dotEnv = genutil.HardenEnv(dotEnv)
+	if stack.VolumeExists("remnawave-db-data") {
+		fmt.Printf("%s"+i18n.T("DB_VOLUME_EXISTS")+"%s\n", ui.ColorRed, "remnawave-db-data", ui.ColorReset)
+		return nil, fmt.Errorf("existing database volume")
+	}
 	if err := os.WriteFile(filepath.Join(panelDir, ".env"), []byte(dotEnv), 0600); err != nil {
 		return nil, err
 	}
 
-	// Same literal-placeholder rationale as internal/caddypanelonly: the
-	// original's line 274 is `REMNAWAVE_API_TOKEN=\$api_token` (backslash
-	// keeps bash from expanding it), so the file ends up containing the
-	// literal text "$api_token", not an empty value. Reproduced as-is;
-	// api.CreateAPIToken's replaceLineInFile matches by line prefix
-	// regardless of what follows it.
+	// The API token line starts out as a placeholder; api.CreateAPIToken
+	// replaces its value once the panel has issued a token.
 	dockerCompose := fmt.Sprintf(dockerComposeTemplate,
 		st.selfstealDomain, st.panelDomain, st.subDomain, "$api_token",
 	)
-	if err := os.WriteFile(filepath.Join(panelDir, "docker-compose.yml"), []byte(dockerCompose), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(panelDir, "docker-compose.yml"), []byte(dockerCompose), 0600); err != nil {
 		return nil, err
 	}
 
 	caddyfile := fmt.Sprintf(caddyfileTemplate, st.cookiesRandom1, st.cookiesRandom2)
-	if err := os.WriteFile(filepath.Join(panelDir, "Caddyfile"), []byte(caddyfile), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(panelDir, "Caddyfile"), []byte(caddyfile), 0600); err != nil {
 		return nil, err
 	}
 
@@ -494,7 +499,10 @@ func InstallationPanelNode() error {
 	upCmd := exec.Command("docker", "compose", "up", "-d", "--build")
 	upCmd.Dir = panelDir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	_ = upCmd.Run()
+	if err := upCmd.Run(); err != nil {
+		fmt.Printf("%sdocker compose up: %v%s\n", ui.ColorRed, err, ui.ColorReset)
+		return err
+	}
 
 	// Allow the co-located node's docker subnet to reach itself on 2222
 	// (best-effort, same as internal/panelfull).
@@ -505,11 +513,10 @@ func InstallationPanelNode() error {
 	api.PanelDomain = st.panelDomain
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("REGISTERING_REMNAWAVE"), ui.ColorReset)
-	time.Sleep(20 * time.Second)
 
 	// Wait for the panel API to answer.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CHECK_CONTAINERS"), ui.ColorReset)
-	const maxAttempts = 5
+	const maxAttempts = 40
 	client := &http.Client{Timeout: 30 * time.Second}
 	for attempt := 1; ; {
 		req, _ := http.NewRequest("GET", "http://"+domainURL+"/api/auth/status", nil)
@@ -529,12 +536,15 @@ func InstallationPanelNode() error {
 			return fmt.Errorf(i18n.T("CONTAINERS_TIMEOUT"), maxAttempts)
 		}
 		fmt.Printf(ui.ColorRed+i18n.T("CONTAINERS_NOT_READY_ATTEMPT")+ui.ColorReset+"\n", attempt, maxAttempts)
-		time.Sleep(60 * time.Second)
+		time.Sleep(8 * time.Second)
 		attempt++
 	}
 
 	// Register the superadmin account.
 	token := api.RegisterRemnawave(domainURL, st.superadminUser, st.superadminPass, "")
+	if token == "" {
+		return fmt.Errorf("%s", i18n.T("ERROR_REGISTER"))
+	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("REGISTRATION_SUCCESS"), ui.ColorReset)
 
 	// Fetch the real public key and patch it into
@@ -543,12 +553,17 @@ func InstallationPanelNode() error {
 	// key, not just a config-profile record. Same as internal/panelfull.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_PUBLIC_KEY"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
-	api.GetPublicKey(domainURL, token, targetDir)
+	if err := api.GetPublicKey(domainURL, token, targetDir); err != nil {
+		return err
+	}
 
 	// Generate xray keys.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GENERATE_KEYS"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	privateKey := api.GenerateXrayKeys(domainURL, token)
+	if privateKey == "" {
+		return fmt.Errorf("%s", i18n.T("ERROR_GENERATE_KEYS"))
+	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GENERATE_KEYS_SUCCESS"), ui.ColorReset)
 
 	// Delete the default config profile.
@@ -561,6 +576,9 @@ func InstallationPanelNode() error {
 	// caddy_data volume both containers share (see certs.CaddyCertPaths).
 	nodeCertFullchain, nodeCertPrivkey := certs.CaddyCertPaths(st.selfstealDomain)
 	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, "", nodeCertFullchain, nodeCertPrivkey, api.ConfigProfileInbounds{Raw: true})
+	if configProfileUUID == "" || inboundUUID == "" {
+		return fmt.Errorf("%s", i18n.T("ERROR_CREATE_CONFIG_PROFILE"))
+	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
 
 	// Create the node without a node_address override (unlike
@@ -569,11 +587,15 @@ func InstallationPanelNode() error {
 	// the co-located node's actual docker-network address. Same as
 	// internal/panelfull.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_NODE"), ui.ColorReset)
-	api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, "", "")
+	if err := api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, "", ""); err != nil {
+		return err
+	}
 
 	// Create the host.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_HOST"), ui.ColorReset)
-	api.CreateHost(domainURL, token, inboundUUID, st.selfstealDomain, configProfileUUID, "")
+	if err := api.CreateHost(domainURL, token, inboundUUID, st.selfstealDomain, configProfileUUID, ""); err != nil {
+		return err
+	}
 
 	// Default squad.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_DEFAULT_SQUAD"), ui.ColorReset)
@@ -585,7 +607,9 @@ func InstallationPanelNode() error {
 
 	// Subscription-page API token.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_API_TOKEN"), ui.ColorReset)
-	_ = api.CreateAPIToken(domainURL, token, targetDir, "")
+	if err := api.CreateAPIToken(domainURL, token, targetDir, ""); err != nil {
+		return err
+	}
 
 	// Restart the whole stack so remnanode picks up its
 	// real SECRET_KEY and the subscription page picks up its API token.
@@ -601,7 +625,10 @@ func InstallationPanelNode() error {
 	upCmd2 := exec.Command("docker", "compose", "up", "-d", "--build")
 	upCmd2.Dir = panelDir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	_ = upCmd2.Run()
+	if err := upCmd2.Run(); err != nil {
+		fmt.Printf("%sdocker compose up: %v%s\n", ui.ColorRed, err, ui.ColorReset)
+		return err
+	}
 
 	// Install a random selfsteal template for the co-located node.
 	if err := selfsteal.RandomHTML(""); err != nil {

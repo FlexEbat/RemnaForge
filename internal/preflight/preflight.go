@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 // CheckDocker verifies both that the `docker` binary exists AND that the

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sync"
 )
 
 // LogFile is the destination for tee-style logging.
@@ -26,10 +27,15 @@ func Question(msg string) string {
 	return fmt.Sprintf("%s[?]%s %s%s%s", ColorGreen, ColorReset, ColorYellow, msg, ColorReset)
 }
 
-// Reading prints prompt via Question and reads a line of input.
+// Reading prints prompt via Question and reads a line of input. When
+// stdin is closed (EOF, Ctrl+D) the process exits instead of returning
+// empty strings forever to callers that loop until they get valid input.
 func Reading(prompt string) string {
 	fmt.Printf(" %s", Question(prompt))
-	stdinScanner.Scan()
+	if !stdinScanner.Scan() {
+		fmt.Println()
+		Exit(130)
+	}
 	return stdinScanner.Text()
 }
 
@@ -75,10 +81,10 @@ func Println(msg string) {
 // os.Stdout/os.Stderr and waits for the copy goroutine to drain; call it
 // before the process exits so buffered output is not lost.
 func EnableFileLogging() (cleanup func(), err error) {
-	if err := os.MkdirAll(filepath.Dir(LogFile), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(LogFile), 0700); err != nil {
 		return func() {}, err
 	}
-	logFile, err := os.OpenFile(LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile(LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return func() {}, err
 	}
@@ -98,7 +104,7 @@ func EnableFileLogging() (cleanup func(), err error) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _ = io.Copy(io.MultiWriter(realStdout, logFile), pipeReader)
+		_, _ = io.Copy(io.MultiWriter(realStdout, &logWriter{f: logFile}), pipeReader)
 	}()
 
 	closed := false
@@ -118,9 +124,26 @@ func EnableFileLogging() (cleanup func(), err error) {
 	return cleanup, nil
 }
 
-// LogClear strips ANSI escape codes from the log file, done natively
-// instead of shelling out to sed.
+// logMu serialises writes to the log file.
+var logMu sync.Mutex
+
+// logWriter appends to the log file with ANSI colour codes removed, so
+// the log stays readable without a separate cleanup pass.
+type logWriter struct{ f *os.File }
+
+func (w *logWriter) Write(p []byte) (int, error) {
+	logMu.Lock()
+	defer logMu.Unlock()
+	if _, err := w.f.Write(ansiEscape.ReplaceAll(p, nil)); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+// LogClear removes any leftover ANSI escape codes from the log file.
 func LogClear() error {
+	logMu.Lock()
+	defer logMu.Unlock()
 	data, err := os.ReadFile(LogFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -129,5 +152,8 @@ func LogClear() error {
 		return err
 	}
 	cleaned := ansiEscape.ReplaceAll(data, nil)
-	return os.WriteFile(LogFile, cleaned, 0644)
+	if len(cleaned) == len(data) {
+		return nil
+	}
+	return os.WriteFile(LogFile, cleaned, 0600)
 }

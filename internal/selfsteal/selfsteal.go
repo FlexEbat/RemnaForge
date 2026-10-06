@@ -22,8 +22,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 const optDir = "/opt"
@@ -230,8 +230,7 @@ func installTemplate(ts *templateSet, chosen string, pickVariant func(options []
 				return fmt.Errorf("failed to create %s", webRoot)
 			}
 		}
-		_ = clearDir(webRoot)
-		if err := copyDir(selectedPath, webRoot); err != nil {
+		if err := replaceWebRoot(selectedPath, webRoot); err != nil {
 			return fmt.Errorf("%s", i18n.T("UNPACK_ERROR"))
 		}
 		fmt.Println(i18n.T("TEMPLATE_COPY"))
@@ -316,33 +315,70 @@ func InteractiveInstall(templateSource string) error {
 	return installTemplate(ts, chosen, pickVariant)
 }
 
+// maxDownloadSize caps a template archive download.
+const maxDownloadSize = 100 << 20
+
 // downloadWithRetry fetches url, retrying with a 3-second delay between
 // attempts (up to 10 tries) on failure.
 func downloadWithRetry(url string) ([]byte, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
-	for {
+	client := &http.Client{Timeout: 60 * time.Second}
+	var lastErr error
+	for attempt := 1; attempt <= 10; attempt++ {
 		resp, err := client.Get(url)
-		if err == nil && resp.StatusCode == http.StatusOK {
-			data, readErr := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if readErr == nil {
-				return data, nil
+		if err == nil {
+			if resp.StatusCode == http.StatusOK {
+				data, readErr := io.ReadAll(io.LimitReader(resp.Body, maxDownloadSize+1))
+				resp.Body.Close()
+				switch {
+				case readErr != nil:
+					lastErr = readErr
+				case len(data) > maxDownloadSize:
+					return nil, fmt.Errorf("download from %s exceeds %d bytes", url, maxDownloadSize)
+				default:
+					return data, nil
+				}
+			} else {
+				resp.Body.Close()
+				lastErr = fmt.Errorf("unexpected status %s", resp.Status)
 			}
-		}
-		if resp != nil {
-			resp.Body.Close()
+		} else {
+			lastErr = err
 		}
 		fmt.Println(i18n.T("DOWNLOAD_FAIL"))
 		time.Sleep(3 * time.Second)
 	}
+	return nil, fmt.Errorf("download %s: %w", url, lastErr)
+}
+
+// replaceWebRoot swaps the contents of webRoot for those of src. The old
+// contents are copied aside first and put back if the copy fails, so a
+// failed install never leaves the decoy site empty. The directory itself
+// is kept (not renamed), because it is bind-mounted into the web server
+// container.
+func replaceWebRoot(src, webRoot string) error {
+	backup := webRoot + ".bak"
+	_ = os.RemoveAll(backup)
+	haveBackup := copyDir(webRoot, backup) == nil
+
+	_ = clearDir(webRoot)
+	if err := copyDir(src, webRoot); err != nil {
+		if haveBackup {
+			_ = clearDir(webRoot)
+			_ = copyDir(backup, webRoot)
+		}
+		_ = os.RemoveAll(backup)
+		return err
+	}
+	_ = os.RemoveAll(backup)
+	return nil
 }
 
 // extractZip guards against Zip Slip: filepath.Join alone doesn't
 // reject a malicious f.Name like "../../etc/cron.d/x", so this checks
 // the cleaned, joined path stays under dest before writing anything.
 // templateURLs are fixed, trusted GitHub archives, so this is
-// defense-in-depth against a compromised template repo or a
-// tampered-with download, not a fix for a currently-reachable exploit.
+// a safeguard against a compromised template repo or a tampered-with
+// download.
 func extractZip(zr *zip.Reader, dest string) error {
 	destClean := filepath.Clean(dest) + string(filepath.Separator)
 	for _, f := range zr.File {
@@ -351,7 +387,7 @@ func extractZip(zr *zip.Reader, dest string) error {
 			return fmt.Errorf("%s: illegal file path outside extraction directory", f.Name)
 		}
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(path, f.Mode()); err != nil {
+			if err := os.MkdirAll(path, 0755); err != nil {
 				return err
 			}
 			continue
@@ -363,7 +399,7 @@ func extractZip(zr *zip.Reader, dest string) error {
 		if err != nil {
 			return err
 		}
-		out, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		out, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode().Perm()|0600)
 		if err != nil {
 			rc.Close()
 			return err

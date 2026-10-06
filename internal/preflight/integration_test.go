@@ -5,9 +5,7 @@
 // sysctl.conf and ufw rules), so it must not run as part of a normal
 // `go test ./...` on a developer's machine. The CI workflow
 // (.github/workflows/ci.yml) runs it on a disposable GitHub-hosted
-// Ubuntu runner, the only environment this project has access to that
-// can actually verify docker/apt/systemd/ufw behavior. The development
-// sandbox this project was built in has none of those.
+// Ubuntu runner, which has docker, apt, systemd and ufw available.
 package preflight
 
 import (

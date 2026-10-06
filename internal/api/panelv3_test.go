@@ -1,8 +1,6 @@
-// This file guards two behavior changes introduced by Remnawave Panel
-// v3.2.0 that would otherwise regress silently: GET /api/keygen renamed
-// its response field from pubKey to secretKey, and DELETE endpoints
-// switched from 200+JSON body to 204 No Content on success. See the
-// BUG FIX comments on GetPublicKey and DeleteConfigProfile in api.go.
+// Tests for two Remnawave Panel 3.2.0 API changes: GET /api/keygen
+// returns the key as secretKey (it was pubKey), and DELETE endpoints
+// answer 204 No Content on success.
 package api
 
 import (

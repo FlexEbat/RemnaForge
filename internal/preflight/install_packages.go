@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 // dirRemnawave holds this tool's own config/state directory. Duplicated
@@ -252,10 +252,12 @@ func enableBBR() {
 // mail-on-upgrade notifications to root.
 func configureUnattendedUpgrades() error {
 	const confPath = "/etc/apt/apt.conf.d/50unattended-upgrades"
-	f, err := os.OpenFile(confPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-	if err == nil {
-		_, _ = f.WriteString(`Unattended-Upgrade::Mail "root";` + "\n")
-		f.Close()
+	const mailLine = `Unattended-Upgrade::Mail "root";`
+	if existing, _ := os.ReadFile(confPath); !strings.Contains(string(existing), mailLine) {
+		if f, err := os.OpenFile(confPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644); err == nil {
+			_, _ = f.WriteString(mailLine + "\n")
+			f.Close()
+		}
 	}
 
 	debconf := exec.Command("debconf-set-selections")

@@ -39,7 +39,7 @@ VLESS 协议及其相关机制（XTLS、REALITY、VLESS Encryption）发展很�
 
 ## 已知问题
 
-目前没有正在生效的已知 bug。
+发现 bug？请在 GitHub 上提交 issue。
 
 **带节点的 Caddy 安装（无论是与面板同机还是独立安装）在首次运行时会自行构建 Caddy 镜像**，而不是直接使用官方镜像：Xray 会把 Reality 的 fallback 流量通过 PROXY protocol 包装后转发到一个 unix socket，Caddy 在这个 socket 上监听它的所有域名，而官方 `caddy` 镜像并不包含这个功能所需的模块（`github.com/mastercactapus/caddy2-proxyprotocol`）。`internal/caddynode`/`internal/caddypanelfull` 的 `docker-compose.yml` 现在会通过 `xcaddy` 自行构建镜像（`docker compose up -d --build`），所以首次运行会比平时多花几分钟 —— Docker 在编译镜像，而不只是拉取镜像。
 
@@ -96,19 +96,20 @@ sudo remnaforge
 2. Reinstall panel/node            — 卸载当前服务栈并重新安装
 3. Manage Panel/Node                — 启动/停止/更新/日志/CLI/8443 临时访问
 4. Install random template          — 更换节点上的 selfsteal 模板
-5. WARP Native
-6. Backup and Restore                — 调用第三方工具 distillium/remnawave-backup-restore
-7. Manage IPv6                       — 开启或关闭 IPv6
-8. Manage certificates domain        — 手动续期或重新签发证书
-9. Manage Node Profile               — 为已注册的节点开启/关闭 Hysteria2/XHTTP inbound
-10. Check for updates script
-11. Remove script                    — 移除 RemnaForge 和/或已安装的服务栈
+5. Backup and Restore                — 调用第三方工具 distillium/remnawave-backup-restore
+6. Manage IPv6                       — 开启或关闭 IPv6
+7. Manage certificates domain        — 手动续期或重新签发证书
+8. Manage Node Profile               — 为已注册的节点开启/关闭 Hysteria2/XHTTP inbound
+9. Versions, diagnostics and migration — 已安装版本、健康检查、面板 2.x → 3.x 迁移
+10. Remove script                    — 移除 RemnaForge 和/或已安装的服务栈
 0. Exit
 ```
 
+`remnaforge doctor`、`remnaforge versions` 和 `remnaforge --version` 无需进入菜单即可使用。
+
 选择第 1 项后，先确定安装类型（面板+节点 / 仅面板 / 向已有面板添加节点 / 仅节点），接着询问使用 Nginx 还是 Caddy，然后逐项交互式询问其余信息：域名、独立安装节点时面板的 IP、证书签发方式。
 
-第 9 项的工作方式与第 1 项中的「添加节点」流程类似：直接询问面板 URL、API 令牌和配置 profile 名称，而不是读取本机的 `.env` —— 因为这个 profile 可能属于任意一个面板，不一定是本机安装的那个。节点默认只携带 `Raw`（VLESS+Reality）；这个菜单项通过勾选式菜单（数字键切换，Enter 确认）来添加或移除 `Hysteria2`/`XHTTP`，且不会影响已启用 inbound 已经签发的密钥等信息。开启 `Hysteria2` 时会询问该节点的证书是否为通配符证书 —— 因为这个菜单项本身并没有安装这个节点，无法用其他方式判断。
+第 8 项的工作方式与第 1 项中的「添加节点」流程类似：直接询问面板 URL、API 令牌和配置 profile 名称，而不是读取本机的 `.env` —— 因为这个 profile 可能属于任意一个面板，不一定是本机安装的那个。节点默认只携带 `Raw`（VLESS+Reality）；这个菜单项通过勾选式菜单（数字键切换，Enter 确认）来添加或移除 `Hysteria2`/`XHTTP`，且不会影响已启用 inbound 已经签发的密钥等信息。开启 `Hysteria2` 时会询问该节点的证书是否为通配符证书 —— 因为这个菜单项本身并没有安装这个节点，无法用其他方式判断。
 
 ## 此工具创建和修改的文件
 
@@ -118,7 +119,7 @@ sudo remnaforge
 - `/etc/sysctl.conf`、`ufw` 规则 —— 在开关 IPv6 以及首次安装依赖时会修改。
 - `/var/www/html/` —— selfsteal 域名的 HTML 模板。
 
-完整卸载（菜单第 11 项，「wipe everything」）会连同容器、镜像、数据卷一起删除 `/opt/remnawave` 或 `/opt/remnanode`。不会动 `/etc/letsencrypt` —— 证书会保留在磁盘上。
+完整卸载（菜单第 10 项，「wipe everything」）会连同容器、镜像、数据卷一起删除 `/opt/remnawave` 或 `/opt/remnanode`。不会动 `/etc/letsencrypt` —— 证书会保留在磁盘上。
 
 ## 日志
 

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"math/big"
+	"regexp"
 	"strings"
 )
 
@@ -83,4 +84,15 @@ func GenerateAlnumSecret(length int) string {
 		}
 	}
 	return sb.String()[:length]
+}
+
+// HardenEnv replaces the shared default database password and webhook
+// secret in a generated .env with fresh random values, so no two
+// installs share credentials.
+func HardenEnv(env string) string {
+	dbPass := GenerateAlnumSecret(32)
+	webhook := GenerateAlnumSecret(64)
+	env = strings.ReplaceAll(env, "postgres:postgres@", "postgres:"+dbPass+"@")
+	env = strings.ReplaceAll(env, "POSTGRES_PASSWORD=postgres", "POSTGRES_PASSWORD="+dbPass)
+	return regexp.MustCompile(`(?m)^WEBHOOK_SECRET_HEADER=.*$`).ReplaceAllString(env, "WEBHOOK_SECRET_HEADER="+webhook)
 }

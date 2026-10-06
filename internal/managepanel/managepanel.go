@@ -13,8 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/stack"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 // findInstallDir returns whichever of /opt/remnawave or /opt/remnanode
@@ -93,10 +94,8 @@ func ManagePanel() {
 	}
 }
 
-// Go doesn't need the fd-juggling (`exec 3>&1 4>&2; exec > /dev/tty`) bash
-// uses to get an interactive TTY through a subshell. Wiring the child's
-// stdio directly to our own os.Std{in,out,err} gives the same interactive
-// `docker exec -it` session.
+// The child's stdio is wired directly to our own os.Std{in,out,err},
+// which gives an interactive `docker exec -it` session.
 func runRemnawaveCLI() {
 	if !dockerContainerRunning("remnawave") {
 		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CONTAINER_NOT_RUNNING"), ui.ColorReset)
@@ -213,7 +212,15 @@ func updatePanelNode() {
 	}
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("UPDATING"), ui.ColorReset)
-	time.Sleep(1 * time.Second)
+
+	if exec.Command("docker", "inspect", "-f", "{{.State.Running}}", "remnawave-db").Run() == nil {
+		dest, err := stack.BackupPanel(dir)
+		if err != nil {
+			fmt.Printf("%s%s: %v%s\n", ui.ColorRed, i18n.T("BACKUP_FAILED"), err, ui.ColorReset)
+			return
+		}
+		fmt.Printf("%s"+i18n.T("BACKUP_DONE")+"%s\n", ui.ColorGreen, dest, ui.ColorReset)
+	}
 
 	before := composeImageIDs(dir)
 
@@ -227,10 +234,10 @@ func updatePanelNode() {
 	if before != after || strings.Contains(string(pullOutput), "Pull complete") {
 		fmt.Println()
 		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("IMAGES_DETECTED"), ui.ColorReset)
-		_ = composeRun(dir, "down")
-		time.Sleep(5 * time.Second)
-		_ = composeRun(dir, "up", "-d")
-		time.Sleep(1 * time.Second)
+		if err := composeRun(dir, "up", "-d", "--remove-orphans"); err != nil {
+			fmt.Printf("%s%v%s\n", ui.ColorRed, err, ui.ColorReset)
+			return
+		}
 		_ = exec.Command("docker", "image", "prune", "-f").Run()
 		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("UPDATE_SUCCESS1"), ui.ColorReset)
 	} else {

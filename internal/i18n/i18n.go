@@ -1,48 +1,34 @@
 // Package i18n holds the two supported translations (English and
 // Russian) for every user-facing string in this tool, plus the current
 // language and the accessor used to look strings up by key.
-//
-// A handful of strings carry inline notes about earlier wording issues
-// that have since been fixed, kept for context on why a string reads
-// the way it does:
-//
-//  1. i18n.T("CONFIG_NOT_FOUND") / i18n.T("NGINX_CONF_NOT_FOUND") used to embed
-//     a directory path via unconditional string interpolation, which
-//     silently produced "not found in " with nothing after it whenever
-//     that path wasn't set at message-construction time. FIXED: both
-//     strings now use a proper Go %s placeholder. Call sites
-//     (internal/managepanel) pass the real directory in via
-//     fmt.Sprintf, restoring the obviously-intended behavior.
-//  2. i18n.T("ERROR_OS") (both languages) said "Supported only Debian 11/12
-//     and Ubuntu 22.04/24.04", stale text that didn't reflect what
-//     internal/oscheck actually accepted. Since internal/oscheck checks
-//     version numbers rather than a fixed list (Debian >= 11, Ubuntu >=
-//     22.04, no upper bound), the message says "11+"/"22.04+" to match
-//     reality.
-//  3. i18n.T("INVALID_CHOICE") said "Please select 0-11", baked into a
-//     string shared by menus of different sizes (the main menu and the
-//     selfsteal-template menu). No fixed range is correct for both.
-//     FIXED: the range was dropped from the message entirely, leaving
-//     "Invalid choice." The main menu still tells the user the current
-//     range through mainMenuPrompt() in internal/menu, which computes
-//     it from the live item count.
-//  4. i18n.T("INSTALL_PROMPT") and i18n.T("INSTALL_INVALID_CHOICE") said "0-5",
-//     but the install menu lists exactly 4 options (panel+node, panel
-//     only, add node, node only) plus 0 to exit: a valid range of 0-4.
-//     FIXED: both strings now say "0-4".
-//  5. DOCKER_COMPOSE_DOWN_FAILED: internal/uninstall.removeScriptAndPanel()
-//     used to report a failed `docker compose down` with
-//     i18n.T("CHANGE_DIR_FAILED") ("Failed to change to directory %s"),
-//     wrong wording left over from an earlier revision that actually
-//     did a directory change here; it no longer does (cmd.Dir is set
-//     instead), so that message no longer matched the failure it was
-//     reporting. This key names the actual failure instead.
 package i18n
 
 // Lang holds the currently active translation.
 var Lang map[string]string
 
 var english = map[string]string{
+	"MAINT_TITLE":                         "Versions, diagnostics and migration",
+	"MAINT_VERSIONS":                      "Show installed versions",
+	"MAINT_DOCTOR":                        "Run health check",
+	"MAINT_MIGRATE":                       "Migrate panel 2.x to 3.x",
+	"MAINT_PROMPT":                        "Select action (0-3):",
+	"MAINT_ANNOUNCEMENTS":                 "Release announcements:",
+	"MAINT_DOCTOR_OK":                     "All checks passed.",
+	"MAINT_DOCTOR_PROBLEMS":               "Checks failed",
+	"MAINT_NEEDS_MIGRATION":               "still uses 2.x variables, run the migration",
+	"MAINT_NO_PANEL":                      "No panel installation found in /opt/remnawave.",
+	"MAINT_ALREADY_V3":                    "The panel installation is already on the 3.x layout.",
+	"MAINT_MIGRATE_WARNING":               "The panel .env and docker-compose.yml will be rewritten for 3.x and the containers recreated. A database backup is made first.",
+	"MAINT_MIGRATE_CONFIRM":               "Continue? (y/n): ",
+	"MAINT_MIGRATE_DONE":                  "Migration finished. Check the panel and your nodes.",
+	"MAINT_CADDY_ENCODE":                  "Add 'encode zstd gzip' to the panel site in the Caddyfile: 3.x expects the proxy to compress responses.",
+	"BACKUP_BEFORE_REMOVE":                "Make a database backup first? (y/n): ",
+	"BACKUP_DONE":                         "Backup saved to %s",
+	"BACKUP_FAILED":                       "Backup failed",
+	"CONFIRM_TYPE_DELETE":                 "Type DELETE to confirm: ",
+	"CONFIRM_ABORTED":                     "Confirmation did not match, nothing was removed.",
+	"DB_VOLUME_EXISTS":                    "Docker volume %s already exists and holds a database initialised with a different password. Use Reinstall or remove the volume first.",
+	"TEARDOWN_FAILED":                     "Could not stop and remove %s; its files were left in place.",
 	"ABORT_MESSAGE":                       "Installation aborted by user",
 	"ACCESS_PANEL":                        "Access panel via port 8443 (Only for panel + node)",
 	"ACME_METHOD":                         "Using ACME (Let's Encrypt) with HTTP-01 challenge (no wildcard support)...",
@@ -275,19 +261,16 @@ var english = map[string]string{
 	"LANG_FILE_UPDATE_FAILED":                 "✗ Failed to update %s",
 	"LANG_RU":                                 "Русский",
 	"LATEST_VERSION":                          "You already have the latest version of the script (%s).",
-	"LEGIZ_EXTENSIONS_PROMPT":                 "Select action (0-2):",
 	"LOCAL_FILE_NOT_FOUND":                    "Local script file not found, downloading new version...",
 	"MANAGE_PANEL_NODE_INVALID_CHOICE":        "Invalid choice. Please select 0-6.",
 	"MANAGE_PANEL_NODE_PROMPT":                "Select action (0-6):",
 	"MENU_1":                                  "Install Remnawave Components",
 	"MENU_10":                                 "Manage Node Profile",
-	"MENU_11":                                 "Check for updates script",
+	"MENU_11":                                 "Versions, diagnostics and migration",
 	"MENU_12":                                 "Remove script",
 	"MENU_2":                                  "Reinstall panel/node",
 	"MENU_3":                                  "Manage Panel/Node",
 	"MENU_4":                                  "Install random template for selfsteal node",
-	"MENU_5":                                  "Custom extensions by legiz",
-	"MENU_6":                                  "WARP Native",
 	"MENU_7":                                  "Backup and Restore",
 	"MENU_8":                                  "Manage IPv6",
 	"MENU_9":                                  "Manage certificates domain",
@@ -302,7 +285,7 @@ var english = map[string]string{
 	"NODE_NOT_CONNECTED":                      "Node not connected after %d attempts!",
 	"NODE_UNAVAILABLE":                        "Node is unavailable on attempt %d.",
 	"NODE_PROFILE_ENTER_NAME":                 "Enter the config profile name:",
-	"NODE_PROFILE_ENTER_PANEL_URL":            "Enter the panel URL (host:port):",
+	"NODE_PROFILE_ENTER_PANEL_URL":            "Enter the panel URL (host:port or https://panel.example.com):",
 	"NODE_PROFILE_ENTER_TOKEN":                "Enter the panel API token:",
 	"NODE_PROFILE_HYSTERIA2":                  "Hysteria2 TLS",
 	"NODE_PROFILE_NOT_FOUND":                  "Config profile not found",
@@ -458,6 +441,28 @@ var english = map[string]string{
 	"YQ_SUCCESSFULLY_INSTALLED":               "yq successfully installed!",
 }
 var russian = map[string]string{
+	"MAINT_TITLE":                             "Версии, диагностика и миграция",
+	"MAINT_VERSIONS":                          "Показать установленные версии",
+	"MAINT_DOCTOR":                            "Проверка состояния",
+	"MAINT_MIGRATE":                           "Миграция панели 2.x → 3.x",
+	"MAINT_PROMPT":                            "Выберите действие (0-3):",
+	"MAINT_ANNOUNCEMENTS":                     "Анонсы релизов:",
+	"MAINT_DOCTOR_OK":                         "Все проверки пройдены.",
+	"MAINT_DOCTOR_PROBLEMS":                   "Проверок не пройдено",
+	"MAINT_NEEDS_MIGRATION":                   "используются переменные 2.x, запустите миграцию",
+	"MAINT_NO_PANEL":                          "Установка панели в /opt/remnawave не найдена.",
+	"MAINT_ALREADY_V3":                        "Установка панели уже в формате 3.x.",
+	"MAINT_MIGRATE_WARNING":                   "Файлы .env и docker-compose.yml панели будут переписаны под 3.x, контейнеры пересозданы. Перед этим делается бэкап базы.",
+	"MAINT_MIGRATE_CONFIRM":                   "Продолжить? (y/n): ",
+	"MAINT_MIGRATE_DONE":                      "Миграция завершена. Проверьте панель и ноды.",
+	"MAINT_CADDY_ENCODE":                      "Добавьте 'encode zstd gzip' в блок сайта панели в Caddyfile: 3.x ожидает сжатие ответов на стороне прокси.",
+	"BACKUP_BEFORE_REMOVE":                    "Сначала сделать бэкап базы данных? (y/n): ",
+	"BACKUP_DONE":                             "Бэкап сохранён в %s",
+	"BACKUP_FAILED":                           "Не удалось создать бэкап",
+	"CONFIRM_TYPE_DELETE":                     "Введите DELETE для подтверждения: ",
+	"CONFIRM_ABORTED":                         "Подтверждение не совпало, ничего не удалено.",
+	"DB_VOLUME_EXISTS":                        "Docker-том %s уже существует и содержит базу, инициализированную с другим паролем. Используйте переустановку или сначала удалите том.",
+	"TEARDOWN_FAILED":                         "Не удалось остановить и удалить %s; файлы оставлены на месте.",
 	"ABORT_MESSAGE":                           "Установка прервана пользователем",
 	"ACCESS_PANEL":                            "Доступ к панели через порт 8443 (только для панели + ноды)",
 	"ACME_METHOD":                             "Используем ACME (Let's Encrypt) с HTTP-01 вызовом (без поддержки wildcard)...",
@@ -688,19 +693,16 @@ var russian = map[string]string{
 	"LANG_FILE_UPDATE_FAILED":                 "✗ Не удалось обновить %s",
 	"LANG_RU":                                 "Русский",
 	"LATEST_VERSION":                          "У вас уже установлена последняя версия скрипта (%s).",
-	"LEGIZ_EXTENSIONS_PROMPT":                 "Выберите действие (0-2):",
 	"LOCAL_FILE_NOT_FOUND":                    "Локальный файл скрипта не найден, загружаем новую версию...",
 	"MANAGE_PANEL_NODE_INVALID_CHOICE":        "Неверный выбор. Выберите 0-6.",
 	"MANAGE_PANEL_NODE_PROMPT":                "Выберите действие (0-6):",
 	"MENU_1":                                  "Установка компонентов Remnawave",
 	"MENU_10":                                 "Управление профилем ноды",
-	"MENU_11":                                 "Проверить обновления скрипта",
+	"MENU_11":                                 "Версии, диагностика и миграция",
 	"MENU_12":                                 "Удалить скрипт",
 	"MENU_2":                                  "Переустановить панель/ноду",
 	"MENU_3":                                  "Управление панелью/нодой",
 	"MENU_4":                                  "Установить случайный шаблон для selfsteal ноды",
-	"MENU_5":                                  "Кастомные расширения от legiz",
-	"MENU_6":                                  "WARP Native",
 	"MENU_7":                                  "Backup and Restore",
 	"MENU_8":                                  "Управление IPv6",
 	"MENU_9":                                  "Управление сертификатами домена",
@@ -715,7 +717,7 @@ var russian = map[string]string{
 	"NODE_NOT_CONNECTED":                      "Нода не подключена после %d попыток!",
 	"NODE_UNAVAILABLE":                        "Нода недоступна на попытке %d.",
 	"NODE_PROFILE_ENTER_NAME":                 "Введите имя конфиг-профиля:",
-	"NODE_PROFILE_ENTER_PANEL_URL":            "Введите URL панели (host:port):",
+	"NODE_PROFILE_ENTER_PANEL_URL":            "Введите URL панели (host:port или https://panel.example.com):",
 	"NODE_PROFILE_ENTER_TOKEN":                "Введите API-токен панели:",
 	"NODE_PROFILE_HYSTERIA2":                  "Hysteria2 TLS",
 	"NODE_PROFILE_NOT_FOUND":                  "Конфиг-профиль не найден",
@@ -869,23 +871,6 @@ var russian = map[string]string{
 	"WILDCARD_CERT_FOUND":                     "Wildcard-сертификат найден в /etc/letsencrypt/live/",
 	"YQ_DOESNT_WORK_AFTER_INSTALLATION":       "Ошибка: yq не работает после установки!",
 	"YQ_SUCCESSFULLY_INSTALLED":               "yq успешно установлен!",
-}
-
-// IN_DEVELOPMENT is a stub message used for menu paths not yet
-// implemented, or for WARP, which the project excludes by scope. It
-// lives in its own map, separate from the english/russian ones above,
-// to make clear this text isn't part of the regular translation set.
-var inDevelopment = map[string]string{
-	"en": "🚧 Not implemented yet in this Go port.",
-	"ru": "🚧 Пока не реализовано в Go-версии.",
-}
-
-// InDevelopment returns the stub message in the current UI language.
-func InDevelopment() string {
-	if Current == "ru" {
-		return inDevelopment["ru"]
-	}
-	return inDevelopment["en"]
 }
 
 // availableTemplates is used by internal/selfsteal.InteractiveInstall

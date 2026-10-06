@@ -39,7 +39,7 @@ If anything in this README contradicts those sources, trust the sources, not thi
 
 ## Known issues
 
-No active known bugs right now.
+Found a bug? Open an issue on GitHub.
 
 **Caddy installs with a node (co-located or standalone) build their own Caddy image on first run** instead of using a stock one: Xray wraps Reality fallback traffic in the PROXY protocol on a unix socket where Caddy listens for all its domains, and the official `caddy` image doesn't include the module that needs (`github.com/mastercactapus/caddy2-proxyprotocol`). `docker-compose.yml` for `internal/caddynode`/`internal/caddypanelfull` now builds it itself via `xcaddy` (`docker compose up -d --build`), so the first run takes a couple of minutes longer than usual — Docker is compiling the image, not just pulling it.
 
@@ -96,19 +96,20 @@ On the very first run the tool asks for an interface language (English/Русс�
 2. Reinstall panel/node            — tear down the current stack and reinstall
 3. Manage Panel/Node                — start/stop/update/logs/CLI/temporary access on 8443
 4. Install random template          — change the selfsteal template on a node
-5. WARP Native
-6. Backup and Restore                — third-party distillium/remnawave-backup-restore
-7. Manage IPv6                       — turn IPv6 on or off
-8. Manage certificates domain        — renew or reissue a certificate manually
-9. Manage Node Profile               — turn Hysteria2/XHTTP on or off on an already-registered node
-10. Check for updates script
-11. Remove script                    — remove RemnaForge and/or the installed stack
+5. Backup and Restore                — third-party distillium/remnawave-backup-restore
+6. Manage IPv6                       — turn IPv6 on or off
+7. Manage certificates domain        — renew or reissue a certificate manually
+8. Manage Node Profile               — turn Hysteria2/XHTTP on or off on an already-registered node
+9. Versions, diagnostics and migration — installed versions, health check, panel 2.x → 3.x migration
+10. Remove script                    — remove RemnaForge and/or the installed stack
 0. Exit
 ```
 
+`remnaforge doctor`, `remnaforge versions` and `remnaforge --version` run without the menu.
+
 Item 1, after the install type is chosen (panel+node / panel only / add a node to an existing panel / node only), asks Nginx or Caddy, then asks everything else interactively: domains, the panel's IP when installing a standalone node, the certificate issuance method.
 
-Item 9 works like item 1's "add a node" flow: it asks for the panel URL, API token, and config profile name directly, rather than reading a local `.env` — the profile can belong to any panel, not just the one installed on this machine. A node carries only `Raw` (VLESS+Reality) by default; this item adds or removes `Hysteria2`/`XHTTP` through a checkbox menu (a number toggles it, Enter applies the selection) without touching the already-issued secrets of inbounds that stay on. Turning on `Hysteria2` asks whether the node's certificate was issued as a wildcard — this menu item didn't install the node itself and has no other way to know.
+Item 8 works like item 1's "add a node" flow: it asks for the panel URL, API token, and config profile name directly, rather than reading a local `.env` — the profile can belong to any panel, not just the one installed on this machine. A node carries only `Raw` (VLESS+Reality) by default; this item adds or removes `Hysteria2`/`XHTTP` through a checkbox menu (a number toggles it, Enter applies the selection) without touching the already-issued secrets of inbounds that stay on. Turning on `Hysteria2` asks whether the node's certificate was issued as a wildcard — this menu item didn't install the node itself and has no other way to know.
 
 ## Files this tool creates and touches
 
@@ -118,7 +119,7 @@ Item 9 works like item 1's "add a node" flow: it asks for the panel URL, API tok
 - `/etc/sysctl.conf`, `ufw` rules — when turning IPv6 on/off and during the initial dependency install.
 - `/var/www/html/` — the selfsteal domain's HTML template.
 
-A full removal (menu item 11, "wipe everything") tears down `/opt/remnawave` or `/opt/remnanode` along with its containers, images, and volumes. It leaves `/etc/letsencrypt` alone — certificates stay on disk.
+A full removal (menu item 10, "wipe everything") tears down `/opt/remnawave` or `/opt/remnanode` along with its containers, images, and volumes. It leaves `/etc/letsencrypt` alone — certificates stay on disk.
 
 ## Logs
 

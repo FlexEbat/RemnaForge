@@ -1,23 +1,15 @@
-// Package uninstall lets the user remove just this tool's own state, or
-// wipe the installed panel/node (docker containers, images, volumes)
-// too.
-//
-// This fork has no installer script yet (see README: build-from-source
-// only for now), so no single guaranteed binary path exists to remove.
-// "Remove script only" removes the config/state directory
-// (/usr/local/remnawave_reverse, which holds the saved panel API token,
-// see internal/api.DirRemnawave) and removes a binary at the
-// conventional /usr/local/bin/remnawave-easy-install path if one exists
-// there, rather than assuming it does.
+// Package uninstall removes this tool's own state, or additionally the
+// installed panel/node stacks (containers, volumes, images of those
+// stacks only; nothing else on the host is touched).
 package uninstall
 
 import (
 	"fmt"
 	"os"
-	"os/exec"
 
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/i18n"
-	"github.com/remnawave/remnawave-reverse-proxy-go/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/stack"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 // dirRemnawave holds this tool's own config/state directory. Duplicated
@@ -25,10 +17,8 @@ import (
 // needless cross-package import for a single path string.
 const dirRemnawave = "/usr/local/remnawave_reverse"
 
-// conventionalBinPath is where a manually-copied build of this tool
-// would plausibly live, matching the README's suggested build/install
-// location; see the package doc comment above.
-const conventionalBinPath = "/usr/local/bin/remnawave-easy-install"
+// binPaths are the locations the binary is normally installed to.
+var binPaths = []string{"/usr/local/bin/remnaforge"}
 
 func RemoveScript() {
 	for {
@@ -67,7 +57,7 @@ func removeScriptOnly() {
 	}
 
 	_ = os.RemoveAll(dirRemnawave)
-	_ = os.Remove(conventionalBinPath)
+	removeBinary()
 
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("SCRIPT_REMOVED"), ui.ColorReset)
 	ui.Exit(0)
@@ -75,9 +65,7 @@ func removeScriptOnly() {
 
 func removeScriptAndPanel() {
 	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CONFIRM_REMOVE_ALL"), ui.ColorReset)
-	confirm := ui.Reading("")
-	if confirm != "y" && confirm != "Y" {
-		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
+	if !stack.ConfirmDelete() {
 		return
 	}
 
@@ -85,31 +73,25 @@ func removeScriptAndPanel() {
 		if _, err := os.Stat(dir); err != nil {
 			continue
 		}
+		stack.PromptBackup(dir)
 		fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-		downCmd := exec.Command("docker", "compose", "down", "-v", "--rmi", "all", "--remove-orphans")
-		downCmd.Dir = dir
-		// FIXED: this used to report a failed `docker compose down` with
-		// i18n.T("CHANGE_DIR_FAILED") ("Failed to change to directory %s"),
-		// left over from an earlier revision that actually did a directory
-		// change here; it no longer does (downCmd.Dir is used instead), so
-		// that message named the wrong failure. Unlike
-		// internal/reinstall.reinstallRemnawave, which intentionally
-		// discards this same error (fire-and-forget `docker compose down`,
-		// matching how it's run elsewhere in this codebase), this path
-		// already checks the error, so it now reports it under its real
-		// name instead of keeping a misleading message.
-		if err := downCmd.Run(); err != nil {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, fmt.Sprintf(i18n.T("DOCKER_COMPOSE_DOWN_FAILED"), dir), ui.ColorReset)
+		if err := stack.Teardown(dir); err != nil {
+			fmt.Printf("%s"+i18n.T("TEARDOWN_FAILED")+"%s\n", ui.ColorRed, dir, ui.ColorReset)
+			fmt.Printf("%s%v%s\n", ui.ColorRed, err, ui.ColorReset)
+			return
 		}
-		_ = os.RemoveAll(dir)
 	}
 
-	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	_ = exec.Command("docker", "system", "prune", "-a", "--volumes", "-f").Run()
-
 	_ = os.RemoveAll(dirRemnawave)
-	_ = os.Remove(conventionalBinPath)
+	removeBinary()
 
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("ALL_REMOVED"), ui.ColorReset)
 	ui.Exit(0)
+}
+
+// removeBinary deletes the installed binary at its conventional paths.
+func removeBinary() {
+	for _, p := range binPaths {
+		_ = os.Remove(p)
+	}
 }
