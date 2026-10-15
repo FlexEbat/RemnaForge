@@ -116,7 +116,7 @@ sudo remnaforge
 - `/opt/remnawave/` 或 `/opt/remnanode/` —— 已安装服务栈的 `docker-compose.yml`、`.env`、`nginx.conf` 或 `Caddyfile`。
 - `/usr/local/remnawave_reverse/` —— RemnaForge 自身的状态：选定的语言、日志文件、依赖已安装的标记。
 - `/etc/letsencrypt/` —— 证书和续期配置，仅当选择 Nginx + certbot 时使用。
-- `/etc/sysctl.conf`、`ufw` 规则 —— 在开关 IPv6 以及首次安装依赖时会修改。
+- `/etc/sysctl.conf` —— 在开关 IPv6 时会修改。`/etc/sysctl.d/99-remnaforge-bbr.conf` 和 `ufw` 规则 —— 在首次安装依赖时会修改（启用 ufw 之前，会先放行 sshd 正在监听的端口）。
 - `/var/www/html/` —— selfsteal 域名的 HTML 模板。
 
 完整卸载（菜单第 10 项，「wipe everything」）会连同容器、镜像、数据卷一起删除 `/opt/remnawave` 或 `/opt/remnanode`。不会动 `/etc/letsencrypt` —— 证书会保留在磁盘上。

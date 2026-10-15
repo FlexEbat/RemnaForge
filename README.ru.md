@@ -116,7 +116,7 @@ sudo remnaforge
 - `/opt/remnawave/` или `/opt/remnanode/` — `docker-compose.yml`, `.env`, `nginx.conf` или `Caddyfile` установленного стека.
 - `/usr/local/remnawave_reverse/` — собственное состояние RemnaForge: выбранный язык, лог-файл, отметка об уже выполненной установке зависимостей.
 - `/etc/letsencrypt/` — сертификаты и конфигурация продления, если выбран Nginx с certbot.
-- `/etc/sysctl.conf`, правила `ufw` — при включении/выключении IPv6 и при первичной установке зависимостей.
+- `/etc/sysctl.conf` — при включении/выключении IPv6. `/etc/sysctl.d/99-remnaforge-bbr.conf` и правила `ufw` — при первичной установке зависимостей (перед включением ufw разрешается порт, на котором слушает sshd).
 - `/var/www/html/` — HTML-шаблон selfsteal-домена.
 
 Полное удаление (пункт 10 меню, «wipe everything») сносит `/opt/remnawave` или `/opt/remnanode` вместе с контейнерами, образами и томами. `/etc/letsencrypt` не трогает — сертификаты остаются на диске.
