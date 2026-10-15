@@ -89,3 +89,43 @@ func TestEveryReferencedKeyExists(t *testing.T) {
 		t.Errorf("keys used in code but not defined:\n%s", strings.Join(missing, "\n"))
 	}
 }
+
+// A key that no code refers to is dead text that still has to be
+// translated and kept in sync, so each key must appear as a quoted
+// literal somewhere outside the locale tables.
+func TestNoUnusedKeys(t *testing.T) {
+	root := filepath.Join("..", "..")
+	var code strings.Builder
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		if filepath.Base(path) == "i18n.go" && filepath.Base(filepath.Dir(path)) == "i18n" {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		code.Write(data)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	src := code.String()
+	var unused []string
+	for k := range english {
+		if !strings.Contains(src, `"`+k+`"`) {
+			unused = append(unused, k)
+		}
+	}
+	sort.Strings(unused)
+	if len(unused) > 0 {
+		t.Errorf("keys defined but never used in code:\n%s", strings.Join(unused, "\n"))
+	}
+}
