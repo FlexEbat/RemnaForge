@@ -103,10 +103,14 @@ func InstallPackages() error {
 	// BBR congestion control.
 	enableBBR()
 
-	// UFW baseline rules.
-	if err := run("ufw", "allow", "22/tcp", "comment", "SSH"); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CONFIGURE_UFW"), ui.ColorReset)
-		return err
+	// UFW baseline rules. SSH is allowed on the port(s) sshd really uses,
+	// not a fixed 22: enabling ufw on a server whose sshd listens elsewhere
+	// cuts the operator off from the machine.
+	for _, port := range sshPorts() {
+		if err := run("ufw", "allow", fmt.Sprintf("%d/tcp", port), "comment", "SSH"); err != nil {
+			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CONFIGURE_UFW"), ui.ColorReset)
+			return err
+		}
 	}
 	if err := run("ufw", "allow", "443/tcp", "comment", "HTTPS"); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CONFIGURE_UFW"), ui.ColorReset)
