@@ -228,28 +228,32 @@ func ensureDocker() error {
 	return nil
 }
 
+// bbrConfPath is the sysctl drop-in this tool owns. A file of our own
+// replaces editing /etc/sysctl.conf: matching substrings there treated a
+// commented-out line as a setting and appended duplicates when the
+// spacing differed, and a drop-in is also easy to remove again.
+const bbrConfPath = "/etc/sysctl.d/99-remnaforge-bbr.conf"
+
+const bbrConf = "net.core.default_qdisc = fq\nnet.ipv4.tcp_congestion_control = bbr\n"
+
 // enableBBR enables the BBR congestion-control algorithm, best-effort:
 // errors from the underlying commands are intentionally ignored, since
 // this is a nice-to-have network tuning step, not something worth
 // failing the whole install over.
 func enableBBR() {
-	const sysctlConf = "/etc/sysctl.conf"
-	data, _ := os.ReadFile(sysctlConf)
-	content := string(data)
+	if err := writeBBRConf(bbrConfPath); err != nil {
+		return
+	}
+	_ = exec.Command("sysctl", "-p", bbrConfPath).Run()
+}
 
-	appended := false
-	if !strings.Contains(content, "net.core.default_qdisc = fq") {
-		content += "net.core.default_qdisc = fq\n"
-		appended = true
+// writeBBRConf writes the drop-in unless it already holds the wanted
+// content, so repeated runs leave the file alone.
+func writeBBRConf(path string) error {
+	if existing, err := os.ReadFile(path); err == nil && string(existing) == bbrConf {
+		return nil
 	}
-	if !strings.Contains(content, "net.ipv4.tcp_congestion_control = bbr") {
-		content += "net.ipv4.tcp_congestion_control = bbr\n"
-		appended = true
-	}
-	if appended {
-		_ = os.WriteFile(sysctlConf, []byte(content), 0644)
-	}
-	_ = exec.Command("sysctl", "-p").Run()
+	return os.WriteFile(path, []byte(bbrConf), 0644)
 }
 
 // configureUnattendedUpgrades turns on unattended security upgrades and
