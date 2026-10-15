@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -100,13 +101,17 @@ func RegisterRemnawave(domainURL, username, password, token string) string {
 	return ""
 }
 
-// See inline comments below for the line-by-line mapping; this is the
-// longest/most stateful function in the module.
+// GetPanelToken returns an API token for the panel on 127.0.0.1:3000.
+// It reuses the token saved under DirRemnawave when the panel still
+// accepts it. Otherwise it asks for a new one: a pasted API token when
+// the panel has OAuth or Telegram login enabled (no password login
+// then), else the superadmin username and password. A new token is
+// saved to disk with mode 0600.
 func GetPanelToken() (string, error) {
-	tokenFile := DirRemnawave + "/token"
+	tokenFile := filepath.Join(DirRemnawave, "token")
 	domainURL := "127.0.0.1:3000"
 
-	// local auth_status=$(make_api_request "GET" "http://${domain_url}/api/auth/status" "")
+	// The auth status tells whether password login exists at all.
 	authStatus := MakeAPIRequest("GET", BaseURL(domainURL)+"/api/auth/status", "", "")
 	oauthEnabled := false
 
