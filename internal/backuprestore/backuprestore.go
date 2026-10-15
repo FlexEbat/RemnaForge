@@ -8,6 +8,8 @@
 package backuprestore
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,8 +22,21 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
-// scriptURL is the community backup/restore tool this package fetches.
-const scriptURL = "https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh"
+// scriptRef is the commit of the community backup/restore tool this
+// package fetches, and scriptSHA256 the SHA-256 of backup-restore.sh at
+// that commit. The script runs as root, so the download is pinned to a
+// commit and verified instead of following the moving main branch. To
+// update: pick a commit, review the script, then set both constants to
+// the new commit and `sha256sum backup-restore.sh`.
+const (
+	scriptRef    = "a24e020eac10ad1bc0576d55a87a1c01f0ef9048"
+	scriptSHA256 = "3b73286792ad71538dba156ebc3ae42e58699cf2fceb4126ec2bcd8dc8e2cc82"
+)
+
+const scriptURL = "https://raw.githubusercontent.com/distillium/remnawave-backup-restore/" + scriptRef + "/backup-restore.sh"
+
+// maxScriptSize caps the download; the pinned script is far smaller.
+const maxScriptSize = 5 << 20
 
 // Run downloads the community backup/restore script to $HOME if it
 // isn't already there, then hands off to it interactively. If the
@@ -55,8 +70,9 @@ func Run() error {
 }
 
 // downloadScript writes the script to a temporary file next to dest and
-// renames it into place only once the download has completed, so an
-// interrupted download never leaves a truncated script behind.
+// renames it into place only once the download is complete and matches
+// scriptSHA256, so neither an interrupted download nor a tampered one
+// ever ends up as an executable script.
 func downloadScript(dest string) error {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(scriptURL)
@@ -68,13 +84,24 @@ func downloadScript(dest string) error {
 		return fmt.Errorf("unexpected status %d fetching %s", resp.StatusCode, scriptURL)
 	}
 
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxScriptSize+1))
+	if err != nil {
+		return err
+	}
+	if len(data) > maxScriptSize {
+		return fmt.Errorf("script from %s exceeds %d bytes", scriptURL, maxScriptSize)
+	}
+	if err := verifyScript(data, scriptSHA256); err != nil {
+		return err
+	}
+
 	tmp, err := os.CreateTemp(filepath.Dir(dest), ".backup-restore-*")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(tmp.Name())
 
-	if _, err := io.Copy(tmp, io.LimitReader(resp.Body, 5<<20)); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		return err
 	}
@@ -82,6 +109,15 @@ func downloadScript(dest string) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), dest)
+}
+
+// verifyScript compares the SHA-256 of data with the expected hex digest.
+func verifyScript(data []byte, wantHex string) error {
+	sum := sha256.Sum256(data)
+	if got := hex.EncodeToString(sum[:]); got != wantHex {
+		return fmt.Errorf("checksum mismatch: got %s, want %s", got, wantHex)
+	}
+	return nil
 }
 
 // runInteractive runs name (a full path or something on $PATH) with its
