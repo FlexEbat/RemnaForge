@@ -4,6 +4,7 @@
 package stack
 
 import (
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -45,69 +46,86 @@ func VolumeExists(name string) bool {
 // directory. The panel's db container must be running.
 func BackupPanel(dir string) (string, error) {
 	dest := filepath.Join(dir, "backups", time.Now().UTC().Format("20060102-150405"))
-	if err := os.MkdirAll(dest, 0700); err != nil {
+	if err := backupPanelTo(dir, dest); err != nil {
 		return "", err
 	}
+	return dest, nil
+}
 
-	if data, err := os.ReadFile(filepath.Join(dir, ".env")); err == nil {
-		if err := os.WriteFile(filepath.Join(dest, ".env"), data, 0600); err != nil {
-			return "", err
+// backupPanelTo is BackupPanel with an explicit destination. A failed
+// run removes dest again: a half-written db.sql.gz next to a valid .env
+// looks like a usable backup and is not one.
+func backupPanelTo(dir, dest string) (err error) {
+	if err = os.MkdirAll(dest, 0700); err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(dest)
+		}
+	}()
+
+	if data, readErr := os.ReadFile(filepath.Join(dir, ".env")); readErr == nil {
+		if err = os.WriteFile(filepath.Join(dest, ".env"), data, 0600); err != nil {
+			return err
 		}
 	}
 
 	out, err := os.OpenFile(filepath.Join(dest, "db.sql.gz"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer out.Close()
 
 	gz := gzip.NewWriter(out)
 	cmd := exec.Command("docker", "exec", "remnawave-db", "sh", "-c",
 		`pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"`)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", err
+		return err
 	}
-	if err := cmd.Start(); err != nil {
-		return "", err
+	if err = cmd.Start(); err != nil {
+		return err
 	}
-	if _, err := io.Copy(gz, pipe); err != nil {
+	if _, err = io.Copy(gz, pipe); err != nil {
 		_ = cmd.Wait()
-		return "", err
+		return err
 	}
-	if err := cmd.Wait(); err != nil {
-		return "", fmt.Errorf("pg_dump failed: %w", err)
+	if err = cmd.Wait(); err != nil {
+		return fmt.Errorf("pg_dump failed: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
-	if err := gz.Close(); err != nil {
-		return "", err
+	if err = gz.Close(); err != nil {
+		return err
 	}
-	return dest, nil
+	return out.Sync()
 }
 
 // PromptBackup offers a database backup of the panel stack in dir,
-// when one is installed and its database container is running.
-func PromptBackup(dir string) {
+// when one is installed and its database container is running. The
+// backup goes straight to /root, outside dir, because the caller
+// deletes dir next. It returns false when the operator asked for a
+// backup and none was written; the caller must then stop before
+// removing anything, since the volumes hold the only copy of the data.
+func PromptBackup(dir string) bool {
 	if _, err := os.Stat(filepath.Join(dir, "docker-compose.yml")); err != nil {
-		return
+		return true
 	}
 	if exec.Command("docker", "inspect", "-f", "{{.State.Running}}", "remnawave-db").Run() != nil {
-		return
+		return true
 	}
 	answer := ui.Reading(i18n.T("BACKUP_BEFORE_REMOVE"))
 	if answer != "y" && answer != "Y" {
-		return
+		return true
 	}
-	dest, err := BackupPanel(dir)
-	if err != nil {
+	keep := filepath.Join("/root", filepath.Base(dir)+"-backup-"+time.Now().UTC().Format("20060102-150405"))
+	if err := backupPanelTo(dir, keep); err != nil {
 		fmt.Printf("%s%s: %v%s\n", ui.ColorRed, i18n.T("BACKUP_FAILED"), err, ui.ColorReset)
-		return
-	}
-	// Keep the backup outside the directory that is about to be deleted.
-	keep := filepath.Join("/root", filepath.Base(dir)+"-backup-"+filepath.Base(dest))
-	if err := os.Rename(dest, keep); err != nil {
-		keep = dest
+		return false
 	}
 	fmt.Printf("%s"+i18n.T("BACKUP_DONE")+"%s\n", ui.ColorGreen, keep, ui.ColorReset)
+	return true
 }
 
 // ConfirmDelete asks the operator to type DELETE.

@@ -4,6 +4,7 @@
 package reinstall
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -139,7 +140,10 @@ func reinstallRemnawave() error {
 		if _, err := os.Stat(dir); err != nil {
 			continue
 		}
-		stack.PromptBackup(dir)
+		if !stack.PromptBackup(dir) {
+			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("BACKUP_ABORTED"), ui.ColorReset)
+			return errors.New("backup not written")
+		}
 		fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 		if err := stack.Teardown(dir); err != nil {
 			fmt.Printf("%s"+i18n.T("TEARDOWN_FAILED")+"%s\n", ui.ColorRed, dir, ui.ColorReset)
