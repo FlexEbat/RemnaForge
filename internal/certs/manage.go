@@ -218,9 +218,8 @@ func ensureDNSCredentials(certMethod, renewalConf string) {
 		if err != nil {
 			return
 		}
-		_ = os.MkdirAll(filepath.Dir(credFile), 0755)
 		ini := fmt.Sprintf("dns_cloudflare_email = %s\ndns_cloudflare_api_key = %s\n", validEmail, validKey)
-		_ = os.WriteFile(credFile, []byte(ini), 0600)
+		reportCredentialsWrite(credFile, ini)
 
 	} else if certMethod == "3" {
 		credFile := renewalConfValue(conf, "dns-gcore-credentials")
@@ -232,8 +231,7 @@ func ensureDNSCredentials(certMethod, renewalConf string) {
 		}
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CERT_GCORE_FILE_NOT_FOUND"), ui.ColorReset)
 		gcoreKey := ui.Reading(ui.ColorYellow + i18n.T("ENTER_GCORE_TOKEN") + ui.ColorReset)
-		_ = os.MkdirAll(filepath.Dir(credFile), 0755)
-		_ = os.WriteFile(credFile, []byte(fmt.Sprintf("dns_gcore_apitoken = %s\n", gcoreKey)), 0600)
+		reportCredentialsWrite(credFile, fmt.Sprintf("dns_gcore_apitoken = %s\n", gcoreKey))
 	}
 }
 
@@ -313,4 +311,13 @@ func fileModTime(path string) int64 {
 		return 0
 	}
 	return info.ModTime().Unix()
+}
+
+// reportCredentialsWrite recreates a missing DNS credentials file and
+// tells the operator when that fails. A silent failure here would only
+// surface later as a failed certificate renewal.
+func reportCredentialsWrite(path, content string) {
+	if err := writeSecretFile(path, content); err != nil {
+		fmt.Printf("%s%s: %v%s\n", ui.ColorRed, i18n.T("CERT_CREDENTIALS_WRITE_FAILED"), err, ui.ColorReset)
+	}
 }

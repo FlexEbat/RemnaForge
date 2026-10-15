@@ -1,8 +1,10 @@
 # TECH.md
 
-**Версия: v1.9.4** (2026-10-15)
+**Версия: v1.9.5** (2026-10-15)
 
 Changelog (новое сверху, один пункт на одну пушнутую единицу работы):
+
+- **v1.9.5**: `certs.ensureDNSCredentials` создавал файл с токеном DNS (`cloudflare.ini`/`gcore.ini`) через `_ = os.MkdirAll` и `_ = os.WriteFile`: при ошибке оператор ничего не видел, а продление сертификата падало позже. Запись вынесена в `writeSecretFile` (каталог 0700, файл 0600), её используют и `issue.go`, где раньше каталог создавался с 0755. `ensureDNSCredentials` теперь печатает ошибку (новый ключ `CERT_CREDENTIALS_WRITE_FAILED`, en+ru). Тесты `internal/certs/secret_test.go`.
 
 - **v1.9.4**: `preflight.enableBBR` правил `/etc/sysctl.conf` через `strings.Contains`: закомментированная строка `# net.ipv4.tcp_congestion_control = bbr` считалась настройкой, и BBR не включался, а запись с другими пробелами (`=bbr`) дописывалась повторно. Теперь инструмент пишет собственный файл `/etc/sysctl.d/99-remnaforge-bbr.conf` (`writeBBRConf`), не трогает его, если содержимое совпадает, и применяет через `sysctl -p <файл>`. Старые строки в `/etc/sysctl.conf` на уже установленных серверах остаются и безвредны. Тест `internal/preflight/bbr_test.go`.
 

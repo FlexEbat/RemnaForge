@@ -28,6 +28,16 @@ func secretsDir() string {
 	return "/root/.secrets/certbot"
 }
 
+// writeSecretFile writes a DNS API credentials file. The directory is
+// 0700 and the file 0600: both hold a token that can edit the zone, and
+// certbot refuses credentials files that other users can read.
+func writeSecretFile(path, content string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(content), 0600)
+}
+
 // Validates Cloudflare credentials against the Cloudflare API, prompting
 // up to 3 times. Returns the (possibly re-entered) apiKey/email.
 func CheckAPI(apiKey, email string) (validAPIKey, validEmail string, err error) {
@@ -96,18 +106,14 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 			return err
 		}
 
-		dir := secretsDir()
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return err
-		}
-		iniPath := filepath.Join(dir, "cloudflare.ini")
+		iniPath := filepath.Join(secretsDir(), "cloudflare.ini")
 		var ini string
 		if hasUpperRE.MatchString(validKey) {
 			ini = fmt.Sprintf("dns_cloudflare_api_token = %s\n", validKey)
 		} else {
 			ini = fmt.Sprintf("dns_cloudflare_email = %s\ndns_cloudflare_api_key = %s\n", validEmail, validKey)
 		}
-		if err := os.WriteFile(iniPath, []byte(ini), 0600); err != nil {
+		if err := writeSecretFile(iniPath, ini); err != nil {
 			return err
 		}
 
@@ -163,12 +169,8 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 
 		gcoreAPIKey := ui.Reading(i18n.T("ENTER_GCORE_TOKEN"))
 
-		dir := secretsDir()
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return err
-		}
-		iniPath := filepath.Join(dir, "gcore.ini")
-		if err := os.WriteFile(iniPath, []byte(fmt.Sprintf("dns_gcore_apitoken = %s\n", gcoreAPIKey)), 0600); err != nil {
+		iniPath := filepath.Join(secretsDir(), "gcore.ini")
+		if err := writeSecretFile(iniPath, fmt.Sprintf("dns_gcore_apitoken = %s\n", gcoreAPIKey)); err != nil {
 			return err
 		}
 
