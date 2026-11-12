@@ -1,4 +1,4 @@
-**English** | [Русский](README.ru.md) | [中文](README.zh.md) | [فارسی](README.fa.md)
+**English** | [Русский](README.ru.md) | [中文](README.zh.md)
 
 # RemnaForge
 
@@ -114,7 +114,7 @@ Item 8 works like item 1's "add a node" flow: it asks for the panel URL, API tok
 ## Files this tool creates and touches
 
 - `/opt/remnawave/` or `/opt/remnanode/` — the installed stack's `docker-compose.yml`, `.env`, `nginx.conf` or `Caddyfile`.
-- `/usr/local/remnawave_reverse/` — RemnaForge's own state: the chosen language, the log file, a marker that dependencies are already installed.
+- `/usr/local/remnawave_reverse/` — RemnaForge's own state: the chosen language, the log file, a marker that dependencies are already installed. The lock file `remnaforge.lock` there stops a second instance from starting while one is running.
 - `/etc/letsencrypt/` — certificates and renewal configuration, if Nginx with certbot was chosen.
 - `/etc/sysctl.conf` — when turning IPv6 on/off. `/etc/sysctl.d/99-remnaforge-bbr.conf` and `ufw` rules — during the initial dependency install (the port sshd listens on is allowed before ufw is enabled).
 - `/var/www/html/` — the selfsteal domain's HTML template.

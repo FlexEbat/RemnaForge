@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/maintenance"
 	"github.com/FlexEbat/RemnaForge/internal/menu"
 	"github.com/FlexEbat/RemnaForge/internal/oscheck"
+	"github.com/FlexEbat/RemnaForge/internal/runlock"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -30,6 +32,19 @@ func main() {
 	if err := oscheck.CheckRoot(); err != nil {
 		ui.ErrorExit(err.Error())
 	}
+
+	// The lock comes after the root check because creating its directory
+	// needs root, and before the menu because every mutating flow starts
+	// there. Read-only subcommands return earlier and take no lock.
+	lock, err := runlock.Acquire(runlock.DefaultPath)
+	var busy *runlock.BusyError
+	switch {
+	case errors.As(err, &busy):
+		ui.ErrorExit(fmt.Sprintf(i18n.T("RUNLOCK_BUSY"), busy.PID, busy.Since.Format("2006-01-02 15:04:05")))
+	case err != nil:
+		ui.ErrorExit(fmt.Sprintf(i18n.T("RUNLOCK_FAILED"), err))
+	}
+	defer lock.Release()
 
 	menu.Run()
 }

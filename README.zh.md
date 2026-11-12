@@ -1,4 +1,4 @@
-[English](README.md) | [Русский](README.ru.md) | **中文** | [فارسی](README.fa.md)
+[English](README.md) | [Русский](README.ru.md) | **中文**
 
 # RemnaForge
 
@@ -114,7 +114,7 @@ sudo remnaforge
 ## 此工具创建和修改的文件
 
 - `/opt/remnawave/` 或 `/opt/remnanode/` —— 已安装服务栈的 `docker-compose.yml`、`.env`、`nginx.conf` 或 `Caddyfile`。
-- `/usr/local/remnawave_reverse/` —— RemnaForge 自身的状态：选定的语言、日志文件、依赖已安装的标记。
+- `/usr/local/remnawave_reverse/` —— RemnaForge 自身的状态：选定的语言、日志文件、依赖已安装的标记。其中的 `remnaforge.lock` 文件会在已有实例运行时阻止第二个实例启动。
 - `/etc/letsencrypt/` —— 证书和续期配置，仅当选择 Nginx + certbot 时使用。
 - `/etc/sysctl.conf` —— 在开关 IPv6 时会修改。`/etc/sysctl.d/99-remnaforge-bbr.conf` 和 `ufw` 规则 —— 在首次安装依赖时会修改（启用 ufw 之前，会先放行 sshd 正在监听的端口）。
 - `/var/www/html/` —— selfsteal 域名的 HTML 模板。
