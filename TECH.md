@@ -1,8 +1,10 @@
 # TECH.md
 
-**Version: v1.9.13** (2026-11-12)
+**Version: v1.9.14** (2026-11-12)
 
 Changelog (newest first, one entry per pushed unit of work):
+
+- **v1.9.14**: slice 15, picker part (point 23). `nodeprofile.pickInbounds` marks `Raw Reality` as deprecated (labels `NODE_PROFILE_RAW` in both locales) and refuses to switch it on (`toggleOption`, new key `NODE_PROFILE_DEPRECATED_BLOCKED`). A profile that already carries the inbound keeps it, and the operator can switch it off. The four README files describe this in the item 8 paragraph. The install flows part of slice 15 stays open: the five profile-creating flows still create new profiles with `Raw`, pending the decision in section 11.
 
 - **v1.9.13**: new section 11 splits the installer requirements list (23 numbered points plus the bootstrap paragraph) into 15 slices with dependencies, acceptance criteria and open questions. A code survey before writing found existing code that contradicts the list or duplicates it: `preflight.InstallPackages` turns on BBR, unattended-upgrades and ufw without asking (points 2, 10, 16), three separate Docker checks exist (`preflight.CheckDocker`, `packagesAlreadySatisfied`, `maintenance.runChecks`), `Doctor` and `certs.CheckCertExpiry` already cover part of points 17, 21 and 22, and `domain.CheckDomain` has no AAAA lookup. Each case is assigned to a slice that reworks or removes it. The code is unchanged.
 
@@ -435,6 +437,8 @@ Depends on slices 7 and 10.
 - Open: pick the signature scheme: `cosign` keyless (needs the cosign binary on the server), `minisign` (small binary, key in the repository) or `gpg` (usually present). Default proposal: `minisign`, because the verifier is one small static binary the script can pin by hash.
 
 ### Slice 15. Deprecate "Raw Reality" (point 23)
+
+Status: picker part done in v1.9.14. Install flows part blocked on the open question below.
 
 - `nodeprofile.pickInbounds` marks `NODE_PROFILE_RAW` as deprecated (the label gets a deprecation note in both locales) and refuses to switch it on. A profile that already carries the inbound keeps it, and the operator can switch it off.
 - Open, blocks the install flows part: since v1.3.1 the five profile-creating flows (`addnode`, `panelfull`, `panelonly`, `caddypanelfull`, `caddypanelonly`) create the profile with `Raw` only, and the picker demands at least one inbound. If `Raw` cannot be selected, a new profile has no valid default. Options: (a) change only the picker and leave the install defaults as they are for now, (b) choose another default inbound for new profiles. Option (b) needs a decision on which inbound that is.
