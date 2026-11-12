@@ -1,8 +1,10 @@
 # TECH.md
 
-**Version: v1.9.20** (2026-11-12)
+**Version: v1.9.21** (2026-11-12)
 
 Changelog (newest first, one entry per pushed unit of work):
+
+- **v1.9.21**: the Persian README is removed (`README.fa.md` and its link in the language switchers). Documentation languages are English, Russian and Chinese. `CONTRIBUTING.md` says three versions instead of four. Section 11 gets the answers of the maintainer to the last round of questions (see the new subsection "Decisions of 2026-11-12"). The code is unchanged.
 
 - **v1.9.20**: the remaining open points of section 11 are decided. Slice 16 blocks `vpn`, `node`, `panel`, country codes, `proxy`, `admin`, `xray`, `vless` and `remna`. Slice 2 leaves servers that already run BBR, unattended-upgrades and ufw as they are. Slice 13: the HAProxy backend implements TLS everywhere, so it supports TLS-terminated profiles only and skips Reality, which does not fit that routing yet. Nginx and Caddy flows keep Reality. The code is unchanged.
 
@@ -467,3 +469,18 @@ Depends on slice 5.
 ### Order of work
 
 Slice 1 lock part is done and slice 15 is withdrawn. Continue with the slice 1 timeouts, then 2, 3, 4, 5, 16, 7, 10, 9, 6, 11, 12, 8, 13, 14.
+
+### Decisions of 2026-11-12
+
+- **Workflow.** Work lands on `dev` first. After the checks pass, the slice is merged into `main`, and work stops until the maintainer has reviewed it. Pushes and merges are made as the maintainer (author and committer `FlexEbat`, no tool attribution).
+- **Versions.** A finished slice raises the minor version. Fixes inside a slice raise the patch version. A change that breaks existing behavior raises the major version. The exact numbers are confirmed with the maintainer before the first slice.
+- **Languages.** Documentation: English, Russian, Chinese. Interface strings (`i18n`): English and Russian.
+- **Slice 14 is postponed.** No bootstrap script, no signing and no first release tag for now.
+- **Hysteria2.** It runs over UDP on 443 and stays outside the SNI routing. Every TCP profile goes through the routing.
+- **YAML (slice 7).** `docker-compose.yml` is edited through the `yaml.v3` node API, which keeps comments and order. The module comes through its GitHub mirror with a `replace`, like `golang.org/x/net`. `nginx.conf` and `Caddyfile` use marked blocks, and `.env` is merged key by key. If the mirror does not resolve, fall back to marked blocks for compose as well.
+- **User-edited installer files.** The file is kept, the operator sees a diff and picks keep, merge or replace.
+- **Telegram (slice 11).** The operator fills in the bot token. The check runs only when a token is set.
+- **Timeouts, thresholds and the rest of slices 1 to 13 and 16.** The defaults proposed on 2026-11-12 apply: apt 15 min, docker pull and build 30 min, other commands 2 min; refuse below 1 GiB RAM and warn below 2 GiB; 10 GB free on `/var/lib/docker` and `/opt`; kernel 4.9 warning; `apt-get upgrade` with preview; domain policy on new input only; ufw as the suggested firewall; no package revert and no certificate removal on rollback; rotate the database password and the webhook header by default; reports in `/usr/local/remnawave_reverse/reports/` at 0600; `--dry-run` keeps asking and reading, and changes nothing; HAProxy in the `haproxy:lts` container.
+- **Docker install (slice 4).** Install from the official Docker apt repository: `ca-certificates` and `curl`, the key in `/etc/apt/keyrings/docker.asc`, a deb822 file `/etc/apt/sources.list.d/docker.sources`, then `docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin`. The repository URL and the suite follow the distribution: `linux/debian` with `VERSION_CODENAME` on Debian, `linux/ubuntu` with `UBUNTU_CODENAME` on Ubuntu and its derivatives.
+- **Automatic fixes (slice 5).** The tool fixes what it owns on its own and reports the rest with an exact remedy. Open for confirmation: see the maintainer's note on the limits of automatic fixing.
+

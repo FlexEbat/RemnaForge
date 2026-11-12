@@ -1,4 +1,4 @@
-**English** | [Русский](README.ru.md) | [中文](README.zh.md) | [فارسی](README.fa.md)
+**English** | [Русский](README.ru.md) | [中文](README.zh.md)
 
 # RemnaForge
 
