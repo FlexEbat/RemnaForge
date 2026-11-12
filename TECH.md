@@ -1,250 +1,253 @@
 # TECH.md
 
-**Версия: v1.9.11** (2026-10-15)
+**Version: v1.9.12** (2026-11-12)
 
-Changelog (новое сверху, один пункт на одну пушнутую единицу работы):
+Changelog (newest first, one entry per pushed unit of work):
 
-- **v1.9.11**: из `internal/i18n/i18n.go` удалены 117 неиспользуемых ключей (по 117 строк в `english` и `russian`). Проверка шла в три шага. Ключ считался живым, если его имя встречается как строковый литерал в любом коде вне таблиц: так найдены 10 ключей, которые не вызываются через `i18n.T("…")` напрямую, а передаются в меню (`MENU_1`, `MENU_2`, `MENU_4`, `MENU_7`, `MENU_8`, `MENU_10`, `MENU_11`) и в выбор языка (`CHOOSE_LANG`, `LANG_EN`, `LANG_RU`); они остались. Динамической сборки имён ключей в коде нет: единственный нелитеральный вызов, `i18n.T(key)` в `menu.go`, получает литералы. Тексты 117 удалённых ключей не продублированы захардкоженными строками в коде. Среди удалённых: весь набор `WARP_*` (WARP Native не реализован, раздел 5), `BRANDING_*`, `SUB_*`, `ALIAS_*`, `EXTENSIONS_*`, `YQ_*`, `UPDATE_*`, `DOCKER_COMPOSE_DOWN_FAILED` (его заменил `TEARDOWN_FAILED`). Новый тест `TestNoUnusedKeys` не даёт ключам копиться снова: проверено, что он падает при добавлении ключа без использования.
+- **v1.9.12**: `TECH.md` is translated into English in full. Section numbers, package names, i18n keys and code identifiers are unchanged. The language rule in `CONTRIBUTING.md` (section "Language") now lists `TECH.md` as an English document. `CONTRIBUTING.md` itself stays Russian. The code is unchanged.
 
-- **v1.9.10**: во всех четырёх `README` раздел «Files this tool creates and touches» отражает изменения v1.9.2 и v1.9.4: при первичной установке зависимостей затрагивается `/etc/sysctl.d/99-remnaforge-bbr.conf` (а не `/etc/sysctl.conf`, который правит только переключатель IPv6), а перед включением ufw разрешается порт, на котором слушает sshd. Правка внесена в одном коммите по правилу раздела «Язык» в `CONTRIBUTING.md`.
+- **v1.9.11**: 117 unused keys are removed from `internal/i18n/i18n.go` (117 lines each in `english` and `russian`). The check ran in three steps. A key counted as live if its name appears as a string literal anywhere in the code outside the tables. That found 10 keys that are not called through `i18n.T("…")` directly but are passed to the menu (`MENU_1`, `MENU_2`, `MENU_4`, `MENU_7`, `MENU_8`, `MENU_10`, `MENU_11`) and to the language selector (`CHOOSE_LANG`, `LANG_EN`, `LANG_RU`). Those stay. The code builds no key names dynamically: the only non-literal call, `i18n.T(key)` in `menu.go`, receives literals. The texts of the 117 removed keys are not duplicated as hardcoded strings in the code. Among the removed keys: the whole `WARP_*` set (WARP Native is not implemented, section 5), `BRANDING_*`, `SUB_*`, `ALIAS_*`, `EXTENSIONS_*`, `YQ_*`, `UPDATE_*`, and `DOCKER_COMPOSE_DOWN_FAILED` (replaced by `TEARDOWN_FAILED`). The new test `TestNoUnusedKeys` stops keys from piling up again: it fails when a key is added without a use, which was verified.
 
-- **v1.9.9**: `TECH.md` приведён в соответствие с кодом (раздел 10, пункт 5). В дерево папок (раздел 3) добавлены `maintenance`, `nodeprofile`, `stack`, в таблицу реализованного (раздел 5) добавлены `maintenance` и `stack`. Второй заголовок `Версия: v1.7.0` посреди changelog убран: версия файла одна, у каждого пункта своя версия. В «Не реализовано» описание автообновления уточнено: конвейер релизов настроен, но тегов `v*` в репозитории пока нет.
+- **v1.9.10**: the section "Files this tool creates and touches" in all four `README` files reflects the changes of v1.9.2 and v1.9.4. The first dependency install touches `/etc/sysctl.d/99-remnaforge-bbr.conf` (not `/etc/sysctl.conf`, which only the IPv6 switch edits), and before enabling ufw the tool allows the port sshd listens on. The edit landed in one commit, following the rule in the "Language" section of `CONTRIBUTING.md`.
 
-- **v1.9.8**: тесты для чистых функций, у которых их не было. `internal/genutil`: состав и длина пароля, алфавит `GenerateAlnumSecret`, `HardenEnv` (пароль в `DATABASE_URL` и `POSTGRES_PASSWORD` совпадает, чужие строки не тронуты, два запуска дают разные секреты). `internal/selfsteal`: `extractZip` отвергает путь за пределами каталога (Zip Slip) и распаковывает вложенные файлы. `internal/certs`: порядок `sortNatural`. `internal/i18n`: одинаковые наборы ключей в en и ru, нет пустых значений, совпадают форматные глаголы, каждый литерал `i18n.T("КЛЮЧ")` из кода определён в обеих локалях. Для защиты от Zip Slip и для `HardenEnv` проверено, что тест падает, если отключить соответствующую проверку. Код продукта не менялся.
+- **v1.9.9**: `TECH.md` is aligned with the code (section 10, item 5). The folder tree (section 3) gains `maintenance`, `nodeprofile` and `stack`, and the table of implemented parts (section 5) gains `maintenance` and `stack`. The second `Version: v1.7.0` header in the middle of the changelog is removed: the file has one version, and each entry has its own. In "Not implemented" the description of auto-update is refined: the release pipeline is set up, but the repository has no `v*` tags yet.
 
-- **v1.9.7**: `managepanel` (открытие и закрытие доступа к панели на порту 8443) записывал `nginx.conf` и `Caddyfile` с правами 0644, хотя с v1.9.0 установщики создают их с 0600. На существующих файлах `os.WriteFile` права не меняет, поэтому на уже установленных серверах поведение то же; разница появляется только когда файл создаётся заново. Права приведены к 0600 в четырёх местах `internal/managepanel/access.go`.
+- **v1.9.8**: tests for pure functions that had none. `internal/genutil`: password composition and length, the `GenerateAlnumSecret` alphabet, `HardenEnv` (the password in `DATABASE_URL` and `POSTGRES_PASSWORD` matches, foreign lines stay untouched, two runs produce different secrets). `internal/selfsteal`: `extractZip` rejects a path outside the target directory (Zip Slip) and extracts nested files. `internal/certs`: the order of `sortNatural`. `internal/i18n`: identical key sets in en and ru, no empty values, matching format verbs, and every `i18n.T("KEY")` literal in the code is defined in both locales. For the Zip Slip guard and for `HardenEnv` it was verified that the test fails when the matching check is disabled. The product code did not change.
 
-- **v1.9.6**: `api.GetPanelToken`: доккомментарий отсылал к «построчному сопоставлению» с исходным bash-скриптом, а внутри остался перенесённый как есть комментарий `local auth_status=$(make_api_request ...)`. Это нарушало правило v1.2.0 о том, что в коде нет следов прежней реализации. Комментарии заменены описанием поведения. Путь к файлу токена собирается через `filepath.Join`, а не склейкой строк (в результате получался `.../remnawave_reverse//token`). Поведение функции не менялось.
+- **v1.9.7**: `managepanel` (opening and closing panel access on port 8443) wrote `nginx.conf` and `Caddyfile` with mode 0644, although installers have created them with 0600 since v1.9.0. `os.WriteFile` does not change the mode of an existing file, so behavior on servers that are already installed stays the same. The difference shows only when the file is created anew. The mode is now 0600 in four places of `internal/managepanel/access.go`.
 
-- **v1.9.5**: `certs.ensureDNSCredentials` создавал файл с токеном DNS (`cloudflare.ini`/`gcore.ini`) через `_ = os.MkdirAll` и `_ = os.WriteFile`: при ошибке оператор ничего не видел, а продление сертификата падало позже. Запись вынесена в `writeSecretFile` (каталог 0700, файл 0600), её используют и `issue.go`, где раньше каталог создавался с 0755. `ensureDNSCredentials` теперь печатает ошибку (новый ключ `CERT_CREDENTIALS_WRITE_FAILED`, en+ru). Тесты `internal/certs/secret_test.go`.
+- **v1.9.6**: `api.GetPanelToken`: the doc comment referred to a "line-by-line match" with the original bash script, and a comment carried over verbatim, `local auth_status=$(make_api_request ...)`, remained inside. That broke the v1.2.0 rule that the code holds no traces of the earlier implementation. The comments are replaced with a description of the behavior. The path to the token file is built with `filepath.Join` instead of string concatenation (which produced `.../remnawave_reverse//token`). The behavior of the function did not change.
 
-- **v1.9.4**: `preflight.enableBBR` правил `/etc/sysctl.conf` через `strings.Contains`: закомментированная строка `# net.ipv4.tcp_congestion_control = bbr` считалась настройкой, и BBR не включался, а запись с другими пробелами (`=bbr`) дописывалась повторно. Теперь инструмент пишет собственный файл `/etc/sysctl.d/99-remnaforge-bbr.conf` (`writeBBRConf`), не трогает его, если содержимое совпадает, и применяет через `sysctl -p <файл>`. Старые строки в `/etc/sysctl.conf` на уже установленных серверах остаются и безвредны. Тест `internal/preflight/bbr_test.go`.
+- **v1.9.5**: `certs.ensureDNSCredentials` created the DNS token file (`cloudflare.ini`/`gcore.ini`) with `_ = os.MkdirAll` and `_ = os.WriteFile`: on failure the operator saw nothing, and certificate renewal failed later. The write moved to `writeSecretFile` (directory 0700, file 0600), which `issue.go` also uses, where the directory used to be created with 0755. `ensureDNSCredentials` now prints the error (new key `CERT_CREDENTIALS_WRITE_FAILED`, en+ru). Tests in `internal/certs/secret_test.go`.
 
-- **v1.9.3**: `backuprestore` скачивал стороннюю `backup-restore.sh` с подвижной ветки `main` и запускал её от root без проверки. Теперь URL закреплён на коммит (`scriptRef`), а скачанные байты сверяются с SHA-256 (`scriptSHA256`) до записи на диск: подмена файла или оборванная загрузка не превращаются в исполняемый скрипт. Размер ограничен 5 МиБ, превышение возвращает ошибку, а не молча обрезает файл. Обновление: выбрать коммит, просмотреть скрипт, заменить обе константы (инструкция в комментарии над ними). Ограничение: закрепление защищает только первое скачивание. Сам скрипт обновляется по `SCRIPT_REPO_URL` на `main`, это поведение стороннего проекта, и RemnaForge его не контролирует. Тесты в `internal/backuprestore/backuprestore_test.go`.
+- **v1.9.4**: `preflight.enableBBR` edited `/etc/sysctl.conf` with `strings.Contains`: the commented line `# net.ipv4.tcp_congestion_control = bbr` counted as a setting, so BBR was not enabled, and an entry with different spacing (`=bbr`) was appended a second time. The tool now writes its own file `/etc/sysctl.d/99-remnaforge-bbr.conf` (`writeBBRConf`), leaves it alone when the content matches, and applies it with `sysctl -p <file>`. Old lines in `/etc/sysctl.conf` on servers that are already installed stay and are harmless. Test in `internal/preflight/bbr_test.go`.
 
-- **v1.9.2**: `preflight.InstallPackages` разрешал в ufw только `22/tcp` и сразу выполнял `ufw --force enable`. На сервере с sshd на другом порту это закрывало доступ по SSH сразу после установки зависимостей. Новый `sshPorts()` берёт порт текущей сессии из `SSH_CONNECTION` (единственный источник, верный при socket activation: `ssh.socket` на Ubuntu 24.04 задаёт порт в юните сокета, а `Port` из `sshd_config` игнорируется), добавляет порты из `sshd -T` и откатывается на 22, если ни один источник не дал порта. Для каждого найденного порта добавляется правило `ufw allow <порт>/tcp`. Разбор вынесен в чистые функции с тестами в `internal/preflight/sshports_test.go`.
+- **v1.9.3**: `backuprestore` downloaded the third-party `backup-restore.sh` from the moving `main` branch and ran it as root without verification. The URL is now pinned to a commit (`scriptRef`), and the downloaded bytes are checked against a SHA-256 (`scriptSHA256`) before they are written to disk: a swapped file or an interrupted download does not become an executable script. The size is limited to 5 MiB, and exceeding it returns an error instead of silently truncating the file. To update: pick a commit, review the script, replace both constants (instructions in the comment above them). Limitation: pinning protects only the first download. The script updates itself from `SCRIPT_REPO_URL` on `main`. That is the behavior of the third-party project, and RemnaForge does not control it. Tests in `internal/backuprestore/backuprestore_test.go`.
 
-- **v1.9.1**: неудачный бэкап больше не ведёт к удалению данных. `stack.PromptBackup` ничего не возвращал, поэтому при ответе `y` на вопрос о бэкапе и ошибке `pg_dump` удаление и переустановка шли дальше, а `docker compose down -v` стирал тома с единственной копией базы. Теперь функция возвращает `bool`, и `uninstall`/`reinstall` останавливаются до `Teardown`, если бэкап запрошен, но не записан (новый ключ `BACKUP_ABORTED`). Бэкап пишется сразу в `/root`, вне удаляемого каталога: прежний `os.Rename` при ошибке оставлял путь внутри каталога, который `Teardown` удалял следом, а сообщение «Бэкап сохранён» оставалось верным только на словах. `stack.backupPanelTo` удаляет каталог назначения при любой ошибке: оборванный `db.sql.gz` рядом с целым `.env` выглядел как рабочий бэкап. В текст ошибки добавлен stderr `pg_dump`. Тесты `internal/stack/backup_test.go` подменяют `docker` скриптом в `PATH`.
+- **v1.9.2**: `preflight.InstallPackages` allowed only `22/tcp` in ufw and immediately ran `ufw --force enable`. On a server with sshd on another port, that cut off SSH access right after the dependency install. The new `sshPorts()` takes the port of the current session from `SSH_CONNECTION` (the only source that stays correct under socket activation: on Ubuntu 24.04 `ssh.socket` sets the port in the socket unit and ignores `Port` from `sshd_config`), adds the ports from `sshd -T`, and falls back to 22 when no source yields a port. For every port found, the tool adds the rule `ufw allow <port>/tcp`. Parsing lives in pure functions with tests in `internal/preflight/sshports_test.go`.
 
-- **v1.9.0**: исправления по результатам ревью и новые команды. `api.GetPanelToken` собирал URL без схемы (`http://`), из-за чего «добавить ноду» не работало вообще; теперь все запросы идут через `api.BaseURL`, который принимает и `host:port`, и `https://host`. Токен API для subscription page записывался через сопоставление по префиксу и не находил строку с отступом в compose-файле; заменено на `setComposeEnv`. Установщики прерываются, если регистрация, генерация ключей, создание профиля, ноды, хоста или токена не удались, а ошибка `docker compose up` больше не игнорируется. `GetPublicKey` не затирает `SECRET_KEY` пустым значением. Удаление и переустановка используют `internal/stack`: только свои контейнеры, тома и образы, с предложением бэкапа и подтверждением `DELETE`; каталог стека не удаляется, если `compose down` не прошёл. Глобальный `docker system prune -a --volumes` убран. Пароль БД и `WEBHOOK_SECRET_HEADER` генерируются при установке; compose, nginx.conf и Caddyfile пишутся с правами 0600; лог — 0600 в каталоге 0700, без ANSI-кодов. Управление профилем ноды сохраняет `dns`, `routing`, `outbounds` и чужие inbound'ы (`api.MergeProfileConfig`). Конец stdin завершает программу вместо бесконечного цикла. Загрузка шаблонов ограничена 10 попытками и 100 МБ, замена `/var/www/html` откатывается при ошибке, скрипт backup-restore скачивается атомарно. В nginx для панели используется `$proxy_protocol_addr`, cookie-проверка чувствительна к регистру. Перед обновлением панели делается дамп БД. Новый пункт меню «Версии, диагностика и миграция» (`internal/maintenance`): версии контейнеров, проверка состояния, миграция панели 2.x → 3.x; те же `doctor`, `versions` и `--version` доступны из командной строки. Убраны заглушки WARP и «обновления скрипта» из меню и README. Модуль переименован в `github.com/FlexEbat/RemnaForge`.
+- **v1.9.1**: a failed backup no longer leads to data deletion. `stack.PromptBackup` returned nothing, so when the operator answered `y` to the backup question and `pg_dump` failed, removal and reinstall went on, and `docker compose down -v` erased the volumes that held the only copy of the database. The function now returns `bool`, and `uninstall`/`reinstall` stop before `Teardown` when a backup was requested but not written (new key `BACKUP_ABORTED`). The backup is written directly to `/root`, outside the directory that gets removed: the earlier `os.Rename` left the path inside the directory that `Teardown` deleted next when it failed, and the message "Backup saved" stayed true only on paper. `stack.backupPanelTo` removes the destination directory on any error: a truncated `db.sql.gz` next to an intact `.env` looked like a working backup. The error text now includes the stderr of `pg_dump`. Tests in `internal/stack/backup_test.go` replace `docker` with a script in `PATH`.
 
-- **v1.8.1**: пять находок ревью кода: `RegisterRemnawave` собирал JSON через `fmt.Sprintf` вместо `json.Marshal` (не эксплуатируется сейчас, но хрупко); оборванный doc-комментарий над `ConfigProfileInbounds`; ссылка на несуществующую функцию `UpdateConfigProfileInbounds` в комментарии `CreateConfigProfile` (реальное имя — `UpdateConfigProfile`); два мёртвых ключа i18n (`SELFSTEAL_PROMPT` — был только в EN-локали, нигде не вызывается; `MENU_TITLE` — заголовок меню давно берётся из константы `AppName`); неверный список вызывающих сторон в доккомменте `certs.AskCertDomain` (`internal/addnode` там больше не значится, вызывает только `internal/nodeprofile`). Ни один из этих четырёх коммитов не поднимал версию и не попадал в changelog при пуше — нарушение раздела 7, пункты 6-7. Этот коммит закрывает разрыв задним числом одной записью, вместо того чтобы переписывать уже запушенную историю.
+- **v1.9.0**: fixes from the code review and new commands. `api.GetPanelToken` built the URL without a scheme (`http://`), so "add node" did not work at all. Every request now goes through `api.BaseURL`, which accepts both `host:port` and `https://host`. The API token for the subscription page was written by prefix matching and missed an indented line in the compose file. That is replaced with `setComposeEnv`. Installers abort when registration, key generation, or the creation of the profile, node, host or token fails, and the `docker compose up` error is no longer ignored. `GetPublicKey` does not overwrite `SECRET_KEY` with an empty value. Removal and reinstall use `internal/stack`: only their own containers, volumes and images, with a backup offer and the `DELETE` confirmation. The stack directory is not removed when `compose down` failed. The global `docker system prune -a --volumes` is gone. The database password and `WEBHOOK_SECRET_HEADER` are generated at install time. Compose files, nginx.conf and Caddyfile are written with mode 0600. The log is 0600 in a 0700 directory, without ANSI codes. Node profile management keeps `dns`, `routing`, `outbounds` and foreign inbounds (`api.MergeProfileConfig`). End of stdin terminates the program instead of looping forever. Template downloads are limited to 10 attempts and 100 MB, replacing `/var/www/html` rolls back on error, and the backup-restore script is downloaded atomically. Nginx uses `$proxy_protocol_addr` for the panel, and the cookie check is case-sensitive. The tool dumps the database before a panel update. New menu item "Versions, diagnostics and migration" (`internal/maintenance`): container versions, state check, panel 2.x to 3.x migration. The same `doctor`, `versions` and `--version` are available from the command line. The WARP and "script update" stubs are removed from the menu and the README. The module is renamed to `github.com/FlexEbat/RemnaForge`.
 
-- **v1.8.0**: `README.md` (английский) стал основной версией — источником истины по содержанию. Добавлены переводы с идентичной структурой: `README.ru.md`, `README.zh.md`, `README.fa.md` (фарси, RTL). Переключатель языков первой строкой в каждом файле. `CONTRIBUTING.md`, раздел "Язык": зафиксировано, что правка факта в одной версии README обязана попасть во все четыре в одном коммите; `TECH.md`/`CONTRIBUTING.md` остаются только на русском (внутренние документы, не для конечного пользователя).
+- **v1.8.1**: five findings of a code review. `RegisterRemnawave` built JSON with `fmt.Sprintf` instead of `json.Marshal` (not exploitable now, but fragile). A truncated doc comment above `ConfigProfileInbounds`. A reference to the nonexistent function `UpdateConfigProfileInbounds` in the comment of `CreateConfigProfile` (the real name is `UpdateConfigProfile`). Two dead i18n keys: `SELFSTEAL_PROMPT` (present only in the EN locale and called nowhere) and `MENU_TITLE` (the menu title has long come from the `AppName` constant). A wrong list of callers in the doc comment of `certs.AskCertDomain` (`internal/addnode` is no longer listed there, only `internal/nodeprofile` calls it). None of these four commits bumped the version or reached the changelog when pushed, which broke section 7, items 6 and 7. This commit closes the gap retroactively with one entry instead of rewriting history that is already pushed.
 
-- **v1.7.0**: сверка с апстримом панели/ноды (последняя версия панели на момент сверки — 3.4.3, каналы анонсов [announces](https://f.docs.rw/c/announces/14)/[rw-panel](https://f.docs.rw/c/announces/rw-panel/16)/[rw-node](https://f.docs.rw/c/announces/rw-node/17)). Находки:
-  - **Важно для пользователей, не для этого кода**: панель v3.4.3 закрывает GHSA-8mcp-v46j-fp26 (authentication bypass → RCE в backend-tools). `docker-compose.yml` во всех install-флоу уже использует плавающий тег `remnawave/backend:3`, так что `docker compose pull && docker compose up -d` подтягивает патч без переустановки — но только если оператор реально это запускает. Добавлено напоминание в README ("Перед установкой") со ссылками на все три канала анонсов.
-  - **Найден и исправлен реальный баг**: `caddypanelfull`/`caddypanelonly` не сжимали ответы панели/subscription-page (`encode zstd gzip` отсутствовал в Caddyfile). Панель перестала сжимать ответы сама начиная с v3.0.0 (см. announces/354) — для Nginx-флоу это было исправлено ещё в v1.1.2 (`# Gzip Compression` блок), но для Caddy-флоу эквивалентная правка никогда не делалась. Не критично (трафик просто не сжимался, не 500/некорректный ответ), но реальная лишняя нагрузка на канал с v3.0.0 у всех Caddy-инсталляций.
-  - Проверены на предмет ломающих изменений API с v3.2.0 (нашей последней точки сверки) по 3.4.3: списки "endpoint теперь возвращает 201/202/204 без тела" не задевают ни один из вызываемых этим проектом эндпоинтов (`CreateConfigProfile`, `CreateNode`, `CreateHost`, `UpdateSquad`, `DeleteConfigProfile` — последний уже проверяет статус-код, не тело, с версии до этой сверки). Изменения по числовым ID у пользователей не касаются этого проекта (пользователями он не управляет).
-  - `templates/xrayWithoutRU.json` — Xray JSON шаблон подписки, который просили загружать ещё в одном из более ранних запросов, реализован как файл в репозитории с инструкцией (`templates/README.md`), не как авто-загрузка через API: шаблон назначается на конкретный Host через веб-интерфейс панели (Templates → Subscription Templates, затем Host → Расширенные → Шаблон Xray JSON) — выбор Host'а специфичен для каждого развёртывания, RemnaForge не может и не должен угадывать его при установке. Добавлена директива `remnawave.injectHosts` (селектор `sameTagAsRecipient`) — без неё шаблон, как он был прислан изначально, ссылался бы в routing на outbound `proxy`, которого нет в `outbounds`, и был бы нерабочим.
-  - Раздел "Не реализовано" явно помечен как не активный roadmap. README не помечает нереализованные пункты меню отдельно.
+- **v1.8.0**: `README.md` (English) became the main version and the source of truth for content. Translations with an identical structure were added: `README.ru.md`, `README.zh.md`, `README.fa.md` (Persian, RTL). The language switcher is the first line of each file. `CONTRIBUTING.md`, section "Language": a fact edit in one README version must reach all four in one commit. At that time `TECH.md` and `CONTRIBUTING.md` stayed Russian only (internal documents, not for the end user). Superseded in v1.9.12 for `TECH.md`.
 
-- **v1.6.0**: закрыт открытый пункт (1) из changelog v1.3.0/v1.3.1 (неизвестность wildcard-сертификата для ноды, которую текущий запуск не устанавливал). Оказалось, что для `panelonly`/`caddypanelonly`/`addnode` вопрос вообще снят: с v1.3.1 профиль при установке по умолчанию несёт только `Raw`, а значит вычисление пути к сертификату Hysteria2 в этих трёх местах было мёртвым кодом (аргумент вычислялся и передавался в `CreateConfigProfile`, но там не использовался) — код убран, вместе с ним `internal/addnode`'s `selectNodeWebserver()` (тоже стал мёртвым). Реально вопрос актуален только в `internal/nodeprofile`, единственном месте, где Hysteria2 включается уже после установки: там теперь `certs.AskCertDomain()` прямо спрашивает оператора, был ли сертификат ноды wildcard, вместо того чтобы угадывать по домену. Новый ключ `ASK_WILDCARD_CERT` (en+ru).
+- **v1.7.0**: reconciliation with the upstream panel and node (the latest panel version at the time was 3.4.3, announcement channels [announces](https://f.docs.rw/c/announces/14), [rw-panel](https://f.docs.rw/c/announces/rw-panel/16), [rw-node](https://f.docs.rw/c/announces/rw-node/17)). Findings:
+  - **Important for users, not for this code**: panel v3.4.3 closes GHSA-8mcp-v46j-fp26 (authentication bypass leading to RCE in backend-tools). `docker-compose.yml` in every install flow already uses the floating tag `remnawave/backend:3`, so `docker compose pull && docker compose up -d` pulls the patch without a reinstall, but only if the operator actually runs it. A reminder with links to all three announcement channels is added to the README ("Before you install").
+  - **A real bug found and fixed**: `caddypanelfull`/`caddypanelonly` did not compress panel and subscription-page responses (`encode zstd gzip` was missing in the Caddyfile). The panel stopped compressing responses itself starting with v3.0.0 (see announces/354). The Nginx flows got the fix in v1.1.2 (the `# Gzip Compression` block), but the equivalent fix for the Caddy flows was never made. It is not critical (traffic was simply not compressed, with no 500 and no malformed response), but it was extra load on the link for every Caddy installation since v3.0.0.
+  - Checked for breaking API changes from v3.2.0 (our last reconciliation point) to 3.4.3. The lists of "endpoint now returns 201/202/204 without a body" touch none of the endpoints this project calls (`CreateConfigProfile`, `CreateNode`, `CreateHost`, `UpdateSquad`, `DeleteConfigProfile`; the last already checks the status code, not the body, since a version before this reconciliation). The changes around numeric user IDs do not touch this project (it does not manage users).
+  - `templates/xrayWithoutRU.json`, the Xray JSON subscription template that was requested in an earlier task, is implemented as a file in the repository with instructions (`templates/README.md`), not as an automatic upload through the API: the template is assigned to a specific Host in the panel web UI (Templates, Subscription Templates, then Host, Advanced, Xray JSON template). The choice of Host is specific to each deployment, and RemnaForge cannot and should not guess it during installation. The directive `remnawave.injectHosts` (selector `sameTagAsRecipient`) is added. Without it, the template as originally sent referred in routing to an outbound `proxy` that does not exist in `outbounds` and would not work.
+  - The "Not implemented" section is marked explicitly as not an active roadmap. The README does not mark unimplemented menu items separately.
 
-- **v1.5.1**: `README.md` не должен упоминать ограничения среды разработки (например, что сборка Docker-образа не проверена) — такие оговорки принадлежат `TECH.md`/`CONTRIBUTING.md`, не пользовательской документации. Убрана соответствующая строка из раздела "Известные проблемы" (в TECH.md, раздел 5, эта оговорка уже была и осталась). Правило зафиксировано в разделе 6.
+- **v1.6.0**: closes open item (1) from the changelogs of v1.3.0 and v1.3.1 (not knowing whether a node that the current run did not install uses a wildcard certificate). For `panelonly`/`caddypanelonly`/`addnode` the question disappeared: since v1.3.1 the profile carries only `Raw` by default at install time, so computing the Hysteria2 certificate path in those three places was dead code (the argument was computed and passed to `CreateConfigProfile`, which did not use it). The code is removed, and with it `internal/addnode`'s `selectNodeWebserver()` (also dead now). The question stays relevant only in `internal/nodeprofile`, the only place where Hysteria2 is enabled after installation. There `certs.AskCertDomain()` now asks the operator directly whether the node certificate was a wildcard, instead of guessing from the domain. New key `ASK_WILDCARD_CERT` (en+ru).
 
-- **v1.5.0**: постоянный фикс для найденного в v1.4.2 бага (Caddy не запускался на co-located и отдельной ноде из-за отсутствия модуля `proxy_protocol` в стоковом образе). `internal/caddynode` и `internal/caddypanelfull` теперь собирают свой образ Caddy через `xcaddy` прямо в `docker-compose.yml` (`build.dockerfile_inline`, паттерн `caddy:2.11.2-builder` → `xcaddy build --with github.com/mastercactapus/caddy2-proxyprotocol` → копирование бинарника в `caddy:2.11.2`, по образцу из официального блога Caddy). `docker compose up -d` для этих флоу теперь с `--build`. Интерактивное предупреждение из v1.4.2 (`CADDY_PROXY_PROTOCOL_WARNING`, требовало подтверждения `y`) убрано — заменено короткой информационной строкой (`CADDY_BUILD_NOTE`) о том, что сборка образа занимает больше времени, чем обычная загрузка.
+- **v1.5.1**: `README.md` must not mention limits of the development environment (for example, that the Docker image build is unverified). Such caveats belong in `TECH.md`/`CONTRIBUTING.md`, not in user documentation. The matching line is removed from the "Known issues" section (in TECH.md, section 5, that caveat was already there and stays). The rule is recorded in section 6.
 
-  Проверено: итоговый `docker-compose.yml` для обоих флоу — валидный YAML (`yaml.safe_load`), секция `build.dockerfile_inline` разбирается корректно. **Не проверено**: реальная компиляция образа (`docker build`). Модуль `github.com/mastercactapus/caddy2-proxyprotocol` и сам паттерн `xcaddy`-сборки подтверждены по официальной документации Caddy, но **не собраны и не запущены end-to-end**. Перед тем как полагаться на этот фикс в проде, стоит один раз прогнать реальную установку на сервере с доступом в интернет и убедиться, что образ собирается и Caddy стартует.
+- **v1.5.0**: permanent fix for the bug found in v1.4.2 (Caddy did not start on a co-located and on a standalone node because the stock image lacks the `proxy_protocol` module). `internal/caddynode` and `internal/caddypanelfull` now build their own Caddy image with `xcaddy` directly in `docker-compose.yml` (`build.dockerfile_inline`, the pattern `caddy:2.11.2-builder`, then `xcaddy build --with github.com/mastercactapus/caddy2-proxyprotocol`, then copying the binary into `caddy:2.11.2`, following the example from the official Caddy blog). `docker compose up -d` for these flows now runs with `--build`. The interactive warning from v1.4.2 (`CADDY_PROXY_PROTOCOL_WARNING`, which required confirming with `y`) is gone. A short informational line (`CADDY_BUILD_NOTE`) replaces it and says the image build takes longer than a regular download.
 
-- **v1.4.3**: `internal/nodeprofile` больше не спрашивает Nginx/Caddy, если Hysteria2 уже активен на профиле — в этом случае существующий инбаунд переиспользуется целиком (`api.BuildProfileConfig`), и ответ на вопрос всё равно никуда не идёт. Вопрос остался только для случая, когда Hysteria2 включается впервые. Заодно: реально сгенерированные `nginx.conf`/`Caddyfile` (`nginxnode`, `panelfull`, `caddynode`, `caddypanelfull`) провалидированы `nginx -t`/`caddy validate`, а `docker-compose.yml` всех четырёх — как YAML (`yaml.safe_load`, проверены сервисы/тома) — всё синтаксически корректно, кроме уже задокументированного `proxy_protocol` (раздел 5, "Известные баги").
+  Verified: the resulting `docker-compose.yml` for both flows is valid YAML (`yaml.safe_load`), and the `build.dockerfile_inline` section parses correctly. **Not verified**: the real compilation of the image (`docker build`). The module `github.com/mastercactapus/caddy2-proxyprotocol` and the `xcaddy` build pattern are confirmed against the official Caddy documentation but were **not built and not run end to end**. Before relying on this fix in production, run one real installation on a server with internet access and confirm that the image builds and Caddy starts.
 
-- **v1.4.2**: обнаружен и задокументирован давний баг (не внесён в этой сессии): Caddy не запускается при установке co-located или отдельной ноды (`internal/caddynode`, `internal/caddypanelfull`) — `listener_wrappers { proxy_protocol; tls }` в Caddyfile ссылается на модуль, которого нет в стоковом образе `caddy:2.11.2`. Подтверждено локально через `caddy validate` на реально сгенерированном конфиге. Постоянный фикс не выбран (три варианта с компромиссами — раздел 5, "Известные баги"); пока перед запуском затронутых install/reinstall-флоу через Caddy показывается предупреждение и требуется подтверждение `y`. README: новый раздел "Известные проблемы".
+- **v1.4.3**: `internal/nodeprofile` no longer asks Nginx or Caddy when Hysteria2 is already active on the profile. In that case the existing inbound is reused as a whole (`api.BuildProfileConfig`), and the answer would go nowhere anyway. The question stays only for the case where Hysteria2 is enabled for the first time. Also: the actually generated `nginx.conf`/`Caddyfile` (`nginxnode`, `panelfull`, `caddynode`, `caddypanelfull`) are validated with `nginx -t`/`caddy validate`, and the `docker-compose.yml` of all four as YAML (`yaml.safe_load`, services and volumes checked). Everything is syntactically correct except the already documented `proxy_protocol` (section 5, "Known bugs").
 
-- **v1.4.1**: две регрессии, найденные ревью сразу после v1.4.0. (1) `internal/nodeprofile` искал Reality-инбаунд по жёстко зашитому тегу `"Raw"`, но `internal/addnode` создаёт его под тегом, равным имени сущности (`entityName`), не `"Raw"` — при работе через «Manage Node Profile» с нодой, зарегистрированной через `addnode`, это привело бы к тому, что существующий Reality-инбаунд не находится, чекбокс показывает его как выключенный, а подтверждение выбора создаёт НОВЫЙ инбаунд с тегом `"Raw"` и новым `privateKey`, теряя старый — то есть ломает уже выданные клиентам конфиги при первом же использовании этого пункта меню на такой ноде. Исправлено: Reality-инбаунд теперь ищется по `streamSettings.security == "reality"`, а не по имени тега; найденный тег переиспользуется при пересборке профиля. (2) `internal/uninstall.RemoveScript()` после переименования пунктов меню в v1.4.0 показывал заголовок `i18n.T("MENU_11")` ("Check for updates script") вместо `MENU_12` ("Remove script") — плата за то, что переименование пунктов в `menu.go`/`i18n.go` не сопровождалось поиском других мест, ссылающихся на те же ключи по имени.
+- **v1.4.2**: a long-standing bug is found and documented (not introduced in this session): Caddy does not start when a co-located or standalone node is installed (`internal/caddynode`, `internal/caddypanelfull`). `listener_wrappers { proxy_protocol; tls }` in the Caddyfile refers to a module that the stock image `caddy:2.11.2` lacks. Confirmed locally with `caddy validate` on a really generated config. No permanent fix was chosen (three options with trade-offs, section 5, "Known bugs"). Until then, a warning appears and the confirmation `y` is required before the affected install/reinstall flows run through Caddy. README: new section "Known issues".
 
-- **v1.4.0**: новый пункт главного меню «Manage Node Profile» (`internal/nodeprofile`) — включает или выключает `Hysteria2`/`XHTTP` inbound'ы на конфиг-профиле уже зарегистрированной ноды. Работает как `internal/addnode`: спрашивает URL панели, API-токен и имя профиля напрямую, а не полагается на локальный `.env` — рассчитан на любую ноду, а не только co-located. Выбор inbound'ов — чекбокс-меню (`[ ]`/`[x]`, номер переключает, пустая строка подтверждает, минимум один пункт обязателен).
-  API-слой (`internal/api`): добавлены `FindConfigProfileByName` (ищет профиль по имени, отдаёт текущий `config`) и `UpdateConfigProfile` (`PATCH /api/config-profiles`, тело `{uuid, config}` — панель заменяет конфиг целиком, не мёржит; подтверждено по реальному API панели 3.3.2/3.4.0). Построение inbound'ов при обновлении переиспользует уже выданные секреты (`privateKey`/`shortIds`/salamander-пароль) для inbound'ов, которые остаются включёнными — генерирует новые только для только что включённых, иначе каждое переключение через меню рвало бы все уже выданные клиентам конфиги.
-  Меню: новый пункт вставлен как `MENU_10` сразу после «Manage certificates domain»; `MENU_10`/`MENU_11` (Check for updates / Remove script) сдвинуты на `MENU_11`/`MENU_12`.
-  README: добавлен пункт 9 в список меню и абзац с описанием.
-  Открытый пункт (1) из changelog v1.3.0 (неизвестность wildcard-сертификата для ноды, которую этот запуск не устанавливал) актуален и здесь: домен и путь к сертификату для Hysteria2 берутся по домену как есть, без проверки, каким методом был выпущен сертификат на самой ноде.
-- **v1.3.1**: конфиг-профиль ноды по умолчанию снова несёт только `Raw` (VLESS+Reality) — стоковый профиль. `Hysteria2`/`XHTTP` остаются доступны (соответствующие location/route и монтирование сертификата в контейнер ноды из v1.3.0 никуда не делись), но включаются отдельно, не автоматически при установке. `internal/api.CreateConfigProfile` принимает новый параметр `ConfigProfileInbounds{Raw, Hysteria2, XHTTP bool}`; построение inbound'ов вынесено в переиспользуемые `buildInboundConfig`/`buildProfileConfig`, готовые для будущего пункта меню, который будет переключать набор inbound'ов на уже установленной ноде. Заодно закрыт открытый пункт (2) из changelog v1.3.0: `inboundUUID` для `CreateNode`/`CreateHost`/`UpdateSquad` теперь ищется по совпадению тега (`Raw`) в ответе панели, а не берётся по индексу 0 — больше не зависит от того, в каком порядке панель возвращает inbound'ы. Пункт (1) (неизвестность wildcard-сертификата для `panelonly`/`caddypanelonly`/`addnode`) остаётся открытым, актуален для будущего переключателя профилей. README: убран раздел "Чего инструмент не делает".
+- **v1.4.1**: two regressions found by a review right after v1.4.0. (1) `internal/nodeprofile` looked for the Reality inbound by the hardcoded tag `"Raw"`, but `internal/addnode` creates it under a tag equal to the entity name (`entityName`), not `"Raw"`. With "Manage Node Profile" on a node registered through `addnode`, the existing Reality inbound would not be found, the checkbox would show it as off, and confirming the selection would create a NEW inbound with the tag `"Raw"` and a new `privateKey`, losing the old one. That breaks the configs already issued to clients the first time this menu item is used on such a node. Fixed: the Reality inbound is now found by `streamSettings.security == "reality"` instead of the tag name, and the tag found is reused when the profile is rebuilt. (2) After the menu items were renamed in v1.4.0, `internal/uninstall.RemoveScript()` showed the title `i18n.T("MENU_11")` ("Check for updates script") instead of `MENU_12` ("Remove script"). That is the price of renaming items in `menu.go`/`i18n.go` without searching for other places that refer to the same keys by name.
 
-- **v1.3.0**: конфиг-профиль ноды (`internal/api.CreateConfigProfile`) теперь несёт три inbound'а вместо одного: `Raw` (VLESS+Reality, как раньше, тег переименован из `Steal`), `HYSTERIA-BBR` (Hysteria2, TLS терминирует сам Xray) и `XHTTP-TLS` (VLESS+XHTTP поверх второго unix-сокета). Изменение затронуло все пять мест, где создаётся профиль (`addnode`, `panelfull`, `panelonly`, `caddypanelfull`, `caddypanelonly`) и все четыре установщика самой ноды (`nginxnode`, `caddynode`, `panelfull`, `caddypanelfull`), которым нужно: 1) location `/api/v2/stream-events` в nginx.conf либо `handle`-блок в Caddyfile, проксирующий на `/dev/shm/xhttp.sock`, и 2) volume-монтирование сертификата ноды в контейнер `remnanode`, читаемое напрямую Xray для Hysteria2 (для Nginx — `/etc/letsencrypt/live/<домен>/{fullchain,privkey}.pem`, для Caddy — общий том `caddy_data`, путь `certs.CaddyCertPaths`, зависящий от дефолтного макета хранилища сертификатов Caddy). Роутинг-правила профиля расширены (блокировка `geosite:category-ru`/`geoip:ru` в дополнение к private). Два открытых момента, не решаемых внутри этого изменения: (1) `panelonly`/`caddypanelonly`/`addnode` не управляют файлами самой ноды и поэтому не могут знать, использовала ли она wildcard-сертификат (в этом случае реальный каталог сертификата — базовый домен, а не полный) — путь строится по домену как есть; (2) `CreateConfigProfile` по-прежнему берёт `inboundUUID` для `CreateNode`/`CreateHost`/`UpdateSquad` из первого элемента массива `inbounds` в ответе панели, полагаясь на то, что панель возвращает inbound'ы в том же порядке, в котором они были отправлены — не проверено против реального API панели.
+- **v1.4.0**: new main menu item "Manage Node Profile" (`internal/nodeprofile`). It enables or disables the `Hysteria2`/`XHTTP` inbounds on the config profile of an already registered node. It works like `internal/addnode`: it asks for the panel URL, the API token and the profile name directly and does not rely on a local `.env`, so it suits any node, not only a co-located one. The inbound choice is a checkbox menu (`[ ]`/`[x]`, a number toggles, an empty line confirms, at least one item is required).
+  API layer (`internal/api`): `FindConfigProfileByName` (finds a profile by name and returns its current `config`) and `UpdateConfigProfile` (`PATCH /api/config-profiles`, body `{uuid, config}`; the panel replaces the config as a whole and does not merge it, confirmed against the real panel API 3.3.2/3.4.0). Building inbounds on update reuses the secrets already issued (`privateKey`/`shortIds`/salamander password) for inbounds that stay enabled and generates new ones only for newly enabled inbounds. Otherwise every toggle through the menu would break all configs already issued to clients.
+  Menu: the new item is inserted as `MENU_10` right after "Manage certificates domain". `MENU_10`/`MENU_11` (Check for updates / Remove script) shift to `MENU_11`/`MENU_12`.
+  README: item 9 is added to the menu list, plus a paragraph describing it.
+  Open item (1) from the v1.3.0 changelog (not knowing whether the certificate of a node that this run did not install is a wildcard) applies here too: the domain and the certificate path for Hysteria2 are taken from the domain as is, without checking which method issued the certificate on the node itself.
 
-- **v1.2.2**: `CONTRIBUTING.md`: добавлен формат заголовка коммита `type(scope): description` (`feat`/`fix`/`docs`/`refactor`/`test`/`chore`) с примерами на масштабе проекта. Раздел 7 (Definition of Done), пункт 8, ссылается на этот формат.
-- **v1.2.1**: `README.md` переписан полностью: структура, оглавление, разделы про то, что именно ставится и куда, какие файлы трогает инструмент, что не реализовано. Отдельный обязательный к прочтению раздел перед установкой со ссылками на источники по VLESS Encryption/XTLS/REALITY (документация и исходный код Xray-core) и на документацию/исходный код самой панели Remnawave — RemnaForge генерирует конфигурацию для обоих проектов, но не проверяет содержательную корректность и актуальность параметров безопасности сверх того, что нужно для запуска, а формат и рекомендации этих двух проектов меняются от релиза к релизу. Фраза о переименовании в первой строке приведена к принятому в проекте формату: "[Новое имя] — это бывший [старое имя]. Проект переименован и продолжает развиваться как независимый форк [ссылка на апстрим]."
-- **v1.2.0**: проект переименован в **RemnaForge** и с этого момента развивается как независимый проект. Причина и последствия — раздел 1. Из кода, комментариев и служебной документации (`TECH.md`, `CONTRIBUTING.md`) убраны названия, ссылки и номера строк, которые связывали этот проект с его исторической предысторией; единственное упоминание того, что проект был переименован, теперь живёт в первой строке `README.md`. Конвенция `Original bash (file:N-M): funcName()` над каждой функцией снята (раздел 4 больше не требует её). Раздел 5 переписан без колонки "исходный файл". Раздел 8 (была "STATUS GAP") и раздел 9 переписаны: разработка больше не сверяется с посторонним источником для решений о поведении.
-- **v1.1.9**: `internal/certs`: унифицирован `renewHookCommand`, использовавшийся раньше в двух разных вариантах в `check.go` и `handle.go` (один с завершающим `docker compose exec remnawave-nginx nginx -s reload`, другой без). Ревью кода и комментариев по всему проекту: убраны построчные ссылки на файлы вне этого репозитория, добавлена защита от Zip Slip в `internal/selfsteal.extractZip()`, исправлен неверный текст ошибки в `internal/uninstall` (новый ключ `DOCKER_COMPOSE_DOWN_FAILED`), исправлен баг в `internal/managepanel.closePanelAccessCaddy()` — строка `bind unix/{$CADDY_SOCKET_PATH}` возвращалась в Caddyfile безусловно при `close`, даже на `internal/caddypanelonly`-инсталляции, где `CADDY_SOCKET_PATH` нигде не определена; теперь возвращается только если `docker-compose.yml` этой инсталляции реально определяет `CADDY_SOCKET_PATH`.
-- **v1.1.4**: `internal/caddypanelonly`/`internal/caddypanelfull` (установка панели без ноды / с нодой за Caddy), подключены в `internal/menu`.
-- **v1.1.3**: `internal/caddynode` протестирован построчно.
-- **v1.1.2**: gzip-блок в `nginx.conf` во всех трёх nginx install-флоу (`nginxnode`, `panelonly`, `panelfull`).
-- **v1.1.1**: совместимость с Remnawave Panel v3.2.0: `APP_SECRET` вместо `JWT_AUTH_SECRET`+`JWT_API_TOKENS_SECRET`, `DELETE`-эндпоинты возвращают `204` без тела, `remnawave/backend:3`. Регрессионный тест `internal/api/panelv3_test.go`.
-- **v1.1.0**: Backup и Restore. Делегирует стороннему `distillium/remnawave-backup-restore` (MIT).
-- **v1.0.x**: выбор языка интерфейса и сохранение в файл, логирование в файл (`ui.EnableFileLogging`), выбор конкретного selfsteal-шаблона в интерактивном меню, CI (`.github/workflows/ci.yml`), README с нуля, `internal/uninstall`, `internal/reinstall`.
-- **v0.1.0**: `internal/preflight`: установка docker/certbot/ufw/cron/unattended-upgrades/BBR на чистом сервере. Путь от чистого VPS до рабочей панели замкнут для nginx-варианта.
-- **v0.0.x**: базовая версия: IPv6, API-клиент панели, добавление ноды, selfsteal-шаблоны, домен-утилиты, сертификаты (Cloudflare DNS-01/ACME HTTP-01/Gcore DNS-01), три nginx install-флоу, управление панелью/нодой, локализация, главное меню.
+- **v1.3.1**: the node config profile again carries only `Raw` (VLESS+Reality) by default, the stock profile. `Hysteria2`/`XHTTP` stay available (the matching location/route and the certificate mount into the node container from v1.3.0 are still there) but are enabled separately and not automatically at install time. `internal/api.CreateConfigProfile` takes a new parameter `ConfigProfileInbounds{Raw, Hysteria2, XHTTP bool}`. The inbound construction moved into the reusable `buildInboundConfig`/`buildProfileConfig`, ready for a future menu item that toggles the inbound set on an installed node. This also closes open item (2) from the v1.3.0 changelog: `inboundUUID` for `CreateNode`/`CreateHost`/`UpdateSquad` is now found by matching the tag (`Raw`) in the panel response and is no longer taken by index 0, so it no longer depends on the order in which the panel returns inbounds. Item (1) (not knowing whether `panelonly`/`caddypanelonly`/`addnode` use a wildcard certificate) stays open and matters for the future profile switcher. README: the section "What the tool does not do" is removed.
 
----
+- **v1.3.0**: the node config profile (`internal/api.CreateConfigProfile`) now carries three inbounds instead of one: `Raw` (VLESS+Reality as before, the tag is renamed from `Steal`), `HYSTERIA-BBR` (Hysteria2, TLS terminated by Xray itself) and `XHTTP-TLS` (VLESS+XHTTP over a second unix socket). The change touched all five places that create a profile (`addnode`, `panelfull`, `panelonly`, `caddypanelfull`, `caddypanelonly`) and all four node installers (`nginxnode`, `caddynode`, `panelfull`, `caddypanelfull`), which need: 1) a location `/api/v2/stream-events` in nginx.conf, or a `handle` block in the Caddyfile, that proxies to `/dev/shm/xhttp.sock`, and 2) a volume mount of the node certificate into the `remnanode` container, read directly by Xray for Hysteria2 (for Nginx: `/etc/letsencrypt/live/<domain>/{fullchain,privkey}.pem`; for Caddy: the shared volume `caddy_data`, path `certs.CaddyCertPaths`, which depends on the default certificate storage layout of Caddy). The routing rules of the profile are extended (blocking `geosite:category-ru`/`geoip:ru` in addition to private). Two open points that this change does not resolve: (1) `panelonly`/`caddypanelonly`/`addnode` do not manage the files of the node itself and cannot know whether it used a wildcard certificate (in that case the real certificate directory is the base domain, not the full one), so the path is built from the domain as is. (2) `CreateConfigProfile` still takes `inboundUUID` for `CreateNode`/`CreateHost`/`UpdateSquad` from the first element of the `inbounds` array in the panel response, relying on the panel returning inbounds in the order they were sent, which is not verified against the real panel API.
 
-## 0. Как читать этот файл
-
-Служебный документ для тех, кто продолжает разработку. `README.md` описывает, что умеет инструмент для конечного пользователя. Этот файл фиксирует, что происходит внутри и что делать дальше. Обновляйте оба, каждый по своему назначению.
+- **v1.2.2**: `CONTRIBUTING.md`: the commit title format `type(scope): description` (`feat`/`fix`/`docs`/`refactor`/`test`/`chore`) is added with examples at the scale of the project. Section 7 (Definition of Done), item 8, refers to this format.
+- **v1.2.1**: `README.md` is rewritten completely: structure, table of contents, sections on what exactly gets installed and where, which files the tool touches, what is not implemented. A separate section that must be read before installation links to sources on VLESS Encryption/XTLS/REALITY (the Xray-core documentation and source) and to the documentation and source of the Remnawave panel itself. RemnaForge generates configuration for both projects but does not check the substantive correctness and currency of security parameters beyond what is needed to start, and the format and recommendations of those two projects change from release to release. The sentence about the rename in the first line is brought to the format the project uses: "[New name] is the former [old name]. The project is renamed and continues as an independent fork of [upstream link]."
+- **v1.2.0**: the project is renamed **RemnaForge** and develops as an independent project from this point. The reason and the consequences are in section 1. The code, the code comments and the internal documentation (`TECH.md`, `CONTRIBUTING.md`) lose the names, links and line numbers that tied the project to its history. The only remaining mention of the rename lives in the first line of `README.md`. The convention `Original bash (file:N-M): funcName()` above every function is dropped (section 4 no longer requires it). Section 5 is rewritten without the "source file" column. Section 8 (formerly "STATUS GAP") and section 9 are rewritten: development no longer checks an outside source to decide on behavior.
+- **v1.1.9**: `internal/certs`: `renewHookCommand` is unified. It was used in two different variants in `check.go` and `handle.go` (one with a trailing `docker compose exec remnawave-nginx nginx -s reload`, the other without). Review of the code and comments across the project: line-by-line references to files outside this repository are removed, a Zip Slip guard is added to `internal/selfsteal.extractZip()`, a wrong error text in `internal/uninstall` is fixed (new key `DOCKER_COMPOSE_DOWN_FAILED`), and a bug in `internal/managepanel.closePanelAccessCaddy()` is fixed: the line `bind unix/{$CADDY_SOCKET_PATH}` went back into the Caddyfile unconditionally on `close`, even on an `internal/caddypanelonly` installation where `CADDY_SOCKET_PATH` is defined nowhere. It now goes back only if the `docker-compose.yml` of that installation really defines `CADDY_SOCKET_PATH`.
+- **v1.1.4**: `internal/caddypanelonly`/`internal/caddypanelfull` (panel install without a node / with a node behind Caddy) are wired into `internal/menu`.
+- **v1.1.3**: `internal/caddynode` is tested line by line.
+- **v1.1.2**: gzip block in `nginx.conf` in all three nginx install flows (`nginxnode`, `panelonly`, `panelfull`).
+- **v1.1.1**: compatibility with Remnawave Panel v3.2.0: `APP_SECRET` instead of `JWT_AUTH_SECRET`+`JWT_API_TOKENS_SECRET`, `DELETE` endpoints return `204` without a body, `remnawave/backend:3`. Regression test `internal/api/panelv3_test.go`.
+- **v1.1.0**: Backup and Restore. Delegates to the third-party `distillium/remnawave-backup-restore` (MIT).
+- **v1.0.x**: interface language selection and saving to a file, logging to a file (`ui.EnableFileLogging`), choice of a specific selfsteal template in the interactive menu, CI (`.github/workflows/ci.yml`), README from scratch, `internal/uninstall`, `internal/reinstall`.
+- **v0.1.0**: `internal/preflight`: install of docker/certbot/ufw/cron/unattended-upgrades/BBR on a clean server. The path from a clean VPS to a working panel is closed for the nginx variant.
+- **v0.0.x**: base version: IPv6, panel API client, add node, selfsteal templates, domain utilities, certificates (Cloudflare DNS-01/ACME HTTP-01/Gcore DNS-01), three nginx install flows, panel/node management, localization, main menu.
 
 ---
 
-## 1. Проект
+## 0. How to read this file
 
-RemnaForge ставит и обслуживает [Remnawave](https://remna.st) на сервере через интерактивное текстовое меню: панель, ноду или обе части сразу, за Nginx или за Caddy.
-
-С v1.2.0 это независимый проект: решения о том, как должен вести себя код, принимаются исходя из того, что правильно для этого проекта сейчас, а не исходя из совпадения с каким-либо внешним источником. Раздел 9 фиксирует, что это значит на практике.
+An internal document for those who continue development. `README.md` describes what the tool does for the end user. This file records what happens inside and what to do next. Update both, each for its own purpose.
 
 ---
 
-## 2. Стек и ограничения среды
+## 1. Project
 
-- Go 1.22+, весь код на stdlib, кроме `golang.org/x/net/publicsuffix` (`internal/domain`, определение базового домена под многоуровневыми суффиксами вроде `.co.uk`).
-- Внешние зависимости в `go.mod` не запрещены. Добавляйте их, когда это реально лучше stdlib.
-- `golang.org/x/net` подключён через `replace` на зеркало `github.com/golang/net` (`replace golang.org/x/net vX.Y.Z => github.com/golang/net vX.Y.Z`). Для обновления версии: `go get github.com/golang/net@vX.Y.Z`.
-- Пути, которым нужны Docker, systemd, ufw и публичный домен, проверяет CI (`.github/workflows/ci.yml`, integration-джобы `preflight-integration`/`oscheck-integration`) на Ubuntu VM GitHub Actions.
+RemnaForge installs and maintains [Remnawave](https://remna.st) on a server through an interactive text menu: the panel, the node, or both parts together, behind Nginx or behind Caddy.
+
+Since v1.2.0 this is an independent project: decisions about how the code behaves rest on what is right for this project now, not on matching any outside source. Section 9 records what that means in practice.
 
 ---
 
-## 3. Структура папок
+## 2. Stack and environment constraints
+
+- Go 1.22+, all code on the stdlib except `golang.org/x/net/publicsuffix` (`internal/domain`, base domain detection under multi-level suffixes such as `.co.uk`).
+- External dependencies in `go.mod` are not forbidden. Add them when they are really better than the stdlib.
+- `golang.org/x/net` is wired through `replace` to the mirror `github.com/golang/net` (`replace golang.org/x/net vX.Y.Z => github.com/golang/net vX.Y.Z`). To bump the version: `go get github.com/golang/net@vX.Y.Z`.
+- Paths that need Docker, systemd, ufw and a public domain are checked by CI (`.github/workflows/ci.yml`, the integration jobs `preflight-integration`/`oscheck-integration`) on a GitHub Actions Ubuntu VM.
+
+---
+
+## 3. Folder structure
 
 ```
-cmd/remnawave/          точка входа: логирование, выбор языка, проверка ОС и root, главное меню
+cmd/remnawave/          entry point: logging, language selection, OS and root check, main menu
 internal/
-  addnode/               добавление ноды к панели
-  api/                    HTTP-клиент Remnawave API
-  backuprestore/          загрузка и запуск стороннего backup-restore
-  caddynode/              установка ноды за Caddy
-  caddypanelfull/         установка панели с совмещённой нодой за Caddy
-  caddypanelonly/         установка панели без ноды за Caddy
-  certs/                  выпуск и обновление TLS-сертификатов для Nginx
-  domain/                 извлечение базового домена, проверка DNS
-  genutil/                пароли, логины, секреты
-  i18n/                   локализация EN/RU, выбор и сохранение языка
-  ipv6/                   включение и отключение IPv6
-  maintenance/            версии контейнеров, проверка состояния, миграция панели 2.x на 3.x
-  managepanel/            управление установленной панелью и нодой
-  menu/                   главное меню
-  nginxnode/              установка ноды за Nginx
-  nodeprofile/            включение и отключение inbound'ов Raw/Hysteria2/XHTTP на профиле ноды
-  oscheck/                проверка версии ОС и прав root
-  panelfull/              установка панели с совмещённой нодой за Nginx
-  panelonly/              установка панели без ноды за Nginx
-  preflight/              установка docker, certbot, ufw перед первым запуском
-  reinstall/              переустановка панели или ноды поверх текущей
-  selfsteal/              случайный или выбранный HTML-шаблон для selfsteal-домена
-  stack/                  снос стека, бэкап базы, проверка томов docker compose
-  uninstall/              удаление инструмента и установленной панели
-  ui/                     цвета терминала, чтение ввода, логирование в файл
+  addnode/               add a node to the panel
+  api/                    HTTP client of the Remnawave API
+  backuprestore/          download and run the third-party backup-restore
+  caddynode/              node install behind Caddy
+  caddypanelfull/         panel install with a co-located node behind Caddy
+  caddypanelonly/         panel install without a node behind Caddy
+  certs/                  issue and renew TLS certificates for Nginx
+  domain/                 base domain extraction, DNS check
+  genutil/                passwords, logins, secrets
+  i18n/                   EN/RU localization, language selection and saving
+  ipv6/                   enable and disable IPv6
+  maintenance/            container versions, state check, panel 2.x to 3.x migration
+  managepanel/            manage the installed panel and node
+  menu/                   main menu
+  nginxnode/              node install behind Nginx
+  nodeprofile/            enable and disable the Raw/Hysteria2/XHTTP inbounds on the node profile
+  oscheck/                OS version and root check
+  panelfull/              panel install with a co-located node behind Nginx
+  panelonly/              panel install without a node behind Nginx
+  preflight/              install docker, certbot, ufw before the first run
+  reinstall/              reinstall the panel or the node over the current one
+  selfsteal/              random or chosen HTML template for the selfsteal domain
+  stack/                  stack teardown, database backup, docker compose volume check
+  uninstall/              remove the tool and the installed panel
+  ui/                     terminal colors, input reading, file logging
 ```
 
 ---
 
-## 4. Контракты (заморожены)
+## 4. Contracts (frozen)
 
-Трогать только осознанно, с пониманием последствий:
+Touch only deliberately, with an understanding of the consequences:
 
-- **Формат ключей i18n.** `internal/i18n/i18n.go` содержит все строки интерфейса на английском и русском в двух `map[string]string`. Не переписывайте вручную целиком. Точечную правку конкретной строки фиксируйте комментарием над данными. Синтетические строки, которых нет в основном наборе (`IN_DEVELOPMENT`, `AvailableTemplates`, `DownloadingBackupRestore`) живут в отдельных мини-картах внизу файла с пометкой об этом.
-- **Структура `docker-compose.yml`/`nginx.conf`/`Caddyfile`.** Внешний контракт с образами `remnawave/backend`, `remnawave/node`, `remnawave/subscription-page`, `nginx`, `caddy`. Переменные окружения, порты, healthcheck должны совпадать с тем, что ждут эти образы. При смене мажорной версии панели сверяйтесь с реальным changelog панели (пример: v1.1.1), не предполагайте.
-- **Именование Go-пакетов по содержимому.** Каждый пакет называется по тому, что он делает (`panelonly` — панель без ноды, `panelfull` — панель с нодой), независимо от истории именования. Каждый раз сверяйтесь с содержимым файла, если оно неочевидно из названия, не полагайтесь на аналогию с похожим модулем.
-- **`internal/preflight.EnsureInstalled()`.** Точка входа для установки зависимостей (docker/certbot/ufw/cron/unattended-upgrades/BBR). Все install-флоу (`nginxnode`, `panelonly`, `panelfull`, `caddynode`, `caddypanelonly`, `caddypanelfull`) вызывают её первой, до первого интерактивного вопроса пользователю.
-- **`ui.Exit()`: единственная точка вызова `os.Exit`.** После `ui.EnableFileLogging()` голый `os.Exit()` теряет буфер pipe. Новые прямые вызовы `os.Exit()` не добавлять, только `ui.Exit()`.
+- **i18n key format.** `internal/i18n/i18n.go` holds all interface strings in English and Russian in two `map[string]string`. Do not rewrite it as a whole by hand. Record a targeted edit of a specific string with a comment above the data. Synthetic strings that are not in the main set (`IN_DEVELOPMENT`, `AvailableTemplates`, `DownloadingBackupRestore`) live in separate mini-maps at the bottom of the file, marked as such.
+- **Structure of `docker-compose.yml`/`nginx.conf`/`Caddyfile`.** An external contract with the images `remnawave/backend`, `remnawave/node`, `remnawave/subscription-page`, `nginx`, `caddy`. Environment variables, ports and healthchecks must match what these images expect. On a major panel version change, check the real panel changelog (example: v1.1.1) and do not assume.
+- **Go package names by content.** Each package is named after what it does (`panelonly` is the panel without a node, `panelfull` is the panel with a node), whatever the naming history. Check the content of the file whenever it is not obvious from the name, and do not rely on analogy with a similar module.
+- **`internal/preflight.EnsureInstalled()`.** The entry point for installing dependencies (docker/certbot/ufw/cron/unattended-upgrades/BBR). Every install flow (`nginxnode`, `panelonly`, `panelfull`, `caddynode`, `caddypanelonly`, `caddypanelfull`) calls it first, before the first interactive question to the user.
+- **`ui.Exit()` is the only call site of `os.Exit`.** After `ui.EnableFileLogging()` a bare `os.Exit()` loses the pipe buffer. Do not add new direct `os.Exit()` calls, only `ui.Exit()`.
 
 ---
 
-## 5. Что есть в проекте
+## 5. What the project has
 
-### Реализовано
+### Implemented
 
-| Область | Пакет |
+| Area | Package |
 |---|---|
-| Проверка ОС и root | `internal/oscheck` |
+| OS and root check | `internal/oscheck` |
 | IPv6 | `internal/ipv6` |
-| API панели | `internal/api` |
-| Добавление ноды | `internal/addnode` |
-| Управление inbound'ами конфиг-профиля ноды (Raw/Hysteria2/XHTTP) | `internal/nodeprofile` |
-| Шаблоны selfsteal | `internal/selfsteal` |
-| Домен-утилиты | `internal/domain` |
-| Сертификаты (выпуск, продление, меню управления) | `internal/certs` |
-| Установка ноды за Nginx | `internal/nginxnode` |
-| Установка панели без ноды (Nginx) | `internal/panelonly` |
-| Установка панели с нодой (Nginx) | `internal/panelfull` |
-| Установка ноды за Caddy | `internal/caddynode` |
-| Установка панели без ноды (Caddy) | `internal/caddypanelonly` |
-| Установка панели с нодой (Caddy) | `internal/caddypanelfull` |
-| Управление панелью и нодой (Nginx и Caddy) | `internal/managepanel` |
-| Переустановка (Nginx и Caddy) | `internal/reinstall` |
-| Установка зависимостей | `internal/preflight` |
-| Удаление | `internal/uninstall` |
-| Версии, диагностика и миграция панели 2.x на 3.x | `internal/maintenance` |
-| Снос стека и бэкап базы (общие помощники `uninstall`, `reinstall`, `managepanel`) | `internal/stack` |
-| Backup и restore (делегирует стороннему `distillium/remnawave-backup-restore`, MIT) | `internal/backuprestore` |
-| Локализация, выбор языка, логирование в файл | `internal/i18n`, `internal/ui` |
-| Главное меню | `internal/menu` |
+| Panel API | `internal/api` |
+| Add node | `internal/addnode` |
+| Node config profile inbound management (Raw/Hysteria2/XHTTP) | `internal/nodeprofile` |
+| Selfsteal templates | `internal/selfsteal` |
+| Domain utilities | `internal/domain` |
+| Certificates (issue, renew, management menu) | `internal/certs` |
+| Node install behind Nginx | `internal/nginxnode` |
+| Panel install without a node (Nginx) | `internal/panelonly` |
+| Panel install with a node (Nginx) | `internal/panelfull` |
+| Node install behind Caddy | `internal/caddynode` |
+| Panel install without a node (Caddy) | `internal/caddypanelonly` |
+| Panel install with a node (Caddy) | `internal/caddypanelfull` |
+| Panel and node management (Nginx and Caddy) | `internal/managepanel` |
+| Reinstall (Nginx and Caddy) | `internal/reinstall` |
+| Dependency install | `internal/preflight` |
+| Removal | `internal/uninstall` |
+| Versions, diagnostics and panel 2.x to 3.x migration | `internal/maintenance` |
+| Stack teardown and database backup (shared helpers of `uninstall`, `reinstall`, `managepanel`) | `internal/stack` |
+| Backup and restore (delegates to the third-party `distillium/remnawave-backup-restore`, MIT) | `internal/backuprestore` |
+| Localization, language selection, file logging | `internal/i18n`, `internal/ui` |
+| Main menu | `internal/menu` |
 | CI | `.github/workflows/ci.yml` |
 
-### Не реализовано
+### Not implemented
 
-Не в активной разработке, не в ближайших планах — упомянуто здесь для полноты, не как roadmap.
+Not in active development and not in the near plans. Listed here for completeness, not as a roadmap.
 
-- **WARP Native.** Не начато.
-- **Автообновление.** Требует опубликованных релизов с готовыми сборками. Конвейер настроен (`.github/workflows/release.yml`, `.goreleaser.yaml`: linux amd64 и arm64 по тегу `v*`), но на момент записи в репозитории нет ни одного тега `v*`.
-- **Механизм самоустановки.** Нет `install.sh`, только сборка из исходников. Логически связано с автообновлением: сначала self-install, потом autoupdate может что-то реально обновлять.
+- **WARP Native.** Not started.
+- **Auto-update.** Needs published releases with ready builds. The pipeline is set up (`.github/workflows/release.yml`, `.goreleaser.yaml`: linux amd64 and arm64 on a `v*` tag), but at the time of writing the repository has no `v*` tag.
+- **Self-install mechanism.** There is no `install.sh`, only a build from source. It ties logically to auto-update: self-install first, then auto-update has something real to update.
 
-### Известные баги
+### Known bugs
 
-Пусто — на данный момент известных багов, требующих фикса, нет. Последний закрыт ниже (раздел не удалён, чтобы сохранить формат для следующей находки).
+Empty. At the moment there are no known bugs that need a fix. The last one is closed below (the section is not removed, to keep the format for the next finding).
 
-<!-- Закрыто: Caddy не запускался на co-located и отдельной ноде
-     (internal/caddynode, internal/caddypanelfull) из-за отсутствия
-     модуля proxy_protocol в стоковом образе caddy. Исправлено в
-     changelog ниже сборкой через xcaddy. См. историю changelog для
-     полного описания находки и рассмотренных вариантов. -->
-
----
-
-## 6. Правила письма
-
-Активный залог, конкретика вместо общих фраз, без вводных оборотов, без длинного тире, без наречий-усилителей. Комментарий объясняет причину решения, не пересказывает соседнюю строку. Закомментированный код не оставлять. Полные правила с примерами: `CONTRIBUTING.md`.
-
-`README.md` описывает инструмент для конечного пользователя и не упоминает ограничения среды разработки и то, что было или не было проверено при написании кода. Такие оговорки идут в `TECH.md` или `CONTRIBUTING.md`.
+<!-- Closed: Caddy did not start on a co-located and on a standalone node
+     (internal/caddynode, internal/caddypanelfull) because the stock caddy
+     image lacks the proxy_protocol module. Fixed in the changelog above by
+     building through xcaddy. See the changelog history for the full
+     description of the finding and the options considered. -->
 
 ---
 
-## 7. Definition of Done для одной единицы работы
+## 6. Writing rules
 
-1. `go build ./...`: чисто.
-2. `go vet ./...`: чисто.
-3. `gofmt -l .`: пустой вывод.
-4. `go test ./...`: чисто. Постоянные тесты живут в `_test.go`. Одноразовые проверочные тесты пишутся, гоняются, потом удаляются, не коммитятся.
-5. Если менялось поведение, видимое пользователю, обновить `README.md`.
-6. Версия в `internal/menu/version.go` увеличена.
-7. Этот файл обновлён: новый пункт в changelog шапки, изменения в разделах 4 и 5, если контракт или список функциональности сдвинулись.
-8. Закоммичено с заголовком в формате `type(scope): description` (`CONTRIBUTING.md`) и подробным телом сообщения: что изменилось и почему, не только что.
-9. Запушено в `dev`, пуш проверен независимым `git clone` + `go build`. Локальному состоянию после пуша не доверять, git остаётся источником истины.
+Active voice, specifics instead of generic phrases, no filler openers, no long dash, no intensifying adverbs. A comment explains the reason for a decision and does not retell the neighboring line. Do not leave commented-out code. Full rules with examples: `CONTRIBUTING.md`.
+
+`README.md` describes the tool for the end user. It does not mention limits of the development environment or what was or was not verified while the code was written. Such caveats go to `TECH.md` or `CONTRIBUTING.md`.
 
 ---
 
-## 8. Когда не хватает факта о проекте
+## 7. Definition of Done for one unit of work
 
-Непонятно, что должен делать код в конкретной ситуации, как называется контракт, какой пакет уже покрывает нужную функциональность. Работа останавливается до прояснения, предположения по аналогии с похожим модулем не подставляются.
-
-Порядок действий:
-
-1. Найти ответ в этом файле или в самом коде (README, TECH.md, комментарии, тесты). Если однозначного ответа нет и решение затрагивает поведение, видимое пользователю, или контракт из раздела 4, спросить у того, кто ведёт разработку, вместо того чтобы предполагать.
-2. Принятое решение зафиксировать в разделе 4 или 5 этого файла в том же коммите, где оно использовано.
-3. Если факт противоречит уже записанному здесь, явно исправить старую запись, не оставлять обе версии рядом.
-
----
-
-## 9. Правила работы
-
-- Хирургические правки: соседний рабочий код не улучшать и не рефакторить без причины, связанной с текущей задачей.
-- **Баги чинятся всегда, без исключений, независимо от размера или давности.** Найден баг — чинится в той же единице работы, где найден. Совпадение с тем, как код вёл себя раньше, не аргумент за сохранение дефекта.
-- Одна единица работы за один пуш. Definition of Done (раздел 7) выполняется перед каждым пушем, не в конце большой серии правок.
+1. `go build ./...`: clean.
+2. `go vet ./...`: clean.
+3. `gofmt -l .`: empty output.
+4. `go test ./...`: clean. Permanent tests live in `_test.go`. One-off verification tests are written, run, then deleted and not committed.
+5. If user-visible behavior changed, update `README.md`.
+6. The version in `internal/menu/version.go` is bumped.
+7. This file is updated: a new item in the changelog header, and changes in sections 4 and 5 if a contract or the list of features shifted.
+8. Committed with a title in the format `type(scope): description` (`CONTRIBUTING.md`) and a detailed commit body: what changed and why, not only what.
+9. Pushed to `dev`, and the push is verified by an independent `git clone` + `go build`. Do not trust the local state after a push. Git stays the source of truth.
 
 ---
 
-## 10. Ревью после единицы работы
+## 8. When a fact about the project is missing
 
-Отдельным проходом, после того как код написан и Definition of Done зелёный:
+It is unclear what the code should do in a specific situation, what a contract is called, or which package already covers the needed functionality. Work stops until this is clarified. Assumptions by analogy with a similar module are not substituted.
 
-1. Комментарии над функцией объясняют, что она делает и почему, а не пересказывают соседнюю строку кода.
-2. Изменения в поведении описаны в сообщении коммита и в changelog.
-3. Мёртвого кода нет: неиспользуемые функции, закомментированные блоки, заглушки без пометки `🚧`.
-4. Имена переменных окружения в `docker-compose.yml`/`.env`/`nginx.conf`/`Caddyfile` совпадают с тем, что ждут образы `remnawave/*` (раздел 4).
-5. Раздел 5 отражает реальный статус: ничего не отмечено готовым, если не собрано и не проверено.
+Order of actions:
+
+1. Find the answer in this file or in the code itself (README, TECH.md, comments, tests). If there is no unambiguous answer and the decision touches user-visible behavior or a contract from section 4, ask the person who leads development instead of assuming.
+2. Record the decision in section 4 or 5 of this file, in the same commit that uses it.
+3. If a fact contradicts what is already recorded here, correct the old record explicitly and do not leave both versions side by side.
+
+---
+
+## 9. Working rules
+
+- Surgical edits: do not improve or refactor neighboring working code without a reason tied to the current task.
+- **Bugs are always fixed, without exceptions, regardless of size or age.** A bug found is fixed in the same unit of work where it was found. Matching how the code behaved earlier is not an argument for keeping a defect.
+- One unit of work per push. The Definition of Done (section 7) runs before every push, not at the end of a large series of edits.
+
+---
+
+## 10. Review after a unit of work
+
+A separate pass, after the code is written and the Definition of Done is green:
+
+1. Comments above a function explain what it does and why, and do not retell the neighboring line of code.
+2. Behavior changes are described in the commit message and in the changelog.
+3. No dead code: no unused functions, no commented-out blocks, no stubs without a `🚧` mark.
+4. Environment variable names in `docker-compose.yml`/`.env`/`nginx.conf`/`Caddyfile` match what the `remnawave/*` images expect (section 4).
+5. Section 5 reflects the real status: nothing is marked ready unless it is built and verified.
