@@ -1,8 +1,10 @@
 # TECH.md
 
-**Version: v1.9.19** (2026-11-12)
+**Version: v1.9.20** (2026-11-12)
 
 Changelog (newest first, one entry per pushed unit of work):
+
+- **v1.9.20**: the remaining open points of section 11 are decided. Slice 16 blocks `vpn`, `node`, `panel`, country codes, `proxy`, `admin`, `xray`, `vless` and `remna`. Slice 2 leaves servers that already run BBR, unattended-upgrades and ufw as they are. Slice 13: the HAProxy backend implements TLS everywhere, so it supports TLS-terminated profiles only and skips Reality, which does not fit that routing yet. Nginx and Caddy flows keep Reality. The code is unchanged.
 
 - **v1.9.19**: the "deprecated" label of `Raw Reality` is removed again (reverts the code of v1.9.14: the picker can switch `Raw` on, and the labels, the key `NODE_PROFILE_DEPRECATED_BLOCKED`, `toggleOption` and the README sentences are gone). The maintainer asked to drop only the label. The install flows keep creating the profile, the host and the squad with `Raw Reality` during the initial setup, as before, and the tag `Raw` stays. The decisions of v1.9.16 (empty default profiles), v1.9.17 (nothing created at install) and the tag part of v1.9.18 are withdrawn. Still valid: only Debian and Ubuntu, `gpg` for backups and releases, `getMe`, SNI routing on 443 for every proxy, the domain name policy, the panel on 443 with 8443 as the fallback. Section 11 is corrected.
 
@@ -327,7 +329,7 @@ Depends on slice 1.
 - `packagesAlreadySatisfied` stops requiring anything that moved out.
 - Update README (the "Installs dependencies" line, "Files this tool creates") in all four languages in one commit.
 - Done when: a fresh run of an install flow leaves `/etc/sysctl.d/99-remnaforge-bbr.conf`, the unattended-upgrades config and the ufw state untouched (test with a fake `PATH` and a temp root). Each switch in the menu is idempotent. `TestPreflightIntegration` is adjusted to match.
-- Open: servers that already run with the old behavior keep their BBR and ufw state. The slice does not undo it.
+- Decided: servers that already run with the old behavior keep their BBR, unattended-upgrades and ufw state. The slice does not undo it.
 
 ### Slice 3. Environment detection (points 5, 11)
 
@@ -439,7 +441,7 @@ Depends on slices 7 and 10.
 - Introduce a proxy backend interface (`Nginx`, `Caddy`, `HAProxy`) in a new package. The six install packages and `managepanel` share a large amount of near-identical code per proxy. The interface replaces that duplication step by step: the first move extracts the existing Nginx and Caddy code behind the interface with no behavior change, then HAProxy is added as a third implementation.
 - HAProxy flows for panel, node and both, with certificates handled like the Nginx flow (certbot, concatenated PEM, reload hook).
 - Done when: generated configs for all three proxies pass the slice 10 validation. The removed duplicated code shows in the diff.
-- Decided: every profile is routed by SNI, whichever proxy is chosen (Nginx, Caddy or HAProxy). The flow creates the sockets first, then the routing on top of them. All profiles listen on 443. Still open: how PROXY protocol and the selfsteal site map onto HAProxy, The panel is decided: it is served on 443 behind the SNI routing, and 8443 stays as the fallback that `managepanel` opens and closes. In the current Nginx layout Xray owns 443 and passes SNI of the panel, docs and selfsteal domains to nginx over `/dev/shm/nginx.sock` with PROXY protocol, and XHTTP goes to `/dev/shm/xhttp.sock`. The Caddy and HAProxy backends keep this socket-first layout.
+- Decided: every profile is routed by SNI, whichever proxy is chosen (Nginx, Caddy or HAProxy). The flow creates the sockets first, then the routing on top of them. All profiles listen on 443. Decided: the HAProxy backend implements TLS everywhere and skips Reality, which does not fit that routing yet, so HAProxy flows offer TLS-terminated profiles only. Still open, to settle when this slice starts: how PROXY protocol and the selfsteal site map onto HAProxy. The panel is decided: it is served on 443 behind the SNI routing, and 8443 stays as the fallback that `managepanel` opens and closes. In the current Nginx layout Xray owns 443 and passes SNI of the panel, docs and selfsteal domains to nginx over `/dev/shm/nginx.sock` with PROXY protocol, and XHTTP goes to `/dev/shm/xhttp.sock`. The Caddy and HAProxy backends keep this socket-first layout.
 
 ### Slice 14. Bootstrap script and signed releases (points 0, 1)
 
@@ -460,7 +462,7 @@ Depends on slice 5.
 - Reject predictable names for the panel, node and selfsteal domains. The first label may not be `vpn`, `node`, `panel`, and may not be a two-letter country code (`nl`, `de`, `us`) or a label that contains one as a separate part (`nl1`, `de-node`). The check runs in every domain prompt (`domain.CheckDomain` callers) before any DNS or certificate work.
 - On a match the tool prints that such names are insecure, because scanners and blocklists look for them first, and suggests neutral labels such as `stats` or `metrics`. The operator must enter another name.
 - Done when: table tests cover the rejected labels, accepted labels and the two-letter code list, in both locales of the message.
-- Open: the full word list beyond `vpn`, `node`, `panel` and country codes. Planned: add `proxy`, `admin`, `xray`, `vless`, `remna` and ask the maintainer to confirm.
+- Decided: the rejected words are `vpn`, `node`, `panel`, country codes, `proxy`, `admin`, `xray`, `vless` and `remna`.
 
 ### Order of work
 
