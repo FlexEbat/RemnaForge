@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/domain"
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -84,7 +84,7 @@ func CheckAPI(apiKey, email string) (validAPIKey, validEmail string, err error) 
 // runCertbot is a small os/exec wrapper: certbot's own stdout/stderr are
 // left attached to the process so the user sees its output directly.
 func runCertbot(args ...string) error {
-	cmd := exec.Command("certbot", args...)
+	cmd := execx.Command("certbot", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -134,7 +134,7 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 		}
 
 	case "2": // ACME HTTP-01 (no wildcard)
-		_ = exec.Command("ufw", "allow", "80/tcp", "comment", "HTTP for ACME challenge").Run()
+		_ = execx.Command("ufw", "allow", "80/tcp", "comment", "HTTP for ACME challenge").Run()
 
 		certErr := runCertbot(
 			"certonly",
@@ -148,8 +148,8 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 			"--elliptic-curve", "secp384r1",
 		)
 
-		_ = exec.Command("ufw", "delete", "allow", "80/tcp").Run()
-		_ = exec.Command("ufw", "reload").Run()
+		_ = execx.Command("ufw", "delete", "allow", "80/tcp").Run()
+		_ = execx.Command("ufw", "reload").Run()
 
 		if certErr != nil {
 			return certErr
@@ -203,7 +203,7 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 }
 
 func certbotHasPlugin(name string) bool {
-	out, err := exec.Command("certbot", "plugins").CombinedOutput()
+	out, err := execx.Command("certbot", "plugins").CombinedOutput()
 	if err != nil {
 		return false
 	}
@@ -211,14 +211,14 @@ func certbotHasPlugin(name string) bool {
 }
 
 func installGcorePlugin() error {
-	helpOut, _ := exec.Command("python3", "-m", "pip", "install", "--help").CombinedOutput()
+	helpOut, _ := execx.Command("python3", "-m", "pip", "install", "--help").CombinedOutput()
 	args := []string{"-m", "pip", "install"}
 	if strings.Contains(string(helpOut), "break-system-packages") {
 		args = append(args, "--break-system-packages")
 	}
 	args = append(args, "certbot-dns-gcore")
 
-	if err := exec.Command("python3", args...).Run(); err != nil {
+	if err := execx.Command("python3", args...).Run(); err != nil {
 		return err
 	}
 	if !certbotHasPlugin("dns-gcore") {

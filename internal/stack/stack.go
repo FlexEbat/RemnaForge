@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -25,7 +25,7 @@ import (
 // volumes depend on.
 func Teardown(dir string) error {
 	if _, err := os.Stat(filepath.Join(dir, "docker-compose.yml")); err == nil {
-		cmd := exec.Command("docker", "compose", "down", "-v", "--rmi", "all", "--remove-orphans")
+		cmd := execx.Command("docker", "compose", "down", "-v", "--rmi", "all", "--remove-orphans")
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("docker compose down in %s: %v: %s", dir, err, out)
@@ -37,7 +37,7 @@ func Teardown(dir string) error {
 // VolumeExists reports whether a docker volume whose name contains the
 // given text exists (compose prefixes volume names with the project).
 func VolumeExists(name string) bool {
-	out, err := exec.Command("docker", "volume", "ls", "-q", "--filter", "name="+name).Output()
+	out, err := execx.Command("docker", "volume", "ls", "-q", "--filter", "name="+name).Output()
 	return err == nil && strings.TrimSpace(string(out)) != ""
 }
 
@@ -78,7 +78,7 @@ func backupPanelTo(dir, dest string) (err error) {
 	defer out.Close()
 
 	gz := gzip.NewWriter(out)
-	cmd := exec.Command("docker", "exec", "remnawave-db", "sh", "-c",
+	cmd := execx.CommandTimeout(execx.DockerLongTimeout, "docker", "exec", "remnawave-db", "sh", "-c",
 		`pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"`)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -112,7 +112,7 @@ func PromptBackup(dir string) bool {
 	if _, err := os.Stat(filepath.Join(dir, "docker-compose.yml")); err != nil {
 		return true
 	}
-	if exec.Command("docker", "inspect", "-f", "{{.State.Running}}", "remnawave-db").Run() != nil {
+	if execx.Command("docker", "inspect", "-f", "{{.State.Running}}", "remnawave-db").Run() != nil {
 		return true
 	}
 	answer := ui.Reading(i18n.T("BACKUP_BEFORE_REMOVE"))

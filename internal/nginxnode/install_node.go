@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/certs"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
@@ -300,14 +300,14 @@ server {
 
 	// Ufw (best-effort: this is a nice-to-have hardening step, not worth
 	// failing the whole install over).
-	_ = exec.Command("ufw", "allow", "from", state.panelIP, "to", "any", "port", "2222").Run()
-	_ = exec.Command("ufw", "reload").Run()
+	_ = execx.Command("ufw", "allow", "from", state.panelIP, "to", "any", "port", "2222").Run()
+	_ = execx.Command("ufw", "reload").Run()
 
 	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_NODE"), ui.ColorReset)
 	time.Sleep(3 * time.Second)
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	upCmd := exec.Command("docker", "compose", "up", "-d")
+	upCmd := execx.Command("docker", "compose", "up", "-d")
 	upCmd.Dir = nodeDir
 	if err := upCmd.Run(); err != nil {
 		fmt.Printf("%sdocker compose up: %v%s\n", ui.ColorRed, err, ui.ColorReset)

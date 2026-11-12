@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/api"
 	"github.com/FlexEbat/RemnaForge/internal/certs"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
@@ -504,7 +504,7 @@ volumes:
 	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
-	upCmd := exec.Command("docker", "compose", "up", "-d")
+	upCmd := execx.Command("docker", "compose", "up", "-d")
 	upCmd.Dir = panelDir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 	if err := upCmd.Run(); err != nil {
@@ -606,13 +606,13 @@ volumes:
 	// Restart the subscription page so it picks up the token.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
-	downSub := exec.Command("docker", "compose", "down", "remnawave-subscription-page")
+	downSub := execx.Command("docker", "compose", "down", "remnawave-subscription-page")
 	downSub.Dir = panelDir
 	_ = downSub.Run()
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_REMNAWAVE_SUBSCRIPTION_PAGE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
-	upSub := exec.Command("docker", "compose", "up", "-d", "remnawave-subscription-page")
+	upSub := execx.Command("docker", "compose", "up", "-d", "remnawave-subscription-page")
 	upSub.Dir = panelDir
 	if err := upSub.Run(); err != nil {
 		fmt.Printf("%sdocker compose up: %v%s\n", ui.ColorRed, err, ui.ColorReset)

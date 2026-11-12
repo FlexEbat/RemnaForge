@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -80,7 +80,7 @@ func firstNonLoopbackInterface() (string, error) {
 // current value via the sysctl file interface rather than shelling out
 // to the sysctl binary.
 func sysctlGetDisableIPv6All() (int, error) {
-	out, err := exec.Command("sysctl", "-n", "net.ipv6.conf.all.disable_ipv6").Output()
+	out, err := execx.Command("sysctl", "-n", "net.ipv6.conf.all.disable_ipv6").Output()
 	if err != nil {
 		return 0, err
 	}
@@ -129,7 +129,7 @@ func setSysctlIPv6Lines(interfaceName string, disable int) error {
 
 // sysctlApply is the Go equivalent of: sysctl -p > /dev/null 2>&1
 func sysctlApply() {
-	_ = exec.Command("sysctl", "-p").Run()
+	_ = execx.Command("sysctl", "-p").Run()
 }
 
 // enableIPv6 turns IPv6 back on: sets disable_ipv6 to 0 for "all",

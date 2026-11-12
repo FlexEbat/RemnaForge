@@ -11,6 +11,8 @@ package preflight
 import (
 	"os/exec"
 	"testing"
+
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 )
 
 func TestCheckDockerOnRealRunner(t *testing.T) {
@@ -34,7 +36,7 @@ func TestInstallPackagesOnRealRunner(t *testing.T) {
 		t.Error("docker not on PATH after InstallPackages")
 	}
 
-	if err := exec.Command("docker", "info").Run(); err != nil {
+	if err := execx.Command("docker", "info").Run(); err != nil {
 		t.Errorf("docker info failed after InstallPackages: %v", err)
 	}
 }
