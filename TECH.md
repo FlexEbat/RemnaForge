@@ -1,8 +1,10 @@
 # TECH.md
 
-**Version: v1.9.14** (2026-11-12)
+**Version: v1.9.15** (2026-11-12)
 
 Changelog (newest first, one entry per pushed unit of work):
+
+- **v1.9.15**: slice 1, lock part (point 20). New package `internal/runlock`: an exclusive non-blocking `flock` on `/usr/local/remnawave_reverse/remnaforge.lock`, taken in `main` after the root check and before the menu. A second instance prints the PID and start time of the holder (new keys `RUNLOCK_BUSY`, `RUNLOCK_FAILED`, en+ru) and exits with code 1. `doctor`, `versions`, `--version` and `--help` return earlier and take no lock. The kernel drops a flock when its process dies, so a crash leaves no stale lock. Tests in `internal/runlock/runlock_test.go`. The command timeout part (`internal/execx`, 80 `exec.Command` call sites) stays open.
 
 - **v1.9.14**: slice 15, picker part (point 23). `nodeprofile.pickInbounds` marks `Raw Reality` as deprecated (labels `NODE_PROFILE_RAW` in both locales) and refuses to switch it on (`toggleOption`, new key `NODE_PROFILE_DEPRECATED_BLOCKED`). A profile that already carries the inbound keeps it, and the operator can switch it off. The four README files describe this in the item 8 paragraph. The install flows part of slice 15 stays open: the five profile-creating flows still create new profiles with `Raw`, pending the decision in section 11.
 
@@ -133,6 +135,7 @@ internal/
   panelonly/              panel install without a node behind Nginx
   preflight/              install docker, certbot, ufw before the first run
   reinstall/              reinstall the panel or the node over the current one
+  runlock/                exclusive run lock against a second concurrent instance
   selfsteal/              random or chosen HTML template for the selfsteal domain
   stack/                  stack teardown, database backup, docker compose volume check
   uninstall/              remove the tool and the installed panel
@@ -295,6 +298,8 @@ Rules for this section:
 | 23 | `nodeprofile.pickInbounds` offers `NODE_PROFILE_RAW` ("Raw Reality"). Five install flows create the profile with `Raw` only (v1.3.1). | Slice 15, blocked on an open question. |
 
 ### Slice 1. Run lock and command timeouts (point 20)
+
+Status: lock part done in v1.9.15. `internal/execx` and the migration of the `exec.Command` call sites are open.
 
 - Add `internal/runlock`: an exclusive `flock` on `/usr/local/remnawave_reverse/remnaforge.lock`, taken in `main` before the interactive menu and before any mutating subcommand. A second instance prints which PID and start time hold the lock and exits with a nonzero code. `doctor`, `versions`, `--version` and `--help` do not take the lock.
 - Add `internal/execx`: `Run(ctx, timeout, name, args...)` wrapping `exec.CommandContext`, with a default timeout per command class (apt 15 min, docker pull and build 30 min, other 2 min). Rework `preflight.run`, `stack.Teardown`, `stack.backupPanelTo` and every `exec.Command` in `certs` and `maintenance` to call it. Network calls keep their `http.Client` timeouts.

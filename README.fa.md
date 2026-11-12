@@ -114,7 +114,7 @@ sudo remnaforge
 ## فایل‌هایی که این ابزار می‌سازد و تغییر می‌دهد
 
 - `/opt/remnawave/` یا `/opt/remnanode/` — فایل‌های `docker-compose.yml`، `.env`، `nginx.conf` یا `Caddyfile` مربوط به استک نصب‌شده.
-- `/usr/local/remnawave_reverse/` — وضعیت داخلی خود RemnaForge: زبان انتخاب‌شده، فایل لاگ، نشانه‌ای برای نصب‌شدن پیش‌نیازها.
+- `/usr/local/remnawave_reverse/` — وضعیت داخلی خود RemnaForge: زبان انتخاب‌شده، فایل لاگ، نشانه‌ای برای نصب‌شدن پیش‌نیازها. فایل `remnaforge.lock` در آن مانع از اجرای نمونه‌ی دوم می‌شود، تا زمانی که نمونه‌ی اول در حال اجراست.
 - `/etc/letsencrypt/` — گواهی‌ها و تنظیمات تمدید، فقط زمانی که Nginx همراه با certbot انتخاب شده باشد.
 - `/etc/sysctl.conf` — هنگام روشن/خاموش کردن IPv6. `/etc/sysctl.d/99-remnaforge-bbr.conf` و قوانین `ufw` — در زمان نصب اولیه‌ی پیش‌نیازها (پیش از فعال‌سازی ufw، پورتی که sshd روی آن گوش می‌دهد مجاز می‌شود).
 - `/var/www/html/` — قالب HTML مربوط به دامنه‌ی selfsteal.
