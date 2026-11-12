@@ -37,20 +37,8 @@ func selectWebserver() string {
 
 // inboundOption is one line of the checkbox picker.
 type inboundOption struct {
-	label      string
-	checked    *bool
-	deprecated bool
-}
-
-// toggleOption flips opt and reports whether it did. A deprecated option
-// can be switched off but never on: a profile that already carries the
-// inbound keeps working, and no new profile gains it.
-func toggleOption(opt inboundOption) bool {
-	if opt.deprecated && !*opt.checked {
-		return false
-	}
-	*opt.checked = !*opt.checked
-	return true
+	label   string
+	checked *bool
 }
 
 // pickInbounds shows a checkbox-style menu ("[ ] 1. Raw Reality", ...):
@@ -60,9 +48,9 @@ func toggleOption(opt inboundOption) bool {
 func pickInbounds(initial api.ConfigProfileInbounds) api.ConfigProfileInbounds {
 	sel := initial
 	options := []inboundOption{
-		{i18n.T("NODE_PROFILE_RAW"), &sel.Raw, true},
-		{i18n.T("NODE_PROFILE_HYSTERIA2"), &sel.Hysteria2, false},
-		{i18n.T("NODE_PROFILE_XHTTP"), &sel.XHTTP, false},
+		{i18n.T("NODE_PROFILE_RAW"), &sel.Raw},
+		{i18n.T("NODE_PROFILE_HYSTERIA2"), &sel.Hysteria2},
+		{i18n.T("NODE_PROFILE_XHTTP"), &sel.XHTTP},
 	}
 
 	for {
@@ -94,9 +82,7 @@ func pickInbounds(initial api.ConfigProfileInbounds) api.ConfigProfileInbounds {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("INVALID_CHOICE"), ui.ColorReset)
 			continue
 		}
-		if !toggleOption(options[idx-1]) {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NODE_PROFILE_DEPRECATED_BLOCKED"), ui.ColorReset)
-		}
+		*options[idx-1].checked = !*options[idx-1].checked
 	}
 }
 

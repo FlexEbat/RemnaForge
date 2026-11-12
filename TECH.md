@@ -1,8 +1,10 @@
 # TECH.md
 
-**Version: v1.9.18** (2026-11-12)
+**Version: v1.9.19** (2026-11-12)
 
 Changelog (newest first, one entry per pushed unit of work):
+
+- **v1.9.19**: the "deprecated" label of `Raw Reality` is removed again (reverts the code of v1.9.14: the picker can switch `Raw` on, and the labels, the key `NODE_PROFILE_DEPRECATED_BLOCKED`, `toggleOption` and the README sentences are gone). The maintainer asked to drop only the label. The install flows keep creating the profile, the host and the squad with `Raw Reality` during the initial setup, as before, and the tag `Raw` stays. The decisions of v1.9.16 (empty default profiles), v1.9.17 (nothing created at install) and the tag part of v1.9.18 are withdrawn. Still valid: only Debian and Ubuntu, `gpg` for backups and releases, `getMe`, SNI routing on 443 for every proxy, the domain name policy, the panel on 443 with 8443 as the fallback. Section 11 is corrected.
 
 - **v1.9.18**: two more decisions. (1) No code may depend on the inbound tag `Raw`: the tag lookup in `api.CreateConfigProfile` and the `"Raw"` fallback in `internal/nodeprofile` go away, and profile, host and squad are all created the first time the operator selects a profile. (2) The panel is served on 443 behind SNI routing. Port 8443 stays as an operator-opened fallback for the case that the panel route breaks (`managepanel` open and close). The panel container binds only `127.0.0.1:3000`, so 8443 is a proxy listener and not a container port. The code is unchanged.
 
@@ -301,7 +303,7 @@ Rules for this section:
 | 20 | HTTP clients carry timeouts (10 to 60 s). `exec.Command` calls carry none. No lock. | Add (slice 1). |
 | 21 | `maintenance.stackCheck`, `panelAPICheck`. Install flows wait for containers with ad hoc loops. | Replace the ad hoc loops (slice 11). |
 | 22 | `maintenance.Doctor` prints one line per check. No report file. | Extend (slice 11). |
-| 23 | `nodeprofile.pickInbounds` offers `NODE_PROFILE_RAW` ("Raw Reality"). Five install flows create the profile with `Raw` only (v1.3.1). | Slice 15, blocked on an open question. |
+| 23 | `nodeprofile.pickInbounds` offers `NODE_PROFILE_RAW` ("Raw Reality"). Five install flows create the profile with `Raw` only (v1.3.1). | Withdrawn: `Raw Reality` stays a normal protocol (slice 15). |
 
 ### Slice 1. Run lock and command timeouts (point 20)
 
@@ -447,15 +449,9 @@ Depends on slices 7 and 10.
 - Done when: a CI job runs `install.sh` against a test release and a tampered archive, and the tampered one is rejected.
 - Decided: GPG. The public key is published in the repository, and `install.sh` imports it into a temporary keyring and verifies `checksums.txt.sig`.
 
-### Slice 15. Deprecate "Raw Reality" (point 23)
+### Slice 15. Deprecate "Raw Reality" (point 23): withdrawn
 
-Status: picker part done in v1.9.14. The install flows part is decided and waits for the API check below.
-
-- `nodeprofile.pickInbounds` marks `NODE_PROFILE_RAW` as deprecated (the label gets a deprecation note in both locales) and refuses to switch it on. A profile that already carries the inbound keeps it, and the operator can switch it off.
-- Decided: the five profile-creating flows (`addnode`, `panelfull`, `panelonly`, `caddypanelfull`, `caddypanelonly`) create the profile with no inbounds, and the picker accepts an empty selection. The operator chooses protocols after installation through "Manage Node Profile". `Raw Reality` stays deprecated.
-- Decided: install flows create no profile and no host. The operator selects a profile from the CLI (for example XHTTP TLS), and the selection creates the profile and the host, with the inbound listening on port 443 behind the SNI routing of slice 13. `CreateNode`, `CreateHost` and `UpdateSquad` move out of the install flows into this selection step and run the first time a profile is selected. The inbound UUID comes from the profile just created. Nothing looks up the tag `Raw` any more: remove `findRealityTag`'s `"Raw"` fallback in `internal/nodeprofile` and the tag match in `api.CreateConfigProfile` in the same commit.
-- Open: the panel API may require a config profile to register a node. Check this before moving `CreateNode`. If it does, the selection step registers the node as well, and the install flow leaves the node container running and unregistered until then.
-- Done when: the picker test asserts that `Raw` cannot be switched on and an existing `Raw` can be switched off. The remaining part follows the answer to the open question.
+The maintainer withdrew this slice. `Raw Reality` is a normal protocol again. The install flows create the config profile, the host and the squad with `Raw Reality` during the initial setup, and the tag `Raw` stays. The picker in `internal/nodeprofile` lets the operator switch `Raw` on and off. Nothing is left to do here.
 
 ### Slice 16. Domain name policy (new)
 
@@ -468,4 +464,4 @@ Depends on slice 5.
 
 ### Order of work
 
-Slice 15 picker part and slice 1 lock part are done. Continue with the slice 1 timeouts, then 2, 3, 4, 5, 16, 7, 10, 9, 6, 11, 12, 8, 13, 14, and the install flows part of 15. Slices 13 and 14 are the largest and carry open design questions, so they go last.
+Slice 1 lock part is done and slice 15 is withdrawn. Continue with the slice 1 timeouts, then 2, 3, 4, 5, 16, 7, 10, 9, 6, 11, 12, 8, 13, 14.
