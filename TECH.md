@@ -1,8 +1,10 @@
 # TECH.md
 
-**Version: v1.9.16** (2026-11-12)
+**Version: v1.9.17** (2026-11-12)
 
 Changelog (newest first, one entry per pushed unit of work):
+
+- **v1.9.17**: the open item of slice 15 is decided. Install flows create no config profile and no host. The operator picks a profile from the CLI after installation (for example XHTTP TLS), and that choice creates the profile and the host. Every profile is served on port 443. Slice 13 notes the consequence for the panel on 8443. The code is unchanged.
 
 - **v1.9.16**: maintainer decisions on the open questions of section 11 are recorded. New profiles and protocol selections start empty, and the operator picks them after installation (slice 15). Only Debian and Ubuntu are supported, other distributions are detected and refused (slice 3). Port reachability uses `certbot --dry-run` for 80 and the post-install TLS check for 443 (slice 5). Backups are encrypted with `gpg --symmetric` (slice 9), releases are signed with GPG (slice 14), the Telegram check calls `getMe` (slice 11). HAProxy routing is SNI-based for every profile, and so is Nginx and Caddy routing, with sockets created first (slice 13). New slice 16 forbids predictable domain names. The code is unchanged.
 
@@ -433,7 +435,7 @@ Depends on slices 7 and 10.
 - Introduce a proxy backend interface (`Nginx`, `Caddy`, `HAProxy`) in a new package. The six install packages and `managepanel` share a large amount of near-identical code per proxy. The interface replaces that duplication step by step: the first move extracts the existing Nginx and Caddy code behind the interface with no behavior change, then HAProxy is added as a third implementation.
 - HAProxy flows for panel, node and both, with certificates handled like the Nginx flow (certbot, concatenated PEM, reload hook).
 - Done when: generated configs for all three proxies pass the slice 10 validation. The removed duplicated code shows in the diff.
-- Decided: every profile is routed by SNI, whichever proxy is chosen (Nginx, Caddy or HAProxy). The flow creates the sockets first, then the routing on top of them. Still open: how PROXY protocol, the selfsteal site and the panel on port 8443 map onto HAProxy.
+- Decided: every profile is routed by SNI, whichever proxy is chosen (Nginx, Caddy or HAProxy). The flow creates the sockets first, then the routing on top of them. All profiles listen on 443. Still open: how PROXY protocol and the selfsteal site map onto HAProxy, and whether the panel moves from 8443 behind the same 443 SNI routing (the planned answer, to be confirmed because `managepanel` opens and closes 8443 today).
 
 ### Slice 14. Bootstrap script and signed releases (points 0, 1)
 
@@ -449,7 +451,8 @@ Status: picker part done in v1.9.14. The install flows part is decided and waits
 
 - `nodeprofile.pickInbounds` marks `NODE_PROFILE_RAW` as deprecated (the label gets a deprecation note in both locales) and refuses to switch it on. A profile that already carries the inbound keeps it, and the operator can switch it off.
 - Decided: the five profile-creating flows (`addnode`, `panelfull`, `panelonly`, `caddypanelfull`, `caddypanelonly`) create the profile with no inbounds, and the picker accepts an empty selection. The operator chooses protocols after installation through "Manage Node Profile". `Raw Reality` stays deprecated.
-- Open: `CreateNode`, `CreateHost` and `UpdateSquad` take an `inboundUUID` found by the tag `Raw`. With an empty profile there is none. The flows must create the node first and attach hosts and squad membership when the operator adds the first inbound. Check the panel API before changing the order.
+- Decided: install flows create no profile and no host. The operator selects a profile from the CLI (for example XHTTP TLS), and the selection creates the profile and the host, with the inbound listening on port 443 behind the SNI routing of slice 13. `CreateNode`, `CreateHost` and `UpdateSquad` move out of the install flows into this selection step, and the inbound UUID comes from the profile just created, not from the tag `Raw`.
+- Open: the panel API may require a config profile to register a node. Check this before moving `CreateNode`. If it does, the selection step registers the node as well, and the install flow leaves the node container running and unregistered until then.
 - Done when: the picker test asserts that `Raw` cannot be switched on and an existing `Raw` can be switched off. The remaining part follows the answer to the open question.
 
 ### Slice 16. Domain name policy (new)
