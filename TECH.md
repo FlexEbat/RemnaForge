@@ -1,8 +1,10 @@
 # TECH.md
 
-**Version: v1.9.15** (2026-11-12)
+**Version: v1.9.16** (2026-11-12)
 
 Changelog (newest first, one entry per pushed unit of work):
+
+- **v1.9.16**: maintainer decisions on the open questions of section 11 are recorded. New profiles and protocol selections start empty, and the operator picks them after installation (slice 15). Only Debian and Ubuntu are supported, other distributions are detected and refused (slice 3). Port reachability uses `certbot --dry-run` for 80 and the post-install TLS check for 443 (slice 5). Backups are encrypted with `gpg --symmetric` (slice 9), releases are signed with GPG (slice 14), the Telegram check calls `getMe` (slice 11). HAProxy routing is SNI-based for every profile, and so is Nginx and Caddy routing, with sockets created first (slice 13). New slice 16 forbids predictable domain names. The code is unchanged.
 
 - **v1.9.15**: slice 1, lock part (point 20). New package `internal/runlock`: an exclusive non-blocking `flock` on `/usr/local/remnawave_reverse/remnaforge.lock`, taken in `main` after the root check and before the menu. A second instance prints the PID and start time of the holder (new keys `RUNLOCK_BUSY`, `RUNLOCK_FAILED`, en+ru) and exits with code 1. `doctor`, `versions`, `--version` and `--help` return earlier and take no lock. The kernel drops a flock when its process dies, so a crash leaves no stale lock. Tests in `internal/runlock/runlock_test.go`. The command timeout part (`internal/execx`, 80 `exec.Command` call sites) stays open.
 
@@ -327,7 +329,7 @@ Depends on slice 1.
 - `oscheck.CheckOS` reads `sysinfo` instead of parsing `/etc/os-release` itself. The support matrix stays Debian 11+ and Ubuntu 22.04+.
 - Minimum RAM and disk thresholds are constants with a named reason each.
 - Done when: table tests feed fixture `os-release`, `meminfo` and `statfs` values. The output prints as one block at the start of an install flow.
-- Open: the list names dnf and other package managers. Decide whether such systems are only detected and refused with a clear message (planned default) or get install support. Support would double the package-install code.
+- Decided: only Debian and Ubuntu are supported. dnf, RHEL-based and other systems are detected and refused with a clear message, for now.
 
 ### Slice 4. Docker module (point 12)
 
@@ -346,7 +348,7 @@ Depends on slices 1 and 3.
 - Add checks: ports 80 and 443 free locally and reachable from outside, system clock (`timedatectl show` NTPSynchronized), `certbot certonly --dry-run` for feasibility, renewal timer or cron presence, expiry of existing certificates (reuse `certs.CheckCertExpiry`, do not duplicate it).
 - Add `preflight.Run()`: runs all checks, prints one table, returns the failures with a remedy per line. Install flows call it once before the first question. `maintenance.certChecks` calls the same functions.
 - Done when: unit tests cover AAAA mismatch, a Cloudflare-proxied record and a skewed clock with fake resolvers and a fake `timedatectl`.
-- Open: reachability of ports 80 and 443 from outside needs an external probe. Decide between a probe service, a temporary listener plus the operator checking, or a local-only check with a documented limit.
+- Decided: no external probe service. Local bind test for 80 and 443, `certbot --dry-run` as the outside check for port 80 (the staging server connects from the internet), and the TLS check of slice 11 for port 443 after install. The limit is documented in the report.
 
 ### Slice 6. Firewall and intrusion tools (point 16)
 
@@ -392,7 +394,7 @@ Depends on slice 7.
 - Rotation: a menu item that generates a new database password and `WEBHOOK_SECRET_HEADER`, applies them, restarts the dependent services, verifies health and rolls back through slice 8 on failure.
 - Backups: the database backup from `stack` can be encrypted. Secrets in `.env` are part of the backup.
 - Done when: tests cover redaction and permissions. A rotation test with a fake `docker` verifies the order of steps.
-- Open: pick the encryption tool for backups: `age` (new dependency on the server), `gpg` (present or installable through apt) or `openssl enc`. Default proposal: `gpg --symmetric` with a passphrase read from the terminal, because it needs no new binary.
+- Decided: `gpg --symmetric`, passphrase read from the terminal, never passed as an argument.
 
 ### Slice 10. Pre-deployment validation (point 7)
 
@@ -413,7 +415,7 @@ Depends on slices 4 and 5.
 - Install flows end with `verify.Run()` and a summary report. The report is also saved to a file at 0600 with secrets redacted (slice 9).
 - `maintenance.Doctor` runs the same checks over the whole infrastructure and writes the report. It reuses `stackCheck`, `panelAPICheck`, `envCheck` and `certChecks` through `verify`, with no second copy. The ad hoc container wait loops in the install flows go away.
 - Done when: a test with a fake `docker` and a local HTTP server covers pass and fail of each check. `doctor` and an install flow produce the same lines for the same state.
-- Open: "the Telegram bot can connect to the necessary external services" has two readings. One is an egress check to `api.telegram.org`. The other adds a `getMe` call with the bot token from `.env`. The planned default is both, with the token sent only to `api.telegram.org` and never logged.
+- Decided: the Telegram check calls `getMe` with the bot token from `.env`, sent only to `api.telegram.org` and never logged. A failure to reach the host is reported separately from a rejected token.
 
 ### Slice 12. Dry run (point 13)
 
@@ -431,7 +433,7 @@ Depends on slices 7 and 10.
 - Introduce a proxy backend interface (`Nginx`, `Caddy`, `HAProxy`) in a new package. The six install packages and `managepanel` share a large amount of near-identical code per proxy. The interface replaces that duplication step by step: the first move extracts the existing Nginx and Caddy code behind the interface with no behavior change, then HAProxy is added as a third implementation.
 - HAProxy flows for panel, node and both, with certificates handled like the Nginx flow (certbot, concatenated PEM, reload hook).
 - Done when: generated configs for all three proxies pass the slice 10 validation. The removed duplicated code shows in the diff.
-- Open: the target design for HAProxy needs a decision: how SNI routing, PROXY protocol, the selfsteal site and the unix sockets used by the Nginx and Caddy flows map onto HAProxy, and whether the panel on port 8443 stays reachable the same way.
+- Decided: every profile is routed by SNI, whichever proxy is chosen (Nginx, Caddy or HAProxy). The flow creates the sockets first, then the routing on top of them. Still open: how PROXY protocol, the selfsteal site and the panel on port 8443 map onto HAProxy.
 
 ### Slice 14. Bootstrap script and signed releases (points 0, 1)
 
@@ -439,16 +441,26 @@ Depends on slices 7 and 10.
 - Extend `.goreleaser.yaml` with signing of `checksums.txt` and extend `release.yml` accordingly. Cut the first `v*` tag after the script is tested.
 - Pre-compiled binaries remove the need to install Go (point 1). Update README (install section) in all four languages and move "Self-install mechanism" out of "Not implemented" in section 5.
 - Done when: a CI job runs `install.sh` against a test release and a tampered archive, and the tampered one is rejected.
-- Open: pick the signature scheme: `cosign` keyless (needs the cosign binary on the server), `minisign` (small binary, key in the repository) or `gpg` (usually present). Default proposal: `minisign`, because the verifier is one small static binary the script can pin by hash.
+- Decided: GPG. The public key is published in the repository, and `install.sh` imports it into a temporary keyring and verifies `checksums.txt.sig`.
 
 ### Slice 15. Deprecate "Raw Reality" (point 23)
 
-Status: picker part done in v1.9.14. Install flows part blocked on the open question below.
+Status: picker part done in v1.9.14. The install flows part is decided and waits for the API check below.
 
 - `nodeprofile.pickInbounds` marks `NODE_PROFILE_RAW` as deprecated (the label gets a deprecation note in both locales) and refuses to switch it on. A profile that already carries the inbound keeps it, and the operator can switch it off.
-- Open, blocks the install flows part: since v1.3.1 the five profile-creating flows (`addnode`, `panelfull`, `panelonly`, `caddypanelfull`, `caddypanelonly`) create the profile with `Raw` only, and the picker demands at least one inbound. If `Raw` cannot be selected, a new profile has no valid default. Options: (a) change only the picker and leave the install defaults as they are for now, (b) choose another default inbound for new profiles. Option (b) needs a decision on which inbound that is.
+- Decided: the five profile-creating flows (`addnode`, `panelfull`, `panelonly`, `caddypanelfull`, `caddypanelonly`) create the profile with no inbounds, and the picker accepts an empty selection. The operator chooses protocols after installation through "Manage Node Profile". `Raw Reality` stays deprecated.
+- Open: `CreateNode`, `CreateHost` and `UpdateSquad` take an `inboundUUID` found by the tag `Raw`. With an empty profile there is none. The flows must create the node first and attach hosts and squad membership when the operator adds the first inbound. Check the panel API before changing the order.
 - Done when: the picker test asserts that `Raw` cannot be switched on and an existing `Raw` can be switched off. The remaining part follows the answer to the open question.
+
+### Slice 16. Domain name policy (new)
+
+Depends on slice 5.
+
+- Reject predictable names for the panel, node and selfsteal domains. The first label may not be `vpn`, `node`, `panel`, and may not be a two-letter country code (`nl`, `de`, `us`) or a label that contains one as a separate part (`nl1`, `de-node`). The check runs in every domain prompt (`domain.CheckDomain` callers) before any DNS or certificate work.
+- On a match the tool prints that such names are insecure, because scanners and blocklists look for them first, and suggests neutral labels such as `stats` or `metrics`. The operator must enter another name.
+- Done when: table tests cover the rejected labels, accepted labels and the two-letter code list, in both locales of the message.
+- Open: the full word list beyond `vpn`, `node`, `panel` and country codes. Planned: add `proxy`, `admin`, `xray`, `vless`, `remna` and ask the maintainer to confirm.
 
 ### Order of work
 
-Start with slice 15 (small, one question), then 1, 2, 3, 4, 5, 7, 10, 9, 6, 11, 12, 8, 13, 14. Slices 13 and 14 are the largest and carry open design questions, so they go last.
+Slice 15 picker part and slice 1 lock part are done. Continue with the slice 1 timeouts, then 2, 3, 4, 5, 16, 7, 10, 9, 6, 11, 12, 8, 13, 14, and the install flows part of 15. Slices 13 and 14 are the largest and carry open design questions, so they go last.
