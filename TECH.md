@@ -1,8 +1,10 @@
 # TECH.md
 
-**Version: v1.9.12** (2026-11-12)
+**Version: v1.9.13** (2026-11-12)
 
 Changelog (newest first, one entry per pushed unit of work):
+
+- **v1.9.13**: new section 11 splits the installer requirements list (23 numbered points plus the bootstrap paragraph) into 15 slices with dependencies, acceptance criteria and open questions. A code survey before writing found existing code that contradicts the list or duplicates it: `preflight.InstallPackages` turns on BBR, unattended-upgrades and ufw without asking (points 2, 10, 16), three separate Docker checks exist (`preflight.CheckDocker`, `packagesAlreadySatisfied`, `maintenance.runChecks`), `Doctor` and `certs.CheckCertExpiry` already cover part of points 17, 21 and 22, and `domain.CheckDomain` has no AAAA lookup. Each case is assigned to a slice that reworks or removes it. The code is unchanged.
 
 - **v1.9.12**: `TECH.md` is translated into English in full. Section numbers, package names, i18n keys and code identifiers are unchanged. The language rule in `CONTRIBUTING.md` (section "Language") now lists `TECH.md` as an English document. `CONTRIBUTING.md` itself stays Russian. The code is unchanged.
 
@@ -144,7 +146,7 @@ Touch only deliberately, with an understanding of the consequences:
 - **i18n key format.** `internal/i18n/i18n.go` holds all interface strings in English and Russian in two `map[string]string`. Do not rewrite it as a whole by hand. Record a targeted edit of a specific string with a comment above the data. Synthetic strings that are not in the main set (`IN_DEVELOPMENT`, `AvailableTemplates`, `DownloadingBackupRestore`) live in separate mini-maps at the bottom of the file, marked as such.
 - **Structure of `docker-compose.yml`/`nginx.conf`/`Caddyfile`.** An external contract with the images `remnawave/backend`, `remnawave/node`, `remnawave/subscription-page`, `nginx`, `caddy`. Environment variables, ports and healthchecks must match what these images expect. On a major panel version change, check the real panel changelog (example: v1.1.1) and do not assume.
 - **Go package names by content.** Each package is named after what it does (`panelonly` is the panel without a node, `panelfull` is the panel with a node), whatever the naming history. Check the content of the file whenever it is not obvious from the name, and do not rely on analogy with a similar module.
-- **`internal/preflight.EnsureInstalled()`.** The entry point for installing dependencies (docker/certbot/ufw/cron/unattended-upgrades/BBR). Every install flow (`nginxnode`, `panelonly`, `panelfull`, `caddynode`, `caddypanelonly`, `caddypanelfull`) calls it first, before the first interactive question to the user.
+- **`internal/preflight.EnsureInstalled()`.** The entry point for installing dependencies (docker/certbot/ufw/cron/unattended-upgrades/BBR). Every install flow (`nginxnode`, `panelonly`, `panelfull`, `caddynode`, `caddypanelonly`, `caddypanelfull`) calls it first, before the first interactive question to the user. Slice 2 (section 11) narrows what it installs: BBR, unattended-upgrades and the ufw switch-on leave it and become opt-in steps.
 - **`ui.Exit()` is the only call site of `os.Exit`.** After `ui.EnableFileLogging()` a bare `os.Exit()` loses the pipe buffer. Do not add new direct `os.Exit()` calls, only `ui.Exit()`.
 
 ---
@@ -186,7 +188,7 @@ Not in active development and not in the near plans. Listed here for completenes
 
 - **WARP Native.** Not started.
 - **Auto-update.** Needs published releases with ready builds. The pipeline is set up (`.github/workflows/release.yml`, `.goreleaser.yaml`: linux amd64 and arm64 on a `v*` tag), but at the time of writing the repository has no `v*` tag.
-- **Self-install mechanism.** There is no `install.sh`, only a build from source. It ties logically to auto-update: self-install first, then auto-update has something real to update.
+- **Self-install mechanism.** There is no `install.sh`, only a build from source. It ties logically to auto-update: self-install first, then auto-update has something real to update. Slice 14 (section 11) covers the bootstrap script.
 
 ### Known bugs
 
@@ -251,3 +253,193 @@ A separate pass, after the code is written and the Definition of Done is green:
 3. No dead code: no unused functions, no commented-out blocks, no stubs without a `🚧` mark.
 4. Environment variable names in `docker-compose.yml`/`.env`/`nginx.conf`/`Caddyfile` match what the `remnawave/*` images expect (section 4).
 5. Section 5 reflects the real status: nothing is marked ready unless it is built and verified.
+
+---
+
+## 11. Slices for the installer requirements
+
+Source: the requirements list the maintainer supplied on 2026-11-12. It has a bootstrap paragraph (Bash script that detects the architecture, downloads the binary, verifies checksum and signature, launches the installer) and numbered points 1 to 18 and 20 to 23. The source list has no point 19. Points keep their original numbers below, and the bootstrap paragraph is called point 0.
+
+Rules for this section:
+
+- One slice is one or more units of work in the sense of section 7. A slice is done when every line under "Done when" holds and the changelog names the slice.
+- Where a slice says "rework" or "remove", the old code goes away in the same commit as the new code. Two implementations of one behavior must not coexist after the slice.
+- A slice that meets a question under "Open" stops and asks (section 8). It does not guess.
+- The order below respects dependencies. Slices without a dependency line can start any time.
+
+### Code survey: what exists, what conflicts
+
+| Point | Existing code | Verdict |
+|---|---|---|
+| 0, 1 | `.goreleaser.yaml` builds linux amd64/arm64 and writes `checksums.txt`. No signing, no `install.sh`, no `v*` tag. | Extend (slice 14). |
+| 2 | `preflight.InstallPackages` runs `apt-get update`, installs packages and calls `configureUnattendedUpgrades()` unconditionally. No update preview, no reboot check. | Rework (slice 2). |
+| 3 | Nginx (`nginxnode`, `panelonly`, `panelfull`) and Caddy (`caddynode`, `caddypanelonly`, `caddypanelfull`). No HAProxy. | Add (slice 13). |
+| 4 | `preflight` install marker, `stack` uses compose project names. Install flows overwrite `docker-compose.yml`, `.env`, `nginx.conf`, `Caddyfile` with `os.WriteFile`. | Rework (slice 7). |
+| 5 | `oscheck.CheckOS`, `preflight.CheckDocker`, `domain.CheckDomain`. No port, repository or time checks. | Extend (slices 3, 4, 5). |
+| 6, 18 | `genutil` generates secrets, `HardenEnv`, files at 0600 in directories at 0700, log without ANSI codes. No log redaction, no rotation, no encrypted backups, no `.gitignore` for `.env`. | Extend (slice 9). |
+| 7 | Generated configs were validated by hand once (v1.4.3). No validation step in the flows. | Add (slice 10). |
+| 8 | Done in v1.9.0 and v1.9.1 (`stack.Teardown`, `PromptBackup`). | Keep, cover with tests only if a slice touches it. |
+| 9 | `ui.EnableFileLogging` (log file), `maintenance.Doctor`. No final summary report. | Extend (slice 11). |
+| 10 | `enableBBR()` runs inside `InstallPackages` without asking. `internal/ipv6` is manual. | BBR: rework (slice 2). IPv6: keep. |
+| 11 | `oscheck` accepts Debian 11+ and Ubuntu 22.04+ by `/etc/os-release`. `maintenance.diskCheck` reads free disk. No kernel, RAM, package manager, systemd or repository detection. | Extend (slice 3). |
+| 12 | Three Docker checks: `preflight.CheckDocker`, `preflight.packagesAlreadySatisfied`, the `docker compose` line in `maintenance.runChecks`. `preflight.ensureDocker` installs. `stack.VolumeExists`. | Merge into one module, remove duplicates (slice 4). |
+| 13 | None. | Add (slice 12). |
+| 14, 15 | `writeSecretFile`, `setComposeEnv`, `api.MergeProfileConfig` (profile JSON only), database backup in `stack`. No file manifest, no config backup, no atomic write, no rollback. | Add (slices 7, 8). |
+| 16 | `preflight.InstallPackages` allows the sshd ports and 443 in ufw, then runs `ufw --force enable` without asking. `sshPorts()` is correct and stays. | Rework (slices 2 and 6). |
+| 17 | `domain.CheckDomain` (A record, Cloudflare ranges), `certs.CheckCertExpiry`, `certs` renew hook, `maintenance.certChecks`. No AAAA, no port 80/443 reachability, no clock check, no dry-run issue. | Extend (slice 5). |
+| 20 | HTTP clients carry timeouts (10 to 60 s). `exec.Command` calls carry none. No lock. | Add (slice 1). |
+| 21 | `maintenance.stackCheck`, `panelAPICheck`. Install flows wait for containers with ad hoc loops. | Replace the ad hoc loops (slice 11). |
+| 22 | `maintenance.Doctor` prints one line per check. No report file. | Extend (slice 11). |
+| 23 | `nodeprofile.pickInbounds` offers `NODE_PROFILE_RAW` ("Raw Reality"). Five install flows create the profile with `Raw` only (v1.3.1). | Slice 15, blocked on an open question. |
+
+### Slice 1. Run lock and command timeouts (point 20)
+
+- Add `internal/runlock`: an exclusive `flock` on `/usr/local/remnawave_reverse/remnaforge.lock`, taken in `main` before the interactive menu and before any mutating subcommand. A second instance prints which PID and start time hold the lock and exits with a nonzero code. `doctor`, `versions`, `--version` and `--help` do not take the lock.
+- Add `internal/execx`: `Run(ctx, timeout, name, args...)` wrapping `exec.CommandContext`, with a default timeout per command class (apt 15 min, docker pull and build 30 min, other 2 min). Rework `preflight.run`, `stack.Teardown`, `stack.backupPanelTo` and every `exec.Command` in `certs` and `maintenance` to call it. Network calls keep their `http.Client` timeouts.
+- Done when: a test holds the lock in one process and asserts the second exits with the message and code. A test runs `sleep` through `execx` with a 50 ms timeout and asserts the error. `grep -rn "exec.Command(" internal` returns only `execx` itself and code that streams stdin on purpose.
+- Open: none.
+
+### Slice 2. Opt-in system changes (points 2, 10, first half of 16)
+
+Depends on slice 1.
+
+- Remove `enableBBR()`, `configureUnattendedUpgrades()`, the `ufw allow` loop and `ufw --force enable` from `preflight.InstallPackages`. Remove `unattended-upgrades` from `aptPackages`.
+- Add `internal/systune` with a new main menu item "System tuning":
+  - BBR switch (moves `writeBBRConf` and `bbrConfPath` here, same drop-in file, same idempotent write).
+  - unattended-upgrades switch (the logic of `configureUnattendedUpgrades`, run only on request).
+  - System package update: runs `apt-get -s upgrade`, prints the list of pending packages, asks for confirmation, runs the upgrade, then checks `/var/run/reboot-required` and tells the operator. Never reboots.
+- IPv6 stays in `internal/ipv6` as it is: it is already manual.
+- `packagesAlreadySatisfied` stops requiring anything that moved out.
+- Update README (the "Installs dependencies" line, "Files this tool creates") in all four languages in one commit.
+- Done when: a fresh run of an install flow leaves `/etc/sysctl.d/99-remnaforge-bbr.conf`, the unattended-upgrades config and the ufw state untouched (test with a fake `PATH` and a temp root). Each switch in the menu is idempotent. `TestPreflightIntegration` is adjusted to match.
+- Open: servers that already run with the old behavior keep their BBR and ufw state. The slice does not undo it.
+
+### Slice 3. Environment detection (points 5, 11)
+
+- Add `internal/sysinfo` returning one struct: distribution and version, CPU architecture, kernel version, package manager (apt, dnf, yum, zypper, pacman, apk), systemd presence, repository state (`apt-get update` exit code and `apt-cache policy` for the packages the tool needs), RAM, free disk on `/opt` and `/var/lib/docker`.
+- `oscheck.CheckOS` reads `sysinfo` instead of parsing `/etc/os-release` itself. The support matrix stays Debian 11+ and Ubuntu 22.04+.
+- Minimum RAM and disk thresholds are constants with a named reason each.
+- Done when: table tests feed fixture `os-release`, `meminfo` and `statfs` values. The output prints as one block at the start of an install flow.
+- Open: the list names dnf and other package managers. Decide whether such systems are only detected and refused with a clear message (planned default) or get install support. Support would double the package-install code.
+
+### Slice 4. Docker module (point 12)
+
+Depends on slice 3.
+
+- Add `internal/dockercheck`: engine installed, version, Compose v2, daemon state, registry reachability (`docker pull` of a small image or a manifest request), existing containers, networks and volumes of this tool, compose project name conflicts, docker contexts.
+- Move `preflight.ensureDocker` here. Remove `preflight.CheckDocker`, the docker part of `packagesAlreadySatisfied` and the `docker compose` line of `maintenance.runChecks`. Callers use `dockercheck`.
+- Done when: `grep -rn '"docker", "info"' internal` finds only `dockercheck`. Name conflict detection has a test with two compose projects that share a name.
+- Open: none.
+
+### Slice 5. Pre-flight, DNS and certificate feasibility (points 5, 17)
+
+Depends on slices 1 and 3.
+
+- Extend `domain.CheckDomain`: AAAA records, alignment of A and AAAA with the public IP of the server, domain name validity.
+- Add checks: ports 80 and 443 free locally and reachable from outside, system clock (`timedatectl show` NTPSynchronized), `certbot certonly --dry-run` for feasibility, renewal timer or cron presence, expiry of existing certificates (reuse `certs.CheckCertExpiry`, do not duplicate it).
+- Add `preflight.Run()`: runs all checks, prints one table, returns the failures with a remedy per line. Install flows call it once before the first question. `maintenance.certChecks` calls the same functions.
+- Done when: unit tests cover AAAA mismatch, a Cloudflare-proxied record and a skewed clock with fake resolvers and a fake `timedatectl`.
+- Open: reachability of ports 80 and 443 from outside needs an external probe. Decide between a probe service, a temporary listener plus the operator checking, or a local-only check with a documented limit.
+
+### Slice 6. Firewall and intrusion tools (point 16)
+
+Depends on slices 1 and 2.
+
+- Add `internal/firewall`: detect ufw, firewalld, nftables, iptables (nf_tables or legacy), listening ports, NAT rules, conflicting rules for the ports the tool needs, reachability of required external addresses.
+- Every change asks for consent. The operator picks the tool to configure (ufw, firewalld, nftables, iptables). The same flow offers fail2ban or CrowdSec, or neither.
+- `sshPorts()` moves here unchanged and runs before any rule that enables a firewall.
+- Done when: tests use recorded outputs of each tool as fixtures. No code path enables a firewall without a recorded consent.
+- Open: none.
+
+### Slice 7. Configuration file management (points 4, 14)
+
+Depends on slice 1.
+
+- Add `internal/cfgfile`:
+  - Manifest at `/usr/local/remnawave_reverse/manifest.json` with path, owner class (`installer`, `user`, `third-party`) and SHA-256 of the content the installer wrote.
+  - `Write(path, content, opts)`: compares the file hash with the manifest. An unchanged installer file is replaced. A changed or unknown file is not replaced. The operator sees a diff and picks keep, merge or replace.
+  - Backup into `/usr/local/remnawave_reverse/backups/<timestamp>/` before every change, mode 0600.
+  - Atomic write: temporary file in the same directory, `fsync`, `rename`.
+  - `.env` merge by key: existing keys keep their values, new keys are added. `docker-compose.yml`, `nginx.conf` and `Caddyfile` merge as follows: installer-owned blocks are replaced, user blocks stay (reuse the block parser of `managepanel/nginxconf.go`).
+- Migrate every `os.WriteFile` of those four files in `panelonly`, `panelfull`, `nginxnode`, `caddypanelonly`, `caddypanelfull`, `caddynode` and `managepanel`. Fold `writeSecretFile` and `setComposeEnv` into this package when their callers move.
+- Done when: re-running any install flow twice leaves the files byte-identical. A user edit survives a re-run. A test kills the write between temporary file and rename and finds the original intact.
+- Open: none.
+
+### Slice 8. Install transaction and rollback (points 4, 15)
+
+Depends on slices 7 and 4.
+
+- Add a journal of steps per install run: file writes (through `cfgfile`), containers and networks created, packages installed, services started.
+- On failure the installer reverts in reverse order: restore files from the backup, remove containers and networks created in this run, never remove volumes or databases (point 8 stays absolute).
+- Packages and system changes are reported and not reverted.
+- Done when: a fault-injection test fails the flow after each step and asserts the pre-run state, byte for byte, for files and by name for containers.
+- Open: none.
+
+### Slice 9. Secrets (points 6, 18)
+
+Depends on slice 7.
+
+- `ui` log writer redacts known secret values and key patterns (`PASSWORD`, `SECRET`, `TOKEN`, `API_KEY`) before writing to the log file and the report.
+- Audit every `exec` call and flag for secrets in argument lists. Move any found to stdin, environment files or file descriptors. List the results in the changelog entry.
+- Every secret file is 0600 and its directory 0700, checked by a test over the paths `cfgfile` knows. Install flows write a `.gitignore` that excludes `.env` and the secret files into the stack directory.
+- Rotation: a menu item that generates a new database password and `WEBHOOK_SECRET_HEADER`, applies them, restarts the dependent services, verifies health and rolls back through slice 8 on failure.
+- Backups: the database backup from `stack` can be encrypted. Secrets in `.env` are part of the backup.
+- Done when: tests cover redaction and permissions. A rotation test with a fake `docker` verifies the order of steps.
+- Open: pick the encryption tool for backups: `age` (new dependency on the server), `gpg` (present or installable through apt) or `openssl enc`. Default proposal: `gpg --symmetric` with a passphrase read from the terminal, because it needs no new binary.
+
+### Slice 10. Pre-deployment validation (point 7)
+
+Depends on slice 7.
+
+- Before every `docker compose up`, run `docker compose config -q` on the generated compose file.
+- Validate the selected proxy config in a throwaway container: `nginx -t`, `caddy validate`, and `haproxy -c` after slice 13.
+- A failed validation stops the flow before any change is applied and prints the tool output.
+- Done when: a test feeds a broken `nginx.conf` and a broken compose file and asserts the flow stops before `up`.
+- Open: none.
+
+### Slice 11. Post-install verification, diagnostics and report (points 9, 21, 22)
+
+Depends on slices 4 and 5.
+
+- Add `internal/verify` with named checks: container exists, container running, healthcheck passed, PostgreSQL accepts connections (`pg_isready` in the db container), the application answers HTTP, the reverse proxy routes to it, TLS handshake and chain valid, the Telegram integration can reach its external services.
+- Every failed check carries a short description and a remedy line.
+- Install flows end with `verify.Run()` and a summary report. The report is also saved to a file at 0600 with secrets redacted (slice 9).
+- `maintenance.Doctor` runs the same checks over the whole infrastructure and writes the report. It reuses `stackCheck`, `panelAPICheck`, `envCheck` and `certChecks` through `verify`, with no second copy. The ad hoc container wait loops in the install flows go away.
+- Done when: a test with a fake `docker` and a local HTTP server covers pass and fail of each check. `doctor` and an install flow produce the same lines for the same state.
+- Open: "the Telegram bot can connect to the necessary external services" has two readings. One is an egress check to `api.telegram.org`. The other adds a `getMe` call with the bot token from `.env`. The planned default is both, with the token sent only to `api.telegram.org` and never logged.
+
+### Slice 12. Dry run (point 13)
+
+Depends on slices 1, 7 and 2.
+
+- Global flag `--dry-run`, carried in a package-level run context. `execx`, `cfgfile`, `systune` and `firewall` check it: mutating calls print the planned action (command line with secrets redacted, or the file diff) and do nothing. Read-only checks still run.
+- The flag works in the interactive flows and with the subcommands.
+- Done when: a test runs an install flow in dry-run on a temp root and asserts that nothing changed on disk and that no mutating command ran.
+- Open: none.
+
+### Slice 13. HAProxy support (point 3)
+
+Depends on slices 7 and 10.
+
+- Introduce a proxy backend interface (`Nginx`, `Caddy`, `HAProxy`) in a new package. The six install packages and `managepanel` share a large amount of near-identical code per proxy. The interface replaces that duplication step by step: the first move extracts the existing Nginx and Caddy code behind the interface with no behavior change, then HAProxy is added as a third implementation.
+- HAProxy flows for panel, node and both, with certificates handled like the Nginx flow (certbot, concatenated PEM, reload hook).
+- Done when: generated configs for all three proxies pass the slice 10 validation. The removed duplicated code shows in the diff.
+- Open: the target design for HAProxy needs a decision: how SNI routing, PROXY protocol, the selfsteal site and the unix sockets used by the Nginx and Caddy flows map onto HAProxy, and whether the panel on port 8443 stays reachable the same way.
+
+### Slice 14. Bootstrap script and signed releases (points 0, 1)
+
+- Add `install.sh`: detects the architecture (`uname -m`, maps to amd64 or arm64, refuses others), downloads the matching archive from the latest GitHub release, verifies the SHA-256 against `checksums.txt` and the signature of `checksums.txt`, extracts the binary and launches it. It runs with `set -euo pipefail`, takes no secrets and exits on any failed verification.
+- Extend `.goreleaser.yaml` with signing of `checksums.txt` and extend `release.yml` accordingly. Cut the first `v*` tag after the script is tested.
+- Pre-compiled binaries remove the need to install Go (point 1). Update README (install section) in all four languages and move "Self-install mechanism" out of "Not implemented" in section 5.
+- Done when: a CI job runs `install.sh` against a test release and a tampered archive, and the tampered one is rejected.
+- Open: pick the signature scheme: `cosign` keyless (needs the cosign binary on the server), `minisign` (small binary, key in the repository) or `gpg` (usually present). Default proposal: `minisign`, because the verifier is one small static binary the script can pin by hash.
+
+### Slice 15. Deprecate "Raw Reality" (point 23)
+
+- `nodeprofile.pickInbounds` marks `NODE_PROFILE_RAW` as deprecated (the label gets a deprecation note in both locales) and refuses to switch it on. A profile that already carries the inbound keeps it, and the operator can switch it off.
+- Open, blocks the install flows part: since v1.3.1 the five profile-creating flows (`addnode`, `panelfull`, `panelonly`, `caddypanelfull`, `caddypanelonly`) create the profile with `Raw` only, and the picker demands at least one inbound. If `Raw` cannot be selected, a new profile has no valid default. Options: (a) change only the picker and leave the install defaults as they are for now, (b) choose another default inbound for new profiles. Option (b) needs a decision on which inbound that is.
+- Done when: the picker test asserts that `Raw` cannot be switched on and an existing `Raw` can be switched off. The remaining part follows the answer to the open question.
+
+### Order of work
+
+Start with slice 15 (small, one question), then 1, 2, 3, 4, 5, 7, 10, 9, 6, 11, 12, 8, 13, 14. Slices 13 and 14 are the largest and carry open design questions, so they go last.
