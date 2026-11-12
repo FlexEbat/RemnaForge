@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -48,7 +49,7 @@ func packagesAlreadySatisfied() bool {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return false
 	}
-	if exec.Command("docker", "info").Run() != nil {
+	if execx.Command("docker", "info").Run() != nil {
 		return false
 	}
 	if _, err := exec.LookPath("certbot"); err != nil {
@@ -136,14 +137,14 @@ func InstallPackages() error {
 }
 
 func run(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := execx.Command(name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
 func dpkgInstalled(pkg string) bool {
-	out, err := exec.Command("dpkg", "-l").Output()
+	out, err := execx.Command("dpkg", "-l").Output()
 	if err != nil {
 		return false
 	}
@@ -157,11 +158,11 @@ func dpkgInstalled(pkg string) bool {
 }
 
 func systemdActive(unit string) bool {
-	return exec.Command("systemctl", "is-active", "--quiet", unit).Run() == nil
+	return execx.Command("systemctl", "is-active", "--quiet", unit).Run() == nil
 }
 
 func systemdEnabled(unit string) bool {
-	return exec.Command("systemctl", "is-enabled", "--quiet", unit).Run() == nil
+	return execx.Command("systemctl", "is-enabled", "--quiet", unit).Run() == nil
 }
 
 // ensureDocker installs Docker via get.docker.com's install script,
@@ -173,7 +174,7 @@ func ensureDocker() error {
 		if _, err := exec.LookPath("docker"); err != nil {
 			return false
 		}
-		return exec.Command("docker", "info").Run() == nil
+		return execx.Command("docker", "info").Run() == nil
 	}
 
 	if !dockerOK() {
@@ -192,7 +193,7 @@ func ensureDocker() error {
 			return err
 		}
 
-		cmd := exec.Command("sh")
+		cmd := execx.CommandTimeout(execx.AptTimeout, "sh")
 		cmd.Stdin = strings.NewReader(string(script))
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -244,7 +245,7 @@ func enableBBR() {
 	if err := writeBBRConf(bbrConfPath); err != nil {
 		return
 	}
-	_ = exec.Command("sysctl", "-p", bbrConfPath).Run()
+	_ = execx.Command("sysctl", "-p", bbrConfPath).Run()
 }
 
 // writeBBRConf writes the drop-in unless it already holds the wanted
@@ -268,7 +269,7 @@ func configureUnattendedUpgrades() error {
 		}
 	}
 
-	debconf := exec.Command("debconf-set-selections")
+	debconf := execx.Command("debconf-set-selections")
 	debconf.Stdin = strings.NewReader("unattended-upgrades unattended-upgrades/enable_auto_updates boolean true\n")
 	_ = debconf.Run()
 

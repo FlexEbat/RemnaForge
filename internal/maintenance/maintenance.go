@@ -6,9 +6,9 @@ package maintenance
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -52,7 +52,7 @@ func Menu() {
 // ShowVersions prints every running Remnawave container with the image
 // it was created from and, when the image declares one, its version.
 func ShowVersions() {
-	out, err := exec.Command("docker", "ps", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}",
+	out, err := execx.Command("docker", "ps", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}",
 		"--filter", "name=remnawave", "--filter", "name=remnanode").Output()
 	if err != nil {
 		fmt.Printf("%s%v%s\n", ui.ColorRed, err, ui.ColorReset)
@@ -81,7 +81,7 @@ func ShowVersions() {
 }
 
 func imageVersion(image string) string {
-	out, err := exec.Command("docker", "image", "inspect", image, "--format",
+	out, err := execx.Command("docker", "image", "inspect", image, "--format",
 		`{{index .Config.Labels "org.opencontainers.image.version"}}`).Output()
 	if err != nil {
 		return ""

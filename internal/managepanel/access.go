@@ -3,11 +3,11 @@ package managepanel
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -57,10 +57,10 @@ func detectWebserver(dir string) string {
 }
 
 func portInUse(port string) (inUse bool, checked bool) {
-	if out, err := exec.Command("ss", "-tuln").Output(); err == nil {
+	if out, err := execx.Command("ss", "-tuln").Output(); err == nil {
 		return strings.Contains(string(out), ":"+port), true
 	}
-	if out, err := exec.Command("netstat", "-tuln").Output(); err == nil {
+	if out, err := execx.Command("netstat", "-tuln").Output(); err == nil {
 		return strings.Contains(string(out), ":"+port), true
 	}
 	return false, false
@@ -240,8 +240,8 @@ func openPanelAccess() {
 	_ = composeRun(dir, "down", "remnawave-nginx")
 	_ = composeRun(dir, "up", "-d", "remnawave-nginx")
 
-	_ = exec.Command("ufw", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
-	_ = exec.Command("ufw", "reload").Run()
+	_ = execx.Command("ufw", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
+	_ = execx.Command("ufw", "reload").Run()
 
 	panelLink := fmt.Sprintf("https://%s:8443/auth/login?%s=%s", panelDomain, cookie1, cookie2)
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("OPEN_PANEL_LINK"), ui.ColorReset)
@@ -312,8 +312,8 @@ func openPanelAccessCaddy(dir string) {
 	_ = composeRun(dir, "down", "remnawave-caddy")
 	_ = composeRun(dir, "up", "-d", "remnawave-caddy")
 
-	_ = exec.Command("ufw", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
-	_ = exec.Command("ufw", "reload").Run()
+	_ = execx.Command("ufw", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
+	_ = execx.Command("ufw", "reload").Run()
 
 	cookie1, cookie2 := caddyExtractCookies(caddyfile)
 	panelLink := fmt.Sprintf("https://%s:8443/auth/login", panelDomain)
@@ -412,10 +412,10 @@ func closePanelAccess() {
 // Nginx and Caddy branches of closing temporary panel access, factored
 // into one function instead of duplicated.
 func closePort8443UFW() {
-	ufwStatus, _ := exec.Command("ufw", "status").Output()
+	ufwStatus, _ := execx.Command("ufw", "status").Output()
 	if strings.Contains(string(ufwStatus), "8443") && strings.Contains(string(ufwStatus), "ALLOW") {
-		_ = exec.Command("ufw", "delete", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
-		if err := exec.Command("ufw", "reload").Run(); err != nil {
+		_ = execx.Command("ufw", "delete", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
+		if err := execx.Command("ufw", "reload").Run(); err != nil {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("UFW_RELOAD_FAILED"), ui.ColorReset)
 			return
 		}

@@ -3,11 +3,11 @@ package maintenance
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/stack"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
@@ -118,7 +118,7 @@ func MigrateV2ToV3() {
 	patchProxyCompression()
 
 	for _, args := range [][]string{{"pull"}, {"up", "-d", "--remove-orphans"}} {
-		cmd := exec.Command("docker", append([]string{"compose"}, args...)...)
+		cmd := execx.Command("docker", append([]string{"compose"}, args...)...)
 		cmd.Dir = panelDir
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		if err := cmd.Run(); err != nil {

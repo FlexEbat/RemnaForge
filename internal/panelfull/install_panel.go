@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/api"
 	"github.com/FlexEbat/RemnaForge/internal/certs"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
@@ -592,7 +592,7 @@ volumes:
 	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL_NODE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
-	upCmd := exec.Command("docker", "compose", "up", "-d")
+	upCmd := execx.Command("docker", "compose", "up", "-d")
 	upCmd.Dir = panelDir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 	if err := upCmd.Run(); err != nil {
@@ -603,7 +603,7 @@ volumes:
 	// Allow the co-located node's docker subnet to reach itself on 2222
 	// (best-effort: nice-to-have hardening, not worth failing the whole
 	// install over).
-	_ = exec.Command("ufw", "allow", "from", "172.30.0.0/16", "to", "any", "port", "2222", "proto", "tcp").Run()
+	_ = execx.Command("ufw", "allow", "from", "172.30.0.0/16", "to", "any", "port", "2222", "proto", "tcp").Run()
 
 	domainURL := "127.0.0.1:3000"
 	targetDir := panelDir
@@ -707,14 +707,14 @@ volumes:
 	// real SECRET_KEY and the subscription page picks up its API token.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STOPPING_REMNAWAVE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
-	downCmd := exec.Command("docker", "compose", "down")
+	downCmd := execx.Command("docker", "compose", "down")
 	downCmd.Dir = panelDir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 	_ = downCmd.Run()
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL_NODE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
-	upCmd2 := exec.Command("docker", "compose", "up", "-d")
+	upCmd2 := execx.Command("docker", "compose", "up", "-d")
 	upCmd2.Dir = panelDir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 	if err := upCmd2.Run(); err != nil {

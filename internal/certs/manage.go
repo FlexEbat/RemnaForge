@@ -3,11 +3,11 @@ package certs
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
@@ -133,12 +133,12 @@ func updateCurrentCertificates() {
 
 		if daysLeft <= renewThreshold {
 			if certMethod == "2" {
-				_ = exec.Command("ufw", "allow", "80/tcp").Run()
-				_ = exec.Command("ufw", "reload").Run()
+				_ = execx.Command("ufw", "allow", "80/tcp").Run()
+				_ = execx.Command("ufw", "reload").Run()
 			}
 
 			fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-			renewCmd := exec.Command("certbot", "renew", "--cert-name", domainName, "--no-random-sleep-on-renew")
+			renewCmd := execx.Command("certbot", "renew", "--cert-name", domainName, "--no-random-sleep-on-renew")
 			logFile, _ := os.OpenFile(filepath.Join(logDir, "letsencrypt.log"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 			if logFile != nil {
 				renewCmd.Stdout = logFile
@@ -150,8 +150,8 @@ func updateCurrentCertificates() {
 			}
 
 			if certMethod == "2" {
-				_ = exec.Command("ufw", "delete", "allow", "80/tcp").Run()
-				_ = exec.Command("ufw", "reload").Run()
+				_ = execx.Command("ufw", "delete", "allow", "80/tcp").Run()
+				_ = execx.Command("ufw", "reload").Run()
 			}
 
 			if renewErr != nil {

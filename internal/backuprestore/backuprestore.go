@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -126,7 +127,7 @@ func verifyScript(data []byte, wantHex string) error {
 // downloaded tool's own menu, prompts, and progress output all pass
 // through untouched.
 func runInteractive(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := execx.Interactive(name, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

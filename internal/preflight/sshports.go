@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 )
 
 // sshPorts returns the TCP ports ufw must keep open for SSH, never
@@ -21,7 +23,7 @@ func sshPorts() []int {
 	if p, ok := portFromSSHConnection(os.Getenv("SSH_CONNECTION")); ok {
 		ports = append(ports, p)
 	}
-	if out, err := exec.Command(sshdBinary(), "-T").Output(); err == nil {
+	if out, err := execx.Command(sshdBinary(), "-T").Output(); err == nil {
 		ports = append(ports, parseSSHDPorts(string(out))...)
 	}
 	return uniquePorts(ports)

@@ -8,11 +8,11 @@ package managepanel
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/stack"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
@@ -33,7 +33,7 @@ func findInstallDir() (string, bool) {
 // dockerImageRunning reports whether any running container was started
 // from image.
 func dockerImageRunning(image string) bool {
-	out, err := exec.Command("docker", "ps", "-q", "--filter", "ancestor="+image).Output()
+	out, err := execx.Command("docker", "ps", "-q", "--filter", "ancestor="+image).Output()
 	return err == nil && strings.TrimSpace(string(out)) != ""
 }
 
@@ -49,7 +49,7 @@ func anyPanelOrNodeRunning() bool {
 }
 
 func composeRun(dir string, args ...string) error {
-	cmd := exec.Command("docker", append([]string{"compose"}, args...)...)
+	cmd := execx.Command("docker", append([]string{"compose"}, args...)...)
 	cmd.Dir = dir
 	return cmd.Run()
 }
@@ -103,7 +103,7 @@ func runRemnawaveCLI() {
 	}
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("RUNNING_CLI"), ui.ColorReset)
-	cmd := exec.Command("docker", "exec", "-it", "-e", "TERM=xterm-256color", "remnawave", "remnawave")
+	cmd := execx.Interactive("docker", "exec", "-it", "-e", "TERM=xterm-256color", "remnawave", "remnawave")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -116,7 +116,7 @@ func runRemnawaveCLI() {
 }
 
 func dockerContainerRunning(name string) bool {
-	out, err := exec.Command("docker", "ps", "--format", "{{.Names}}").Output()
+	out, err := execx.Command("docker", "ps", "--format", "{{.Names}}").Output()
 	if err != nil {
 		return false
 	}
@@ -167,7 +167,7 @@ func stopPanelNode() {
 // composeImageIDs returns the deduplicated, sorted image IDs backing
 // this compose project's services.
 func composeImageIDs(dir string) string {
-	cmd := exec.Command("docker", "compose", "config", "--images")
+	cmd := execx.Command("docker", "compose", "config", "--images")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
@@ -180,7 +180,7 @@ func composeImageIDs(dir string) string {
 
 	var ids []string
 	for _, img := range images {
-		idOut, err := exec.Command("docker", "images", "-q", img).Output()
+		idOut, err := execx.Command("docker", "images", "-q", img).Output()
 		if err != nil {
 			continue
 		}
@@ -213,7 +213,7 @@ func updatePanelNode() {
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("UPDATING"), ui.ColorReset)
 
-	if exec.Command("docker", "inspect", "-f", "{{.State.Running}}", "remnawave-db").Run() == nil {
+	if execx.Command("docker", "inspect", "-f", "{{.State.Running}}", "remnawave-db").Run() == nil {
 		dest, err := stack.BackupPanel(dir)
 		if err != nil {
 			fmt.Printf("%s%s: %v%s\n", ui.ColorRed, i18n.T("BACKUP_FAILED"), err, ui.ColorReset)
@@ -224,7 +224,7 @@ func updatePanelNode() {
 
 	before := composeImageIDs(dir)
 
-	pullCmd := exec.Command("docker", "compose", "pull")
+	pullCmd := execx.Command("docker", "compose", "pull")
 	pullCmd.Dir = dir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 	pullOutput, _ := pullCmd.CombinedOutput()
@@ -238,7 +238,7 @@ func updatePanelNode() {
 			fmt.Printf("%s%v%s\n", ui.ColorRed, err, ui.ColorReset)
 			return
 		}
-		_ = exec.Command("docker", "image", "prune", "-f").Run()
+		_ = execx.Command("docker", "image", "prune", "-f").Run()
 		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("UPDATE_SUCCESS1"), ui.ColorReset)
 	} else {
 		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("NO_UPDATE"), ui.ColorReset)
@@ -257,7 +257,7 @@ func viewLogs() {
 	}
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("VIEW_LOGS"), ui.ColorReset)
-	cmd := exec.Command("docker", "compose", "logs", "-f", "-t")
+	cmd := execx.Interactive("docker", "compose", "logs", "-f", "-t")
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

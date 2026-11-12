@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -56,7 +56,7 @@ func Doctor() {
 func runChecks() []check {
 	var checks []check
 
-	out, err := exec.Command("docker", "compose", "version", "--short").Output()
+	out, err := execx.Command("docker", "compose", "version", "--short").Output()
 	checks = append(checks, check{"docker compose", err == nil, strings.TrimSpace(string(out))})
 
 	for _, dir := range []string{panelDir, nodeDir} {
@@ -108,7 +108,7 @@ func composeServices(dir string, runningOnly bool) []string {
 	} else {
 		args = append(args, "-a")
 	}
-	cmd := exec.Command("docker", args...)
+	cmd := execx.Command("docker", args...)
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {

@@ -16,11 +16,11 @@ package certs
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/FlexEbat/RemnaForge/internal/domain"
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -186,7 +186,7 @@ func syncCertRenewalCron(cronCommand string, minDaysLeft int) {
 }
 
 func currentCrontab() string {
-	out, _ := exec.Command("crontab", "-u", "root", "-l").Output()
+	out, _ := execx.Command("crontab", "-u", "root", "-l").Output()
 	return string(out)
 }
 
@@ -199,7 +199,7 @@ func addCronRule(existing, cronCommand string) {
 	}
 	newCrontab += rule + "\n"
 
-	cmd := exec.Command("crontab", "-u", "root", "-")
+	cmd := execx.Command("crontab", "-u", "root", "-")
 	cmd.Stdin = strings.NewReader(newCrontab)
 	_ = cmd.Run()
 }

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os/exec"
 
+	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -30,12 +31,12 @@ func CheckDocker() error {
 		return fmt.Errorf("docker not installed")
 	}
 
-	if err := exec.Command("docker", "info").Run(); err != nil {
+	if err := execx.Command("docker", "info").Run(); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOCKER_NOT_WORKING"), ui.ColorReset)
 		return fmt.Errorf("docker daemon not reachable")
 	}
 
-	if err := exec.Command("docker", "compose", "version").Run(); err != nil {
+	if err := execx.Command("docker", "compose", "version").Run(); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOCKER_NOT_WORKING"), ui.ColorReset)
 		return fmt.Errorf("docker compose plugin not available")
 	}
