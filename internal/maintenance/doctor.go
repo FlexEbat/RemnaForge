@@ -1,8 +1,6 @@
 package maintenance
 
 import (
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,9 +9,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/certs"
 	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/preflight"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -185,26 +185,17 @@ func envCheck() check {
 // certChecks reports the remaining validity of every certbot certificate.
 func certChecks() []check {
 	files, _ := filepath.Glob("/etc/letsencrypt/live/*/fullchain.pem")
-	var checks []check
+	var results []preflight.Result
 	for _, f := range files {
 		domain := filepath.Base(filepath.Dir(f))
-		data, err := os.ReadFile(f)
-		if err != nil {
-			checks = append(checks, check{"certificate " + domain, false, err.Error()})
-			continue
-		}
-		block, _ := pem.Decode(data)
-		if block == nil {
-			checks = append(checks, check{"certificate " + domain, false, "not a PEM file"})
-			continue
-		}
-		cert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			checks = append(checks, check{"certificate " + domain, false, err.Error()})
-			continue
-		}
-		days := int(time.Until(cert.NotAfter).Hours() / 24)
-		checks = append(checks, check{"certificate " + domain, days > 14, fmt.Sprintf("%d days left", days)})
+		days, err := certs.CheckCertExpiry(domain)
+		results = append(results, preflight.CertExpiryResult(domain, days, err))
+	}
+	env := preflight.DefaultCheckEnv()
+	results = append(results, preflight.ClockCheck(env), preflight.RenewalCheck(env))
+	var checks []check
+	for _, r := range results {
+		checks = append(checks, check{r.Name, r.Status == preflight.OK, r.Detail})
 	}
 	return checks
 }

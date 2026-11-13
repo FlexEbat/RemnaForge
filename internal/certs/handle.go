@@ -22,6 +22,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/preflight"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -101,6 +102,15 @@ func HandleCertificates(domainsToCheck []string, certMethod, letsencryptEmail, t
 	}
 
 	uniqueDomains := map[string]bool{}
+
+	// HTTP-01 issues from this server's port 80. A dry run against the
+	// staging server proves DNS, the firewall and the port before the real
+	// request, and keeps a failed run off the production rate limits.
+	if needCertificates && certMethod == "2" {
+		if !preflight.ConfirmDryRun(preflight.DefaultCheckEnv(), domainsToCheck, ui.Reading) {
+			return Result{}, fmt.Errorf("aborted")
+		}
+	}
 
 	switch {
 	case needCertificates && (certMethod == "1" || certMethod == "3"):

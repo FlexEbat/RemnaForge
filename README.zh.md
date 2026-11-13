@@ -55,6 +55,7 @@ VLESS 协议及其相关机制（XTLS、REALITY、VLESS Encryption）发展很�
 - 在当前安装基础上重新安装面板或节点，保留原来的反向代理选择。
 - 在操作系统层面开启或关闭 IPv6。
 - 在安装流程开始时打印环境信息（发行版、内核、内存、剩余磁盘、软件源），内存低于 1 GiB 时拒绝安装，并对内存不足、磁盘空间不足和内核过旧给出警告。
+- 安装前执行预检（系统时钟已同步、80 和 443 端口空闲、证书续期已配置），以一张表列出结果并为每个问题给出处理建议；检查失败后会先询问是否继续。对输入的每个域名检查指向别处的 AAAA 记录、Cloudflare 代理和名称是否合法，并在正式申请 HTTP-01 证书前用 certbot 试运行验证。
 - 在全新服务器上、首次安装前预装依赖：`docker`、`docker compose`、`certbot`、`ufw`、`cron`。它本身不会修改主机设置：BBR、自动安全更新和系统软件包升级需要在“系统调优”菜单中手动开启。
 - 面板备份与恢复 —— 委托给第三方工具 [distillium/remnawave-backup-restore](https://github.com/distillium/remnawave-backup-restore)（MIT 许可），自身不做具体实现。
 - 完整卸载（容器、镜像、数据卷）或仅移除 RemnaForge 自身的状态。
