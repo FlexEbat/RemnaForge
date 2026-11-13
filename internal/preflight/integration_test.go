@@ -14,12 +14,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 )
 
-func TestCheckDockerOnRealRunner(t *testing.T) {
-	if err := CheckDocker(); err != nil {
-		t.Fatalf("CheckDocker failed on a runner that ships docker preinstalled: %v", err)
+func TestDockerWorkingOnRealRunner(t *testing.T) {
+	if !dockercheck.Working(dockercheck.DefaultEnv()) {
+		t.Fatal("docker is not working on a runner that ships docker preinstalled")
 	}
 }
 
@@ -38,8 +39,8 @@ func TestInstallPackagesOnRealRunner(t *testing.T) {
 		t.Error("docker not on PATH after InstallPackages")
 	}
 
-	if err := execx.Command("docker", "info").Run(); err != nil {
-		t.Errorf("docker info failed after InstallPackages: %v", err)
+	if !dockercheck.Working(dockercheck.DefaultEnv()) {
+		t.Error("docker is not working after InstallPackages")
 	}
 }
 

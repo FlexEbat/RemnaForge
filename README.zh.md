@@ -139,6 +139,7 @@ internal/
   caddypanelfull/         在 Caddy 后安装面板及同机节点
   caddypanelonly/         在 Caddy 后安装面板（不含节点）
   certs/                  为 Nginx 签发和续期 TLS 证书（certbot）
+  dockercheck/            Docker：引擎、Compose v2、上下文、镜像仓库、项目名冲突；安装 Docker
   domain/                 提取基础域名、DNS 检查、Cloudflare 检测
   execx/                  带超时的外部命令执行
   genutil/                生成密码、用户名、密钥

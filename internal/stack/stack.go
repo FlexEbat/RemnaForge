@@ -34,13 +34,6 @@ func Teardown(dir string) error {
 	return os.RemoveAll(dir)
 }
 
-// VolumeExists reports whether a docker volume whose name contains the
-// given text exists (compose prefixes volume names with the project).
-func VolumeExists(name string) bool {
-	out, err := execx.Command("docker", "volume", "ls", "-q", "--filter", "name="+name).Output()
-	return err == nil && strings.TrimSpace(string(out)) != ""
-}
-
 // BackupPanel writes a gzip-compressed pg_dump of the panel database
 // and a copy of .env into dir/backups/<timestamp>/, returning that
 // directory. The panel's db container must be running.

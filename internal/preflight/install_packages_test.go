@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/sysinfo"
 )
 
@@ -42,6 +43,8 @@ func TestAptPackagesHaveNoDuplicates(t *testing.T) {
 	}
 }
 
+var noDocker = dockercheck.Env{LookPath: func(string) (string, error) { return "", errors.New("none") }}
+
 func TestReportEnvironmentRefusesTinyHost(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, content string) string {
@@ -61,13 +64,13 @@ func TestReportEnvironmentRefusesTinyHost(t *testing.T) {
 		FreeBytes:     func(string) (uint64, error) { return 100 << 30, nil },
 		Run:           func(string, ...string) ([]byte, error) { t.Fatal("repos checked although not asked"); return nil, nil },
 	}
-	if err := reportEnvironment(env, false); err == nil {
+	if err := reportEnvironment(env, noDocker, false); err == nil {
 		t.Fatal("a host with 512 MiB must be refused")
 	}
 	if err := os.WriteFile(env.MeminfoPath, []byte("MemTotal: 4194304 kB\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := reportEnvironment(env, false); err != nil {
+	if err := reportEnvironment(env, noDocker, false); err != nil {
 		t.Fatalf("a host with 4 GiB was refused: %v", err)
 	}
 }

@@ -139,6 +139,7 @@ internal/
   caddypanelfull/         installs the panel with a co-located node behind Caddy
   caddypanelonly/         installs the panel without a node behind Caddy
   certs/                  issues and renews TLS certificates for Nginx (certbot)
+  dockercheck/            Docker engine, Compose v2, context, registry, project name conflicts; installs Docker
   domain/                 base-domain extraction, DNS checks, Cloudflare detection
   execx/                  external commands with a timeout per command class
   genutil/                password, username, and secret generation

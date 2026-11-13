@@ -1,8 +1,10 @@
 # TECH.md
 
-**Version: v1.12.0** (2026-11-12)
+**Version: v1.13.0** (2026-11-12)
 
 Changelog (newest first, one entry per pushed unit of work, only the 5 most recent entries are kept):
+
+- **v1.13.0**: slice 4 is done: the Docker module (point 12). New package `internal/dockercheck` is the only code that asks Docker about itself. `Inspect` returns engine installed, server version, daemon state, Compose version and whether it is v2, the current docker context and all contexts, the compose projects of the daemon (`docker compose ls`), and the containers, networks and volumes that belong to this tool (compose project `remnawave` or `remnanode`). `Working` is the single yes or no: installed, daemon answering, Compose v2 present. `RegistryReachable` sends one GET to `registry-1.docker.io/v2/` and accepts 200 and 401; it pulls nothing, and every image of the stack comes from that registry. `FindConflicts` and `ConflictFor` report a compose project name that two directories share, or that `/opt/remnawave` or `/opt/remnanode` would take over from another directory. `Ensure` is the old `preflight.ensureDocker`, now also reinstalling when the Compose v2 plugin is missing (the old check looked at the engine only). Removed: `preflight.CheckDocker` (it had no caller), the `docker info` part of `packagesAlreadySatisfied`, `dockerOK`, the `docker compose` line of `maintenance.runChecks` and `stack.VolumeExists` (now `dockercheck.VolumeExists`, same behavior). The doctor now shows engine, Compose, a non-default context and a project name conflict as checks. The "Environment" block printed at the start of every install flow gets a Docker line, the count of objects this tool already has, warnings for a dead daemon, a missing or old Compose, a non-default context (commands would run on another machine) and a name conflict, and a registry line when packages are about to be installed. All Docker findings are warnings, not refusals; that is an assumption to confirm. New tests in `internal/dockercheck` (81 percent of statements, including two compose projects that share a name) and `internal/maintenance`. `grep -rn '"docker", "info"' internal` finds only `dockercheck`.
 
 - **v1.12.0**: slice 3 is done: environment detection (points 5, 11). New package `internal/sysinfo` returns one `Info` struct: distribution (ID, version, pretty name), architecture, kernel release, package manager (apt, dnf, yum, zypper, pacman or apk), systemd presence, memory, free disk on `/opt` and `/var/lib/docker` (a path that does not exist yet is measured at its nearest existing parent) and, on request, the repository state (`apt-get update` result and `apt-cache policy` for the packages the tool installs). Every read goes through an `Env`, so tests feed fixture `os-release`, `meminfo`, kernel and `statfs` values. `oscheck.CheckOS` reads `sysinfo` instead of parsing `/etc/os-release` itself; the matrix stays Debian 11+ and Ubuntu 22.04+, and any other system, including dnf and RHEL based ones, is refused with a message that names the detected system and package manager. Thresholds are constants with a named reason each: refuse below 1 GiB of memory (the OOM killer ends Docker, Postgres or Xray), warn below 2 GiB (image pulls and the xcaddy build swap), warn below 10 GiB free on `/opt` and `/var/lib/docker`, warn for a kernel older than 4.9 (BBR arrived there), warn without systemd. Disk, kernel and systemd are warnings, not refusals: section 11 fixes the memory refusal only, so this is an assumption to confirm. `preflight.EnsureInstalled`, the first call of every install flow, prints the block as "Environment" and stops on a refusal; the repository check runs there only when packages are about to be installed. New tests: `internal/sysinfo` (94 percent of statements, plus a read of the real host), `oscheck` table tests on `sysinfo.Info`, and the refusal in `preflight`.
 
@@ -11,8 +13,6 @@ Changelog (newest first, one entry per pushed unit of work, only the 5 most rece
 - **v1.10.0**: slice 1 is done: command timeouts (point 20). New package `internal/execx` wraps `os/exec`. `execx.Command` returns a command that is killed, together with its process group, when it runs longer than the timeout of its class: apt, apt-get and dpkg 15 minutes, `docker` with `pull`, `build`, `--build`, `up` or `run` 30 minutes, every other command 2 minutes. A timeout surfaces as an error that wraps `execx.ErrTimeout`. All 80 `exec.Command` call sites in the code moved to it. Commands the operator drives by hand (`docker exec -it` into the panel CLI, `docker compose logs -f`, the third-party backup-restore script) use `execx.Interactive` and have no timeout. Two calls get a longer timeout on purpose: the `get.docker.com` script (15 minutes, it runs apt) and the `pg_dump` of the database backup (30 minutes, a cut-off dump would be a silently truncated backup). Two classes go beyond the defaults of section 11 and need the maintainer to confirm: `certbot` and `python3 -m pip` get 10 minutes, because a DNS-01 challenge waits for record propagation and `certbot renew` handles every certificate in one run. Tests in `internal/execx/execx_test.go` cover a kill on timeout, the kill of child processes, output capture, stdin streaming and the class table.
 
 - **v1.9.21**: the Persian README is removed (`README.fa.md` and its link in the language switchers). Documentation languages are English, Russian and Chinese. `CONTRIBUTING.md` says three versions instead of four. Section 11 gets the answers of the maintainer to the last round of questions (see the new subsection "Decisions of 2026-11-12"). The code is unchanged.
-
-- **v1.9.20**: the remaining open points of section 11 are decided. Slice 16 blocks `vpn`, `node`, `panel`, country codes, `proxy`, `admin`, `xray`, `vless` and `remna`. Slice 2 leaves servers that already run BBR, unattended-upgrades and ufw as they are. Slice 13: the HAProxy backend implements TLS everywhere, so it supports TLS-terminated profiles only and skips Reality, which does not fit that routing yet. Nginx and Caddy flows keep Reality. The code is unchanged.
 
 ---
 
@@ -51,6 +51,7 @@ internal/
   caddypanelfull/         panel install with a co-located node behind Caddy
   caddypanelonly/         panel install without a node behind Caddy
   certs/                  issue and renew TLS certificates for Nginx
+  dockercheck/            Docker engine, Compose v2, context, registry, name conflicts, install
   domain/                 base domain extraction, DNS check
   execx/                  external commands with a timeout per command class
   genutil/                passwords, logins, secrets
@@ -118,6 +119,7 @@ Touch only deliberately, with an understanding of the consequences:
 | External commands with timeouts | `internal/execx` |
 | System tuning (BBR, automatic updates, upgrade) | `internal/systune` |
 | Host detection and thresholds | `internal/sysinfo` |
+| Docker state, checks and install | `internal/dockercheck` |
 | Backup and restore (delegates to the third-party `distillium/remnawave-backup-restore`, MIT) | `internal/backuprestore` |
 | Localization, language selection, file logging | `internal/i18n`, `internal/ui` |
 | Main menu | `internal/menu` |
@@ -222,7 +224,7 @@ Rules for this section:
 | 9 | `ui.EnableFileLogging` (log file), `maintenance.Doctor`. No final summary report. | Extend (slice 11). |
 | 10 | `enableBBR()` ran inside `InstallPackages` without asking. `internal/ipv6` is manual. | BBR: done (slice 2, v1.11.0). IPv6: keep. |
 | 11 | `oscheck` accepted Debian 11+ and Ubuntu 22.04+ by `/etc/os-release`. `maintenance.diskCheck` reads free disk. There was no kernel, RAM, package manager, systemd or repository detection. | Done (slice 3, v1.12.0). |
-| 12 | Three Docker checks: `preflight.CheckDocker`, `preflight.packagesAlreadySatisfied`, the `docker compose` line in `maintenance.runChecks`. `preflight.ensureDocker` installs. `stack.VolumeExists`. | Merge into one module, remove duplicates (slice 4). |
+| 12 | Three Docker checks existed: `preflight.CheckDocker`, `preflight.packagesAlreadySatisfied`, the `docker compose` line in `maintenance.runChecks`, plus `preflight.ensureDocker` and `stack.VolumeExists`. | Done (slice 4, v1.13.0): one module, `internal/dockercheck`. |
 | 13 | None. | Add (slice 12). |
 | 14, 15 | `writeSecretFile`, `setComposeEnv`, `api.MergeProfileConfig` (profile JSON only), database backup in `stack`. No file manifest, no config backup, no atomic write, no rollback. | Add (slices 7, 8). |
 | 16 | `preflight.InstallPackages` allows the sshd ports and 443 in ufw, then runs `ufw --force enable` without asking. `sshPorts()` is correct and stays. | Rework (slices 2 and 6). |
@@ -267,6 +269,8 @@ Status: done in v1.12.0.
 - Decided: only Debian and Ubuntu are supported. dnf, RHEL-based and other systems are detected and refused with a clear message, for now.
 
 ### Slice 4. Docker module (point 12)
+
+Status: done in v1.13.0.
 
 Depends on slice 3.
 

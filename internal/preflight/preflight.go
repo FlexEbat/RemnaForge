@@ -2,47 +2,22 @@
 // EnsureInstalled/InstallPackages, the actual dependency bootstrap that
 // install flows run before doing real work.
 //
-// install_packages.go auto-bootstraps docker/certbot/ufw/cron/
-// unattended-upgrades/BBR when missing, so an install flow's later
-// `docker compose up -d` doesn't fail silently on a fresh server and
-// only surface as a "containers not ready" timeout minutes later.
-// CheckDocker/CheckCertbot remain as standalone checks for callers that
-// only need to verify state (the "Manage Certificates" menu should not
-// reinstall the world just to check a certificate).
+// install_packages.go auto-bootstraps docker/certbot/ufw/cron when
+// missing, so an install flow's later `docker compose up -d` doesn't
+// fail silently on a fresh server and only surface as a "containers not
+// ready" timeout minutes later. Docker itself is handled by
+// internal/dockercheck. CheckCertbot remains a standalone check for
+// callers that only need to verify state (the "Manage Certificates"
+// menu should not reinstall the world just to check a certificate).
 package preflight
 
 import (
 	"fmt"
 	"os/exec"
 
-	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
-
-// CheckDocker verifies both that the `docker` binary exists AND that the
-// daemon is reachable and the `compose` plugin is present.
-// `docker` being on $PATH doesn't guarantee either: the daemon might not
-// be running, the current user might lack permission, or an old docker
-// without the compose plugin is common on a freshly-provisioned VPS.
-func CheckDocker() error {
-	if _, err := exec.LookPath("docker"); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOCKER_NOT_INSTALLED"), ui.ColorReset)
-		return fmt.Errorf("docker not installed")
-	}
-
-	if err := execx.Command("docker", "info").Run(); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOCKER_NOT_WORKING"), ui.ColorReset)
-		return fmt.Errorf("docker daemon not reachable")
-	}
-
-	if err := execx.Command("docker", "compose", "version").Run(); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOCKER_NOT_WORKING"), ui.ColorReset)
-		return fmt.Errorf("docker compose plugin not available")
-	}
-
-	return nil
-}
 
 // CheckCertbot verifies the `certbot` binary is on $PATH. Shared by
 // internal/certs (the "Manage Certificates" menu) and every install flow

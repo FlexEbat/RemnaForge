@@ -2,13 +2,11 @@ package preflight
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/sysinfo"
@@ -38,7 +36,7 @@ var aptPackages = []string{
 // internal/certs). Every flow benefits from the stronger guarantee.
 func EnsureInstalled() error {
 	satisfied := packagesAlreadySatisfied()
-	if err := reportEnvironment(sysinfo.DefaultEnv(), !satisfied); err != nil {
+	if err := reportEnvironment(sysinfo.DefaultEnv(), dockercheck.DefaultEnv(), !satisfied); err != nil {
 		return err
 	}
 	if satisfied {
@@ -50,22 +48,34 @@ func EnsureInstalled() error {
 // reportEnvironment prints the host block at the start of an install flow
 // and returns an error when the host is too small to install on. The
 // repository check runs only when packages are about to be installed.
-func reportEnvironment(env sysinfo.Env, checkRepos bool) error {
+func reportEnvironment(env sysinfo.Env, docker dockercheck.Env, checkRepos bool) error {
 	info, _ := sysinfo.Collect(env)
 	if checkRepos {
 		sysinfo.CheckRepos(env, &info, aptPackages)
 	}
-	return sysinfo.Print(info)
+	if err := sysinfo.Print(info); err != nil {
+		return err
+	}
+	dockercheck.Print(dockercheck.Inspect(docker))
+	if checkRepos && docker.HTTPStatus != nil {
+		// Images are pulled during an install, so a blocked registry is worth
+		// knowing before it.
+		err := dockercheck.RegistryReachable(docker)
+		color := ui.ColorGray
+		if err != nil {
+			color = ui.ColorYellow
+		}
+		fmt.Printf("%s%s%s\n", color, dockercheck.RegistryLine(err), ui.ColorReset)
+	}
+	fmt.Println()
+	return nil
 }
 
 func packagesAlreadySatisfied() bool {
 	if _, err := os.Stat(installMarker); err != nil {
 		return false
 	}
-	if _, err := exec.LookPath("docker"); err != nil {
-		return false
-	}
-	if execx.Command("docker", "info").Run() != nil {
+	if !dockercheck.Working(dockercheck.DefaultEnv()) {
 		return false
 	}
 	if _, err := exec.LookPath("certbot"); err != nil {
@@ -114,7 +124,7 @@ func InstallPackages() error {
 	}
 
 	// Docker.
-	if err := ensureDocker(); err != nil {
+	if err := dockercheck.Ensure(dockercheck.DefaultEnv()); err != nil {
 		return err
 	}
 
@@ -159,62 +169,3 @@ func systemdEnabled(unit string) bool {
 // streamed from net/http directly into `sh`'s stdin rather than being
 // written to a temp file first, so nothing touches disk and there's no
 // leftover script file to clean up.
-func ensureDocker() error {
-	dockerOK := func() bool {
-		if _, err := exec.LookPath("docker"); err != nil {
-			return false
-		}
-		return execx.Command("docker", "info").Run() == nil
-	}
-
-	if !dockerOK() {
-		fmt.Printf("%sInstalling Docker via get.docker.com...%s\n", ui.ColorYellow, ui.ColorReset)
-
-		client := &http.Client{Timeout: 60 * time.Second}
-		resp, err := client.Get("https://get.docker.com")
-		if err != nil || resp.StatusCode != http.StatusOK {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOWNLOAD_DOCKER_KEY"), ui.ColorReset)
-			return fmt.Errorf("failed to download get-docker.sh")
-		}
-		script, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOWNLOAD_DOCKER_KEY"), ui.ColorReset)
-			return err
-		}
-
-		cmd := execx.CommandTimeout(execx.AptTimeout, "sh")
-		cmd.Stdin = strings.NewReader(string(script))
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_INSTALL_DOCKER"), ui.ColorReset)
-			return err
-		}
-	}
-
-	if _, err := exec.LookPath("docker"); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOCKER_NOT_INSTALLED"), ui.ColorReset)
-		return err
-	}
-
-	if !systemdActive("docker") {
-		if err := run("systemctl", "start", "docker"); err != nil {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_START_DOCKER"), ui.ColorReset)
-			return err
-		}
-	}
-	if !systemdEnabled("docker") {
-		if err := run("systemctl", "enable", "docker"); err != nil {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_ENABLE_DOCKER"), ui.ColorReset)
-			return err
-		}
-	}
-
-	if !dockerOK() {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOCKER_NOT_WORKING"), ui.ColorReset)
-		return fmt.Errorf("docker still not working after install")
-	}
-
-	return nil
-}
