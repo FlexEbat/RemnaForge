@@ -1,6 +1,7 @@
 package preflight
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -38,6 +39,9 @@ func EnsureInstalled() error {
 	satisfied := packagesAlreadySatisfied()
 	if err := reportEnvironment(sysinfo.DefaultEnv(), dockercheck.DefaultEnv(), !satisfied); err != nil {
 		return err
+	}
+	if !Gate(DefaultCheckEnv(), ui.Reading) {
+		return errors.New(i18n.T("PREFLIGHT_STOPPED"))
 	}
 	if satisfied {
 		return nil

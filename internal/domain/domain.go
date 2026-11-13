@@ -17,16 +17,10 @@ package domain
 import (
 	"crypto/x509"
 	"encoding/pem"
-	"fmt"
-	"io"
 	"net"
-	"net/http"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/FlexEbat/RemnaForge/internal/i18n"
-	"github.com/FlexEbat/RemnaForge/internal/ui"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -64,69 +58,6 @@ const (
 	CheckAbort
 )
 
-var httpClient = &http.Client{Timeout: 10 * time.Second}
-
-// resolveA is the Go equivalent of: dig +short A "$domain" | grep -E ... | head -n 1
-func resolveA(domain string) string {
-	ips, err := net.LookupIP(domain)
-	if err != nil {
-		return ""
-	}
-	for _, ip := range ips {
-		if v4 := ip.To4(); v4 != nil {
-			return v4.String()
-		}
-	}
-	return ""
-}
-
-// publicServerIP tries a small list of public IP-echo services in
-// order, returning the first one that answers.
-func publicServerIP() string {
-	for _, url := range []string{"https://ifconfig.me", "https://api.ipify.org", "https://ipinfo.io/ip"} {
-		resp, err := httpClient.Get(url)
-		if err != nil {
-			continue
-		}
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			continue
-		}
-		ip := strings.TrimSpace(string(body))
-		if net.ParseIP(ip) != nil {
-			return ip
-		}
-	}
-	return ""
-}
-
-// cloudflareRanges is the Go equivalent of: curl -s https://www.cloudflare.com/ips-v4
-func cloudflareRanges() []*net.IPNet {
-	resp, err := httpClient.Get("https://www.cloudflare.com/ips-v4")
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil
-	}
-
-	var nets []*net.IPNet
-	for _, line := range strings.Split(string(body), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		_, ipnet, err := net.ParseCIDR(line)
-		if err == nil {
-			nets = append(nets, ipnet)
-		}
-	}
-	return nets
-}
-
 func ipInRanges(ipStr string, ranges []*net.IPNet) bool {
 	ip := net.ParseIP(ipStr)
 	if ip == nil {
@@ -138,62 +69,6 @@ func ipInRanges(ipStr string, ranges []*net.IPNet) bool {
 		}
 	}
 	return false
-}
-
-// showWarning and allowCFProxy default to true.
-func CheckDomain(domainName string, showWarning, allowCFProxy bool) CheckResult {
-	domainIP := resolveA(domainName)
-	serverIP := publicServerIP()
-
-	if domainIP == "" || serverIP == "" {
-		if showWarning {
-			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("WARNING_LABEL"), ui.ColorReset)
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CHECK_DOMAIN_IP_FAIL"), ui.ColorReset)
-			fmt.Printf(ui.ColorYellow+i18n.T("CHECK_DOMAIN_IP_FAIL_INSTRUCTION")+ui.ColorReset+"\n", domainName, serverIP)
-			confirm := ui.Reading(i18n.T("CONFIRM_PROMPT"))
-			if confirm != "y" && confirm != "Y" {
-				return CheckAbort
-			}
-		}
-		return CheckMismatch
-	}
-
-	cfRanges := cloudflareRanges()
-	ipInCF := ipInRanges(domainIP, cfRanges)
-
-	switch {
-	case domainIP == serverIP:
-		return CheckOK
-
-	case ipInCF:
-		if allowCFProxy {
-			return CheckOK
-		}
-		if showWarning {
-			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("WARNING_LABEL"), ui.ColorReset)
-			fmt.Printf(ui.ColorRed+i18n.T("CHECK_DOMAIN_CLOUDFLARE")+ui.ColorReset+"\n", domainName, domainIP)
-			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CHECK_DOMAIN_CLOUDFLARE_INSTRUCTION"), ui.ColorReset)
-			confirm := ui.Reading(i18n.T("CONFIRM_PROMPT"))
-			if confirm == "y" || confirm == "Y" {
-				return CheckMismatch
-			}
-			return CheckAbort
-		}
-		return CheckMismatch
-
-	default:
-		if showWarning {
-			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("WARNING_LABEL"), ui.ColorReset)
-			fmt.Printf(ui.ColorRed+i18n.T("CHECK_DOMAIN_MISMATCH")+ui.ColorReset+"\n", domainName, domainIP, serverIP)
-			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CHECK_DOMAIN_MISMATCH_INSTRUCTION"), ui.ColorReset)
-			confirm := ui.Reading(i18n.T("CONFIRM_PROMPT"))
-			if confirm == "y" || confirm == "Y" {
-				return CheckMismatch
-			}
-			return CheckAbort
-		}
-		return CheckMismatch
-	}
 }
 
 // IsWildcardCert reports whether domainName's live certificate covers

@@ -55,6 +55,7 @@ Found a bug? Open an issue on GitHub.
 - Reinstalls the panel or node over the current install, with the same webserver choice.
 - Turns IPv6 on and off at the OS level.
 - Prints an environment block (distribution, kernel, memory, free disk, repositories) at the start of an install flow, refuses a host with less than 1 GiB of memory and warns about low memory, low disk and an old kernel.
+- Runs pre-flight checks before an install (system clock synchronized, ports 80 and 443 free, certificate renewal in place) and prints one table with a remedy per problem; asks before it goes on after a failure. Checks every domain you enter for AAAA records that point elsewhere, Cloudflare proxying and an invalid name, and tests HTTP-01 issuance with a certbot dry run before the real request.
 - Installs dependencies on a fresh server before the first install: `docker`, `docker compose`, `certbot`, `ufw`, `cron`. It changes no host setting on its own: BBR, automatic security updates and a system package upgrade are switched on by hand in the "System tuning" menu.
 - Panel backup and restore — delegates to the third-party [distillium/remnawave-backup-restore](https://github.com/distillium/remnawave-backup-restore) (MIT) rather than implementing it itself.
 - Removes the install entirely (containers, images, volumes) or just RemnaForge's own state.
