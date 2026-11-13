@@ -54,6 +54,7 @@ Found a bug? Open an issue on GitHub.
 - Manages an installed stack: start, stop, update images, tail `docker compose` logs, the `remnawave` CLI inside the container, temporarily opening the panel on port 8443 for domain-less access.
 - Reinstalls the panel or node over the current install, with the same webserver choice.
 - Turns IPv6 on and off at the OS level.
+- Prints an environment block (distribution, kernel, memory, free disk, repositories) at the start of an install flow, refuses a host with less than 1 GiB of memory and warns about low memory, low disk and an old kernel.
 - Installs dependencies on a fresh server before the first install: `docker`, `docker compose`, `certbot`, `ufw`, `cron`. It changes no host setting on its own: BBR, automatic security updates and a system package upgrade are switched on by hand in the "System tuning" menu.
 - Panel backup and restore — delegates to the third-party [distillium/remnawave-backup-restore](https://github.com/distillium/remnawave-backup-restore) (MIT) rather than implementing it itself.
 - Removes the install entirely (containers, images, volumes) or just RemnaForge's own state.
@@ -153,6 +154,7 @@ internal/
   preflight/              installs docker/certbot/ufw/cron before the first run
   reinstall/              reinstalls the panel or node over the current install
   selfsteal/              HTML templates for the selfsteal domain
+  sysinfo/                host detection: distribution, kernel, memory, disk, package repositories
   systune/                opt-in BBR, automatic security updates and system package upgrade
   uninstall/              removes RemnaForge and/or the installed stack
   ui/                     terminal colors, input, file logging

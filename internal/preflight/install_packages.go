@@ -11,6 +11,7 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/sysinfo"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -36,10 +37,25 @@ var aptPackages = []string{
 // install flow in this project ends up needing certbot anyway (see
 // internal/certs). Every flow benefits from the stronger guarantee.
 func EnsureInstalled() error {
-	if packagesAlreadySatisfied() {
+	satisfied := packagesAlreadySatisfied()
+	if err := reportEnvironment(sysinfo.DefaultEnv(), !satisfied); err != nil {
+		return err
+	}
+	if satisfied {
 		return nil
 	}
 	return InstallPackages()
+}
+
+// reportEnvironment prints the host block at the start of an install flow
+// and returns an error when the host is too small to install on. The
+// repository check runs only when packages are about to be installed.
+func reportEnvironment(env sysinfo.Env, checkRepos bool) error {
+	info, _ := sysinfo.Collect(env)
+	if checkRepos {
+		sysinfo.CheckRepos(env, &info, aptPackages)
+	}
+	return sysinfo.Print(info)
 }
 
 func packagesAlreadySatisfied() bool {

@@ -54,6 +54,7 @@ VLESS 协议及其相关机制（XTLS、REALITY、VLESS Encryption）发展很�
 - 管理已安装的服务栈：启动、停止、更新镜像、查看 `docker compose` 日志、容器内置的 `remnawave` CLI、临时在 8443 端口开放面板以便无域名访问。
 - 在当前安装基础上重新安装面板或节点，保留原来的反向代理选择。
 - 在操作系统层面开启或关闭 IPv6。
+- 在安装流程开始时打印环境信息（发行版、内核、内存、剩余磁盘、软件源），内存低于 1 GiB 时拒绝安装，并对内存不足、磁盘空间不足和内核过旧给出警告。
 - 在全新服务器上、首次安装前预装依赖：`docker`、`docker compose`、`certbot`、`ufw`、`cron`。它本身不会修改主机设置：BBR、自动安全更新和系统软件包升级需要在“系统调优”菜单中手动开启。
 - 面板备份与恢复 —— 委托给第三方工具 [distillium/remnawave-backup-restore](https://github.com/distillium/remnawave-backup-restore)（MIT 许可），自身不做具体实现。
 - 完整卸载（容器、镜像、数据卷）或仅移除 RemnaForge 自身的状态。
@@ -153,6 +154,7 @@ internal/
   preflight/              首次运行前安装 docker/certbot/ufw/cron
   reinstall/              在当前安装基础上重新安装面板或节点
   selfsteal/              selfsteal 域名使用的 HTML 模板
+  sysinfo/                主机检测：发行版、内核、内存、磁盘、软件包仓库
   systune/                按需开启 BBR、自动安全更新和系统软件包升级
   uninstall/              移除 RemnaForge 和/或已安装的服务栈
   ui/                     终端配色、输入读取、文件日志

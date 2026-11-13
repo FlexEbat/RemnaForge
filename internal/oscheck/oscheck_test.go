@@ -2,8 +2,10 @@ package oscheck
 
 import (
 	"os"
-	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/FlexEbat/RemnaForge/internal/sysinfo"
 )
 
 func TestParseVersion(t *testing.T) {
@@ -56,37 +58,51 @@ func TestSupported(t *testing.T) {
 	}
 }
 
-func TestParseOSRelease(t *testing.T) {
-	write := func(t *testing.T, content string) string {
-		p := filepath.Join(t.TempDir(), "os-release")
-		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
-			t.Fatal(err)
-		}
-		return p
+func TestCheckInfo(t *testing.T) {
+	ok := []sysinfo.Info{
+		{OSID: "ubuntu", OSVersion: "24.04", PackageManager: "apt"},
+		{OSID: "debian", OSVersion: "12", PackageManager: "apt"},
 	}
-	t.Run("quoted and plain values", func(t *testing.T) {
-		p := write(t, "PRETTY_NAME=\"Ubuntu 24.04 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nID=ubuntu\nID_LIKE=debian\n")
-		id, ver, err := parseOSRelease(p)
-		if err != nil || id != "ubuntu" || ver != "24.04" {
-			t.Fatalf("got %q %q %v", id, ver, err)
+	for _, info := range ok {
+		if err := checkInfo(info); err != nil {
+			t.Errorf("%s %s refused: %v", info.OSID, info.OSVersion, err)
 		}
-	})
-	t.Run("ID_LIKE does not override ID", func(t *testing.T) {
-		p := write(t, "ID=debian\nID_LIKE=ubuntu\nVERSION_ID=\"12\"\n")
-		if id, _, _ := parseOSRelease(p); id != "debian" {
-			t.Fatalf("id = %q", id)
+	}
+	refused := []struct {
+		info     sysinfo.Info
+		contains []string
+	}{
+		{sysinfo.Info{OSID: "fedora", OSVersion: "40", OSName: "Fedora Linux 40", PackageManager: "dnf"}, []string{"Fedora Linux 40", "dnf", "Debian 11+"}},
+		{sysinfo.Info{OSID: "rocky", OSVersion: "9.3", PackageManager: "dnf"}, []string{"rocky 9.3", "dnf"}},
+		{sysinfo.Info{OSID: "alpine", OSVersion: "3.19", PackageManager: "apk"}, []string{"alpine", "apk"}},
+		{sysinfo.Info{OSID: "ubuntu", OSVersion: "20.04", OSName: "Ubuntu 20.04", PackageManager: "apt"}, []string{"Ubuntu 20.04", "apt"}},
+		{sysinfo.Info{}, []string{"?", "-"}},
+	}
+	for _, c := range refused {
+		err := checkInfo(c.info)
+		if err == nil {
+			t.Errorf("%+v accepted", c.info)
+			continue
 		}
-	})
-	t.Run("lines without a value are skipped", func(t *testing.T) {
-		p := write(t, "# comment\n\nID=debian\nbroken line\nVERSION_ID=\"12\"\n")
-		id, ver, err := parseOSRelease(p)
-		if err != nil || id != "debian" || ver != "12" {
-			t.Fatalf("got %q %q %v", id, ver, err)
+		for _, want := range c.contains {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("%+v: message %q misses %q", c.info, err, want)
+			}
 		}
-	})
-	t.Run("missing file", func(t *testing.T) {
-		if _, _, err := parseOSRelease(filepath.Join(t.TempDir(), "nope")); err == nil {
-			t.Fatal("want an error")
-		}
-	})
+	}
+}
+
+func TestCheckOSReadFailure(t *testing.T) {
+	old := collect
+	defer func() { collect = old }()
+	collect = func() (sysinfo.Info, error) { return sysinfo.Info{}, os.ErrNotExist }
+	if err := CheckOS(); err == nil {
+		t.Fatal("want an error when os-release cannot be read")
+	}
+	collect = func() (sysinfo.Info, error) {
+		return sysinfo.Info{OSID: "debian", OSVersion: "12"}, nil
+	}
+	if err := CheckOS(); err != nil {
+		t.Fatalf("debian 12 refused: %v", err)
+	}
 }
