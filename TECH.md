@@ -1,8 +1,10 @@
 # TECH.md
 
-**Version: v1.10.0** (2026-11-12)
+**Version: v1.11.0** (2026-11-12)
 
 Changelog (newest first, one entry per pushed unit of work, only the 5 most recent entries are kept):
+
+- **v1.11.0**: slice 2 is done: opt-in system changes (points 2, 10, first half of 16). `preflight.InstallPackages` no longer enables BBR, writes the unattended-upgrades config, allows ports in ufw or runs `ufw --force enable`, and `unattended-upgrades` left `aptPackages`; `ufw` stays installed. New package `internal/systune` and a main menu item "System tuning" (key `MENU_13`, next to IPv6) with three entries. (1) BBR switch: the same drop-in `/etc/sysctl.d/99-remnaforge-bbr.conf` with the same idempotent write as before; turning it on loads `tcp_bbr`, applies the file and fails with a clear error when the kernel does not end up on BBR (the old code ignored every error); turning it off removes the drop-in and sets the running kernel back to `cubic`. (2) Automatic security updates switch: installs the package when missing and writes `/etc/apt/apt.conf.d/20auto-upgrades` with `Unattended-Upgrade` set to `1` or `0`. This replaces the `debconf`, `dpkg-reconfigure` and restart steps, and the `Unattended-Upgrade::Mail "root"` line is dropped because it needs a mail server the installer never sets up. (3) System package upgrade: `apt-get update`, `apt-get -s upgrade`, a printed list of pending packages, a confirmation, `apt-get upgrade -y` that keeps locally changed config files, then a notice when `/var/run/reboot-required` exists. It never reboots. Every switch shows its state, asks before it flips, and a repeated run changes nothing. Servers that already ran with the old behavior keep their state. `sshPorts()` has no caller until slice 6 and stays unchanged for it. README in English, Russian and Chinese (the Persian one is gone) describe the new behavior. New tests: `internal/systune` (a fake host with temp paths and a fake command runner, 55 percent of statements, the rest is the real command runner), a guard test that the install flow holds none of the moved steps, the main menu, and the pure functions of `oscheck`, `domain` and `managepanel`. The integration test asserts that no BBR drop-in exists and ufw is inactive after the install; it needs a real runner and has not run yet.
 
 - **v1.10.0**: slice 1 is done: command timeouts (point 20). New package `internal/execx` wraps `os/exec`. `execx.Command` returns a command that is killed, together with its process group, when it runs longer than the timeout of its class: apt, apt-get and dpkg 15 minutes, `docker` with `pull`, `build`, `--build`, `up` or `run` 30 minutes, every other command 2 minutes. A timeout surfaces as an error that wraps `execx.ErrTimeout`. All 80 `exec.Command` call sites in the code moved to it. Commands the operator drives by hand (`docker exec -it` into the panel CLI, `docker compose logs -f`, the third-party backup-restore script) use `execx.Interactive` and have no timeout. Two calls get a longer timeout on purpose: the `get.docker.com` script (15 minutes, it runs apt) and the `pg_dump` of the database backup (30 minutes, a cut-off dump would be a silently truncated backup). Two classes go beyond the defaults of section 11 and need the maintainer to confirm: `certbot` and `python3 -m pip` get 10 minutes, because a DNS-01 challenge waits for record propagation and `certbot renew` handles every certificate in one run. Tests in `internal/execx/execx_test.go` cover a kill on timeout, the kill of child processes, output capture, stdin streaming and the class table.
 
@@ -11,8 +13,6 @@ Changelog (newest first, one entry per pushed unit of work, only the 5 most rece
 - **v1.9.20**: the remaining open points of section 11 are decided. Slice 16 blocks `vpn`, `node`, `panel`, country codes, `proxy`, `admin`, `xray`, `vless` and `remna`. Slice 2 leaves servers that already run BBR, unattended-upgrades and ufw as they are. Slice 13: the HAProxy backend implements TLS everywhere, so it supports TLS-terminated profiles only and skips Reality, which does not fit that routing yet. Nginx and Caddy flows keep Reality. The code is unchanged.
 
 - **v1.9.19**: the "deprecated" label of `Raw Reality` is removed again (reverts the code of v1.9.14: the picker can switch `Raw` on, and the labels, the key `NODE_PROFILE_DEPRECATED_BLOCKED`, `toggleOption` and the README sentences are gone). The maintainer asked to drop only the label. The install flows keep creating the profile, the host and the squad with `Raw Reality` during the initial setup, as before, and the tag `Raw` stays. The decisions of v1.9.16 (empty default profiles), v1.9.17 (nothing created at install) and the tag part of v1.9.18 are withdrawn. Still valid: only Debian and Ubuntu, `gpg` for backups and releases, `getMe`, SNI routing on 443 for every proxy, the domain name policy, the panel on 443 with 8443 as the fallback. Section 11 is corrected.
-
-- **v1.9.18**: two more decisions. (1) No code may depend on the inbound tag `Raw`: the tag lookup in `api.CreateConfigProfile` and the `"Raw"` fallback in `internal/nodeprofile` go away, and profile, host and squad are all created the first time the operator selects a profile. (2) The panel is served on 443 behind SNI routing. Port 8443 stays as an operator-opened fallback for the case that the panel route breaks (`managepanel` open and close). The panel container binds only `127.0.0.1:3000`, so 8443 is a proxy listener and not a container port. The code is unchanged.
 
 ---
 
@@ -68,6 +68,7 @@ internal/
   reinstall/              reinstall the panel or the node over the current one
   runlock/                exclusive run lock against a second concurrent instance
   selfsteal/              random or chosen HTML template for the selfsteal domain
+  systune/                opt-in BBR, automatic security updates, system package upgrade
   stack/                  stack teardown, database backup, docker compose volume check
   uninstall/              remove the tool and the installed panel
   ui/                     terminal colors, input reading, file logging
@@ -82,7 +83,7 @@ Touch only deliberately, with an understanding of the consequences:
 - **i18n key format.** `internal/i18n/i18n.go` holds all interface strings in English and Russian in two `map[string]string`. Do not rewrite it as a whole by hand. Record a targeted edit of a specific string with a comment above the data. Synthetic strings that are not in the main set (`IN_DEVELOPMENT`, `AvailableTemplates`, `DownloadingBackupRestore`) live in separate mini-maps at the bottom of the file, marked as such.
 - **Structure of `docker-compose.yml`/`nginx.conf`/`Caddyfile`.** An external contract with the images `remnawave/backend`, `remnawave/node`, `remnawave/subscription-page`, `nginx`, `caddy`. Environment variables, ports and healthchecks must match what these images expect. On a major panel version change, check the real panel changelog (example: v1.1.1) and do not assume.
 - **Go package names by content.** Each package is named after what it does (`panelonly` is the panel without a node, `panelfull` is the panel with a node), whatever the naming history. Check the content of the file whenever it is not obvious from the name, and do not rely on analogy with a similar module.
-- **`internal/preflight.EnsureInstalled()`.** The entry point for installing dependencies (docker/certbot/ufw/cron/unattended-upgrades/BBR). Every install flow (`nginxnode`, `panelonly`, `panelfull`, `caddynode`, `caddypanelonly`, `caddypanelfull`) calls it first, before the first interactive question to the user. Slice 2 (section 11) narrows what it installs: BBR, unattended-upgrades and the ufw switch-on leave it and become opt-in steps.
+- **`internal/preflight.EnsureInstalled()`.** The entry point for installing dependencies (docker/certbot/ufw/cron). Every install flow (`nginxnode`, `panelonly`, `panelfull`, `caddynode`, `caddypanelonly`, `caddypanelfull`) calls it first, before the first interactive question to the user. Since v1.11.0 BBR, unattended-upgrades and the ufw switch-on are not part of it: they are opt-in steps in `internal/systune`.
 - **`ui.Exit()` is the only call site of `os.Exit`.** After `ui.EnableFileLogging()` a bare `os.Exit()` loses the pipe buffer. Do not add new direct `os.Exit()` calls, only `ui.Exit()`.
 
 ---
@@ -114,6 +115,7 @@ Touch only deliberately, with an understanding of the consequences:
 | Versions, diagnostics and panel 2.x to 3.x migration | `internal/maintenance` |
 | Stack teardown and database backup (shared helpers of `uninstall`, `reinstall`, `managepanel`) | `internal/stack` |
 | External commands with timeouts | `internal/execx` |
+| System tuning (BBR, automatic updates, upgrade) | `internal/systune` |
 | Backup and restore (delegates to the third-party `distillium/remnawave-backup-restore`, MIT) | `internal/backuprestore` |
 | Localization, language selection, file logging | `internal/i18n`, `internal/ui` |
 | Main menu | `internal/menu` |
@@ -208,7 +210,7 @@ Rules for this section:
 | Point | Existing code | Verdict |
 |---|---|---|
 | 0, 1 | `.goreleaser.yaml` builds linux amd64/arm64 and writes `checksums.txt`. No signing, no `install.sh`, no `v*` tag. | Extend (slice 14). |
-| 2 | `preflight.InstallPackages` runs `apt-get update`, installs packages and calls `configureUnattendedUpgrades()` unconditionally. No update preview, no reboot check. | Rework (slice 2). |
+| 2 | `preflight.InstallPackages` ran `configureUnattendedUpgrades()` unconditionally and there was no update preview or reboot check. | Done (slice 2, v1.11.0). |
 | 3 | Nginx (`nginxnode`, `panelonly`, `panelfull`) and Caddy (`caddynode`, `caddypanelonly`, `caddypanelfull`). No HAProxy. | Add (slice 13). |
 | 4 | `preflight` install marker, `stack` uses compose project names. Install flows overwrite `docker-compose.yml`, `.env`, `nginx.conf`, `Caddyfile` with `os.WriteFile`. | Rework (slice 7). |
 | 5 | `oscheck.CheckOS`, `preflight.CheckDocker`, `domain.CheckDomain`. No port, repository or time checks. | Extend (slices 3, 4, 5). |
@@ -216,7 +218,7 @@ Rules for this section:
 | 7 | Generated configs were validated by hand once (v1.4.3). No validation step in the flows. | Add (slice 10). |
 | 8 | Done in v1.9.0 and v1.9.1 (`stack.Teardown`, `PromptBackup`). | Keep, cover with tests only if a slice touches it. |
 | 9 | `ui.EnableFileLogging` (log file), `maintenance.Doctor`. No final summary report. | Extend (slice 11). |
-| 10 | `enableBBR()` runs inside `InstallPackages` without asking. `internal/ipv6` is manual. | BBR: rework (slice 2). IPv6: keep. |
+| 10 | `enableBBR()` ran inside `InstallPackages` without asking. `internal/ipv6` is manual. | BBR: done (slice 2, v1.11.0). IPv6: keep. |
 | 11 | `oscheck` accepts Debian 11+ and Ubuntu 22.04+ by `/etc/os-release`. `maintenance.diskCheck` reads free disk. No kernel, RAM, package manager, systemd or repository detection. | Extend (slice 3). |
 | 12 | Three Docker checks: `preflight.CheckDocker`, `preflight.packagesAlreadySatisfied`, the `docker compose` line in `maintenance.runChecks`. `preflight.ensureDocker` installs. `stack.VolumeExists`. | Merge into one module, remove duplicates (slice 4). |
 | 13 | None. | Add (slice 12). |
@@ -239,7 +241,7 @@ Status: done. The lock part landed in v1.9.15, `internal/execx` and the migratio
 
 ### Slice 2. Opt-in system changes (points 2, 10, first half of 16)
 
-Depends on slice 1.
+Status: done in v1.11.0. Depends on slice 1.
 
 - Remove `enableBBR()`, `configureUnattendedUpgrades()`, the `ufw allow` loop and `ufw --force enable` from `preflight.InstallPackages`. Remove `unattended-upgrades` from `aptPackages`.
 - Add `internal/systune` with a new main menu item "System tuning":

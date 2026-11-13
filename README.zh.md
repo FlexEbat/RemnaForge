@@ -54,7 +54,7 @@ VLESS 协议及其相关机制（XTLS、REALITY、VLESS Encryption）发展很�
 - 管理已安装的服务栈：启动、停止、更新镜像、查看 `docker compose` 日志、容器内置的 `remnawave` CLI、临时在 8443 端口开放面板以便无域名访问。
 - 在当前安装基础上重新安装面板或节点，保留原来的反向代理选择。
 - 在操作系统层面开启或关闭 IPv6。
-- 在全新服务器上、首次安装前预装依赖：`docker`、`docker compose`、`certbot`、`ufw`、`cron`、`unattended-upgrades`，并启用 BBR。
+- 在全新服务器上、首次安装前预装依赖：`docker`、`docker compose`、`certbot`、`ufw`、`cron`。它本身不会修改主机设置：BBR、自动安全更新和系统软件包升级需要在“系统调优”菜单中手动开启。
 - 面板备份与恢复 —— 委托给第三方工具 [distillium/remnawave-backup-restore](https://github.com/distillium/remnawave-backup-restore)（MIT 许可），自身不做具体实现。
 - 完整卸载（容器、镜像、数据卷）或仅移除 RemnaForge 自身的状态。
 - 界面支持英语和俄语，首次运行时选择。
@@ -116,7 +116,7 @@ sudo remnaforge
 - `/opt/remnawave/` 或 `/opt/remnanode/` —— 已安装服务栈的 `docker-compose.yml`、`.env`、`nginx.conf` 或 `Caddyfile`。
 - `/usr/local/remnawave_reverse/` —— RemnaForge 自身的状态：选定的语言、日志文件、依赖已安装的标记。其中的 `remnaforge.lock` 文件会在已有实例运行时阻止第二个实例启动。
 - `/etc/letsencrypt/` —— 证书和续期配置，仅当选择 Nginx + certbot 时使用。
-- `/etc/sysctl.conf` —— 在开关 IPv6 时会修改。`/etc/sysctl.d/99-remnaforge-bbr.conf` 和 `ufw` 规则 —— 在首次安装依赖时会修改（启用 ufw 之前，会先放行 sshd 正在监听的端口）。
+- `/etc/sysctl.conf` —— 在开关 IPv6 时会修改。`/etc/sysctl.d/99-remnaforge-bbr.conf` —— 仅在你于“系统调优”菜单中开启 BBR 时创建，关闭时删除。`/etc/apt/apt.conf.d/20auto-upgrades` —— 仅在你于该菜单中开关自动安全更新时修改。
 - `/var/www/html/` —— selfsteal 域名的 HTML 模板。
 
 完整卸载（菜单第 10 项，「wipe everything」）会连同容器、镜像、数据卷一起删除 `/opt/remnawave` 或 `/opt/remnanode`。不会动 `/etc/letsencrypt` —— 证书会保留在磁盘上。
@@ -139,6 +139,7 @@ internal/
   caddypanelonly/         在 Caddy 后安装面板（不含节点）
   certs/                  为 Nginx 签发和续期 TLS 证书（certbot）
   domain/                 提取基础域名、DNS 检查、Cloudflare 检测
+  execx/                  带超时的外部命令执行
   genutil/                生成密码、用户名、密钥
   i18n/                   英语/俄语界面文本，语言选择与持久化
   ipv6/                   在操作系统层面开启和关闭 IPv6
@@ -152,6 +153,7 @@ internal/
   preflight/              首次运行前安装 docker/certbot/ufw/cron
   reinstall/              在当前安装基础上重新安装面板或节点
   selfsteal/              selfsteal 域名使用的 HTML 模板
+  systune/                按需开启 BBR、自动安全更新和系统软件包升级
   uninstall/              移除 RemnaForge 和/或已安装的服务栈
   ui/                     终端配色、输入读取、文件日志
 ```

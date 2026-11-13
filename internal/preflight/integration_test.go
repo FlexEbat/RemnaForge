@@ -9,7 +9,9 @@
 package preflight
 
 import (
+	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/FlexEbat/RemnaForge/internal/execx"
@@ -38,6 +40,18 @@ func TestInstallPackagesOnRealRunner(t *testing.T) {
 
 	if err := execx.Command("docker", "info").Run(); err != nil {
 		t.Errorf("docker info failed after InstallPackages: %v", err)
+	}
+}
+
+// The install flow must leave BBR and the firewall to the operator: the
+// System tuning menu is the only place that turns them on.
+func TestInstallPackagesLeavesHostSettingsAloneOnRealRunner(t *testing.T) {
+	if _, err := os.Stat("/etc/sysctl.d/99-remnaforge-bbr.conf"); err == nil {
+		t.Error("the BBR drop-in exists after InstallPackages")
+	}
+	out, err := execx.Command("ufw", "status").Output()
+	if err == nil && !strings.Contains(string(out), "inactive") {
+		t.Errorf("ufw is active after InstallPackages:\n%s", out)
 	}
 }
 

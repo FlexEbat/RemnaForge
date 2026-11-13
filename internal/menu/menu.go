@@ -35,6 +35,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/panelonly"
 	"github.com/FlexEbat/RemnaForge/internal/reinstall"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
+	"github.com/FlexEbat/RemnaForge/internal/systune"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 	"github.com/FlexEbat/RemnaForge/internal/uninstall"
 )
@@ -71,6 +72,7 @@ var mainMenuItems = []menuItem{
 		ipv6.ManageIPv6(ipv6.MenuNav{ReturnToMainMenu: func() {}})
 		return false
 	}},
+	{label: label("MENU_13"), action: func() bool { systune.Menu(); return false }},
 	{label: label("MENU_9"), action: func() bool { certs.ManageCertificates(); return false }},
 	{label: label("MENU_10"), action: func() bool { nodeprofile.ManageNodeProfile(); return false }},
 	{label: label("MENU_11"), newGroup: true, action: func() bool { maintenance.Menu(); return false }},
