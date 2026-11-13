@@ -2,6 +2,7 @@ package systune
 
 import (
 	"errors"
+	"github.com/FlexEbat/RemnaForge/internal/firewall"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -479,5 +480,22 @@ func TestMenuUpgradeFailure(t *testing.T) {
 	Menu()
 	if !s.said("failed") || s.said("Packages upgraded") {
 		t.Errorf("output = %v", s.printed)
+	}
+}
+
+func TestMenuStartsTheFirewallFlow(t *testing.T) {
+	newFakeHost(t)
+	called := 0
+	old := runFirewall
+	runFirewall = func(_ firewall.Env, _ func(string) string) { called++ }
+	defer func() { runFirewall = old }()
+	s := &script{answers: []string{"4", "0"}}
+	s.install(t)
+	Menu()
+	if called != 1 {
+		t.Errorf("the firewall flow ran %d times", called)
+	}
+	if !s.said("Firewall and intrusion protection") {
+		t.Errorf("menu entry missing: %v", s.printed)
 	}
 }

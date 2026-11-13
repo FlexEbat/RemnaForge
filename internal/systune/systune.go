@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/firewall"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -195,6 +196,7 @@ func RebootRequired() bool {
 
 // Menu input and output are variables so tests can drive the menu.
 var (
+	runFirewall = firewall.Run
 	readLine    = ui.Reading
 	clearScreen = ui.LogClear
 	out         = func(color, msg string) { fmt.Printf("%s%s%s\n", color, msg, ui.ColorReset) }
@@ -214,6 +216,7 @@ func showMenu() {
 	out(ui.ColorYellow, fmt.Sprintf("1. %s: %s", i18n.T("SYSTUNE_BBR_NAME"), state(BBREnabled())))
 	out(ui.ColorYellow, fmt.Sprintf("2. %s: %s", i18n.T("SYSTUNE_UPGRADES_NAME"), state(UnattendedEnabled())))
 	out(ui.ColorYellow, "3. "+i18n.T("SYSTUNE_UPDATE_NAME"))
+	out(ui.ColorYellow, "4. "+i18n.T("SYSTUNE_FIREWALL_NAME"))
 	fmt.Println()
 	out(ui.ColorYellow, "0. "+i18n.T("EXIT"))
 	fmt.Println()
@@ -230,6 +233,8 @@ func Menu() {
 			toggle(i18n.T("SYSTUNE_UPGRADES_NAME"), UnattendedEnabled(), EnableUnattended, DisableUnattended)
 		case "3":
 			upgradePackages()
+		case "4":
+			runFirewall(firewall.DefaultEnv(), readLine)
 		case "0":
 			out(ui.ColorYellow, i18n.T("EXIT"))
 			_ = clearScreen()
