@@ -1,8 +1,10 @@
 # TECH.md
 
-**Version: v1.11.0** (2026-11-12)
+**Version: v1.12.0** (2026-11-12)
 
 Changelog (newest first, one entry per pushed unit of work, only the 5 most recent entries are kept):
+
+- **v1.12.0**: slice 3 is done: environment detection (points 5, 11). New package `internal/sysinfo` returns one `Info` struct: distribution (ID, version, pretty name), architecture, kernel release, package manager (apt, dnf, yum, zypper, pacman or apk), systemd presence, memory, free disk on `/opt` and `/var/lib/docker` (a path that does not exist yet is measured at its nearest existing parent) and, on request, the repository state (`apt-get update` result and `apt-cache policy` for the packages the tool installs). Every read goes through an `Env`, so tests feed fixture `os-release`, `meminfo`, kernel and `statfs` values. `oscheck.CheckOS` reads `sysinfo` instead of parsing `/etc/os-release` itself; the matrix stays Debian 11+ and Ubuntu 22.04+, and any other system, including dnf and RHEL based ones, is refused with a message that names the detected system and package manager. Thresholds are constants with a named reason each: refuse below 1 GiB of memory (the OOM killer ends Docker, Postgres or Xray), warn below 2 GiB (image pulls and the xcaddy build swap), warn below 10 GiB free on `/opt` and `/var/lib/docker`, warn for a kernel older than 4.9 (BBR arrived there), warn without systemd. Disk, kernel and systemd are warnings, not refusals: section 11 fixes the memory refusal only, so this is an assumption to confirm. `preflight.EnsureInstalled`, the first call of every install flow, prints the block as "Environment" and stops on a refusal; the repository check runs there only when packages are about to be installed. New tests: `internal/sysinfo` (94 percent of statements, plus a read of the real host), `oscheck` table tests on `sysinfo.Info`, and the refusal in `preflight`.
 
 - **v1.11.0**: slice 2 is done: opt-in system changes (points 2, 10, first half of 16). `preflight.InstallPackages` no longer enables BBR, writes the unattended-upgrades config, allows ports in ufw or runs `ufw --force enable`, and `unattended-upgrades` left `aptPackages`; `ufw` stays installed. New package `internal/systune` and a main menu item "System tuning" (key `MENU_13`, next to IPv6) with three entries. (1) BBR switch: the same drop-in `/etc/sysctl.d/99-remnaforge-bbr.conf` with the same idempotent write as before; turning it on loads `tcp_bbr`, applies the file and fails with a clear error when the kernel does not end up on BBR (the old code ignored every error); turning it off removes the drop-in and sets the running kernel back to `cubic`. (2) Automatic security updates switch: installs the package when missing and writes `/etc/apt/apt.conf.d/20auto-upgrades` with `Unattended-Upgrade` set to `1` or `0`. This replaces the `debconf`, `dpkg-reconfigure` and restart steps, and the `Unattended-Upgrade::Mail "root"` line is dropped because it needs a mail server the installer never sets up. (3) System package upgrade: `apt-get update`, `apt-get -s upgrade`, a printed list of pending packages, a confirmation, `apt-get upgrade -y` that keeps locally changed config files, then a notice when `/var/run/reboot-required` exists. It never reboots. Every switch shows its state, asks before it flips, and a repeated run changes nothing. Servers that already ran with the old behavior keep their state. `sshPorts()` has no caller until slice 6 and stays unchanged for it. README in English, Russian and Chinese (the Persian one is gone) describe the new behavior. New tests: `internal/systune` (a fake host with temp paths and a fake command runner, 55 percent of statements, the rest is the real command runner), a guard test that the install flow holds none of the moved steps, the main menu, and the pure functions of `oscheck`, `domain` and `managepanel`. The integration test asserts that no BBR drop-in exists and ufw is inactive after the install; it needs a real runner and has not run yet.
 
@@ -11,8 +13,6 @@ Changelog (newest first, one entry per pushed unit of work, only the 5 most rece
 - **v1.9.21**: the Persian README is removed (`README.fa.md` and its link in the language switchers). Documentation languages are English, Russian and Chinese. `CONTRIBUTING.md` says three versions instead of four. Section 11 gets the answers of the maintainer to the last round of questions (see the new subsection "Decisions of 2026-11-12"). The code is unchanged.
 
 - **v1.9.20**: the remaining open points of section 11 are decided. Slice 16 blocks `vpn`, `node`, `panel`, country codes, `proxy`, `admin`, `xray`, `vless` and `remna`. Slice 2 leaves servers that already run BBR, unattended-upgrades and ufw as they are. Slice 13: the HAProxy backend implements TLS everywhere, so it supports TLS-terminated profiles only and skips Reality, which does not fit that routing yet. Nginx and Caddy flows keep Reality. The code is unchanged.
-
-- **v1.9.19**: the "deprecated" label of `Raw Reality` is removed again (reverts the code of v1.9.14: the picker can switch `Raw` on, and the labels, the key `NODE_PROFILE_DEPRECATED_BLOCKED`, `toggleOption` and the README sentences are gone). The maintainer asked to drop only the label. The install flows keep creating the profile, the host and the squad with `Raw Reality` during the initial setup, as before, and the tag `Raw` stays. The decisions of v1.9.16 (empty default profiles), v1.9.17 (nothing created at install) and the tag part of v1.9.18 are withdrawn. Still valid: only Debian and Ubuntu, `gpg` for backups and releases, `getMe`, SNI routing on 443 for every proxy, the domain name policy, the panel on 443 with 8443 as the fallback. Section 11 is corrected.
 
 ---
 
@@ -68,6 +68,7 @@ internal/
   reinstall/              reinstall the panel or the node over the current one
   runlock/                exclusive run lock against a second concurrent instance
   selfsteal/              random or chosen HTML template for the selfsteal domain
+  sysinfo/                host detection: distribution, kernel, memory, disk, repositories
   systune/                opt-in BBR, automatic security updates, system package upgrade
   stack/                  stack teardown, database backup, docker compose volume check
   uninstall/              remove the tool and the installed panel
@@ -116,6 +117,7 @@ Touch only deliberately, with an understanding of the consequences:
 | Stack teardown and database backup (shared helpers of `uninstall`, `reinstall`, `managepanel`) | `internal/stack` |
 | External commands with timeouts | `internal/execx` |
 | System tuning (BBR, automatic updates, upgrade) | `internal/systune` |
+| Host detection and thresholds | `internal/sysinfo` |
 | Backup and restore (delegates to the third-party `distillium/remnawave-backup-restore`, MIT) | `internal/backuprestore` |
 | Localization, language selection, file logging | `internal/i18n`, `internal/ui` |
 | Main menu | `internal/menu` |
@@ -219,7 +221,7 @@ Rules for this section:
 | 8 | Done in v1.9.0 and v1.9.1 (`stack.Teardown`, `PromptBackup`). | Keep, cover with tests only if a slice touches it. |
 | 9 | `ui.EnableFileLogging` (log file), `maintenance.Doctor`. No final summary report. | Extend (slice 11). |
 | 10 | `enableBBR()` ran inside `InstallPackages` without asking. `internal/ipv6` is manual. | BBR: done (slice 2, v1.11.0). IPv6: keep. |
-| 11 | `oscheck` accepts Debian 11+ and Ubuntu 22.04+ by `/etc/os-release`. `maintenance.diskCheck` reads free disk. No kernel, RAM, package manager, systemd or repository detection. | Extend (slice 3). |
+| 11 | `oscheck` accepted Debian 11+ and Ubuntu 22.04+ by `/etc/os-release`. `maintenance.diskCheck` reads free disk. There was no kernel, RAM, package manager, systemd or repository detection. | Done (slice 3, v1.12.0). |
 | 12 | Three Docker checks: `preflight.CheckDocker`, `preflight.packagesAlreadySatisfied`, the `docker compose` line in `maintenance.runChecks`. `preflight.ensureDocker` installs. `stack.VolumeExists`. | Merge into one module, remove duplicates (slice 4). |
 | 13 | None. | Add (slice 12). |
 | 14, 15 | `writeSecretFile`, `setComposeEnv`, `api.MergeProfileConfig` (profile JSON only), database backup in `stack`. No file manifest, no config backup, no atomic write, no rollback. | Add (slices 7, 8). |
@@ -255,6 +257,8 @@ Status: done in v1.11.0. Depends on slice 1.
 - Decided: servers that already run with the old behavior keep their BBR, unattended-upgrades and ufw state. The slice does not undo it.
 
 ### Slice 3. Environment detection (points 5, 11)
+
+Status: done in v1.12.0.
 
 - Add `internal/sysinfo` returning one struct: distribution and version, CPU architecture, kernel version, package manager (apt, dnf, yum, zypper, pacman, apk), systemd presence, repository state (`apt-get update` exit code and `apt-cache policy` for the packages the tool needs), RAM, free disk on `/opt` and `/var/lib/docker`.
 - `oscheck.CheckOS` reads `sysinfo` instead of parsing `/etc/os-release` itself. The support matrix stays Debian 11+ and Ubuntu 22.04+.

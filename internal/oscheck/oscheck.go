@@ -10,16 +10,14 @@
 package oscheck
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/sysinfo"
 )
-
-const osReleasePath = "/etc/os-release"
 
 const (
 	minDebianMajor = 11
@@ -27,47 +25,41 @@ const (
 	minUbuntuMinor = 4 // "22.04" -> major 22, minor 04
 )
 
-// parseOSRelease reads ID and VERSION_ID out of /etc/os-release (a simple
-// KEY=VALUE file, values optionally double-quoted).
-func parseOSRelease(path string) (id, versionID string, err error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", "", err
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		key, val, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		val = strings.Trim(val, `"`)
-		switch key {
-		case "ID":
-			id = val
-		case "VERSION_ID":
-			versionID = val
-		}
-	}
-	return id, versionID, scanner.Err()
-}
-
 // CheckOS checks that the host OS is a supported release. It returns an
 // error rather than printing and exiting itself, so the caller can
 // decide how to present it; a caller that wants a "print in red and
 // exit" behavior can do so at the top level.
 func CheckOS() error {
-	id, versionID, err := parseOSRelease(osReleasePath)
+	info, err := collect()
 	if err != nil {
 		return fmt.Errorf("%s", i18n.T("ERROR_OS"))
 	}
+	return checkInfo(info)
+}
 
-	if supported(id, versionID) {
+// collect reads the host through sysinfo; tests replace it.
+var collect = func() (sysinfo.Info, error) {
+	return sysinfo.Collect(sysinfo.DefaultEnv())
+}
+
+// checkInfo accepts a supported distribution and refuses every other one
+// with a message that names what was detected.
+func checkInfo(info sysinfo.Info) error {
+	if supported(info.OSID, info.OSVersion) {
 		return nil
 	}
-	return fmt.Errorf("%s", i18n.T("ERROR_OS"))
+	name := info.OSName
+	if name == "" {
+		name = strings.TrimSpace(info.OSID + " " + info.OSVersion)
+	}
+	if name == "" {
+		name = "?"
+	}
+	pm := info.PackageManager
+	if pm == "" {
+		pm = "-"
+	}
+	return fmt.Errorf(i18n.T("ERROR_OS_UNSUPPORTED"), name, pm)
 }
 
 func supported(id, versionID string) bool {
