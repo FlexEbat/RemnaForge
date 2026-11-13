@@ -26,7 +26,7 @@ const installMarker = dirRemnawave + "install_packages"
 var aptPackages = []string{
 	"ca-certificates", "curl", "jq", "ufw", "wget", "gnupg", "unzip", "nano",
 	"dialog", "git", "certbot", "python3-certbot-dns-cloudflare",
-	"unattended-upgrades", "locales", "dnsutils", "coreutils", "grep",
+	"locales", "dnsutils", "coreutils", "grep",
 	"gawk", "python3-pip",
 }
 
@@ -59,8 +59,9 @@ func packagesAlreadySatisfied() bool {
 }
 
 // InstallPackages bootstraps every dependency this project needs on a
-// fresh server: apt packages, cron, Docker, BBR, baseline UFW rules,
-// and unattended-upgrades.
+// fresh server: apt packages, cron and Docker. It changes nothing else
+// on the host: BBR, automatic updates and the firewall are opt-in and
+// live in the System tuning menu (internal/systune).
 func InstallPackages() error {
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("INSTALL_PACKAGES"), ui.ColorReset)
 
@@ -98,33 +99,6 @@ func InstallPackages() error {
 
 	// Docker.
 	if err := ensureDocker(); err != nil {
-		return err
-	}
-
-	// BBR congestion control.
-	enableBBR()
-
-	// UFW baseline rules. SSH is allowed on the port(s) sshd really uses,
-	// not a fixed 22: enabling ufw on a server whose sshd listens elsewhere
-	// cuts the operator off from the machine.
-	for _, port := range sshPorts() {
-		if err := run("ufw", "allow", fmt.Sprintf("%d/tcp", port), "comment", "SSH"); err != nil {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CONFIGURE_UFW"), ui.ColorReset)
-			return err
-		}
-	}
-	if err := run("ufw", "allow", "443/tcp", "comment", "HTTPS"); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CONFIGURE_UFW"), ui.ColorReset)
-		return err
-	}
-	if err := run("ufw", "--force", "enable"); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CONFIGURE_UFW"), ui.ColorReset)
-		return err
-	}
-
-	// Unattended-upgrades.
-	if err := configureUnattendedUpgrades(); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_CONFIGURE_UPGRADES"), ui.ColorReset)
 		return err
 	}
 
@@ -227,54 +201,4 @@ func ensureDocker() error {
 	}
 
 	return nil
-}
-
-// bbrConfPath is the sysctl drop-in this tool owns. A file of our own
-// replaces editing /etc/sysctl.conf: matching substrings there treated a
-// commented-out line as a setting and appended duplicates when the
-// spacing differed, and a drop-in is also easy to remove again.
-const bbrConfPath = "/etc/sysctl.d/99-remnaforge-bbr.conf"
-
-const bbrConf = "net.core.default_qdisc = fq\nnet.ipv4.tcp_congestion_control = bbr\n"
-
-// enableBBR enables the BBR congestion-control algorithm, best-effort:
-// errors from the underlying commands are intentionally ignored, since
-// this is a nice-to-have network tuning step, not something worth
-// failing the whole install over.
-func enableBBR() {
-	if err := writeBBRConf(bbrConfPath); err != nil {
-		return
-	}
-	_ = execx.Command("sysctl", "-p", bbrConfPath).Run()
-}
-
-// writeBBRConf writes the drop-in unless it already holds the wanted
-// content, so repeated runs leave the file alone.
-func writeBBRConf(path string) error {
-	if existing, err := os.ReadFile(path); err == nil && string(existing) == bbrConf {
-		return nil
-	}
-	return os.WriteFile(path, []byte(bbrConf), 0644)
-}
-
-// configureUnattendedUpgrades turns on unattended security upgrades and
-// mail-on-upgrade notifications to root.
-func configureUnattendedUpgrades() error {
-	const confPath = "/etc/apt/apt.conf.d/50unattended-upgrades"
-	const mailLine = `Unattended-Upgrade::Mail "root";`
-	if existing, _ := os.ReadFile(confPath); !strings.Contains(string(existing), mailLine) {
-		if f, err := os.OpenFile(confPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644); err == nil {
-			_, _ = f.WriteString(mailLine + "\n")
-			f.Close()
-		}
-	}
-
-	debconf := execx.Command("debconf-set-selections")
-	debconf.Stdin = strings.NewReader("unattended-upgrades unattended-upgrades/enable_auto_updates boolean true\n")
-	_ = debconf.Run()
-
-	if err := run("dpkg-reconfigure", "-f", "noninteractive", "unattended-upgrades"); err != nil {
-		return err
-	}
-	return run("systemctl", "restart", "unattended-upgrades")
 }
