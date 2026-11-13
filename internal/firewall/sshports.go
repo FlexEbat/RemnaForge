@@ -1,4 +1,4 @@
-package preflight
+package firewall
 
 import (
 	"os"
@@ -9,7 +9,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 )
 
-// sshPorts returns the TCP ports ufw must keep open for SSH, never
+// SSHPorts returns the TCP ports a firewall must keep open for SSH, never
 // empty. Sources, in order of trust:
 //
 //  1. SSH_CONNECTION: the server-side port of the session running this
@@ -18,7 +18,7 @@ import (
 //     comes from the socket unit and sshd_config's Port is ignored.
 //  2. `sshd -T`: the effective sshd_config, for runs from a console.
 //  3. 22, when neither source yields a port.
-func sshPorts() []int {
+func SSHPorts() []int {
 	var ports []int
 	if p, ok := portFromSSHConnection(os.Getenv("SSH_CONNECTION")); ok {
 		ports = append(ports, p)
