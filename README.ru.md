@@ -139,6 +139,7 @@ internal/
   caddypanelfull/         установка панели с совмещённой нодой за Caddy
   caddypanelonly/         установка панели без ноды за Caddy
   certs/                  выпуск и обновление TLS-сертификатов для Nginx (certbot)
+  dockercheck/            Docker: движок, Compose v2, контекст, реестр, конфликты имён проектов; установка Docker
   domain/                 извлечение базового домена, проверка DNS, детект Cloudflare
   execx/                  внешние команды с таймаутом по классу команды
   genutil/                генерация паролей, логинов, секретов

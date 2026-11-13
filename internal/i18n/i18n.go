@@ -7,6 +7,17 @@ package i18n
 var Lang map[string]string
 
 var english = map[string]string{
+	"DOCKERCHECK_CONFLICT":                "The compose project name %q is used by several directories: %s.",
+	"DOCKERCHECK_CONTEXT":                 "The Docker CLI uses the context %q instead of the default one: commands would run on another machine.",
+	"DOCKERCHECK_LINE":                    "Docker: engine %s, compose %s",
+	"DOCKERCHECK_LINE_MISSING":            "Docker: not installed yet",
+	"DOCKERCHECK_LINE_OBJECTS":            "Already there from this tool: %d containers, %d networks, %d volumes",
+	"DOCKERCHECK_NO_COMPOSE":              "The Docker Compose v2 plugin is missing.",
+	"DOCKERCHECK_NO_DAEMON":               "Docker is installed but the daemon does not answer.",
+	"DOCKERCHECK_OLD_COMPOSE":             "Docker Compose %s is too old, version 2 is required.",
+	"DOCKERCHECK_REGISTRY":                "Docker registry: %s",
+	"DOCKERCHECK_REGISTRY_OK":             "reachable",
+	"DOCKERCHECK_REGISTRY_UNREACHABLE":    "unreachable (%v)",
 	"ERROR_OS_UNSUPPORTED":                "Unsupported system: %s (package manager: %s). Only Debian 11+ and Ubuntu 22.04+ are supported.",
 	"MAINT_TITLE":                         "Versions, diagnostics and migration",
 	"MAINT_VERSIONS":                      "Show installed versions",
@@ -363,6 +374,17 @@ var english = map[string]string{
 	"WILDCARD_CERT_FOUND":                     "Wildcard certificate found in /etc/letsencrypt/live/",
 }
 var russian = map[string]string{
+	"DOCKERCHECK_CONFLICT":                    "Имя compose-проекта %q занято несколькими каталогами: %s.",
+	"DOCKERCHECK_CONTEXT":                     "Docker CLI использует контекст %q, а не стандартный: команды выполнятся на другой машине.",
+	"DOCKERCHECK_LINE":                        "Docker: движок %s, compose %s",
+	"DOCKERCHECK_LINE_MISSING":                "Docker: ещё не установлен",
+	"DOCKERCHECK_LINE_OBJECTS":                "Уже есть от этого инструмента: контейнеров %d, сетей %d, томов %d",
+	"DOCKERCHECK_NO_COMPOSE":                  "Плагин Docker Compose v2 отсутствует.",
+	"DOCKERCHECK_NO_DAEMON":                   "Docker установлен, но демон не отвечает.",
+	"DOCKERCHECK_OLD_COMPOSE":                 "Docker Compose %s слишком старый, нужна версия 2.",
+	"DOCKERCHECK_REGISTRY":                    "Реестр Docker: %s",
+	"DOCKERCHECK_REGISTRY_OK":                 "доступен",
+	"DOCKERCHECK_REGISTRY_UNREACHABLE":        "недоступен (%v)",
 	"ERROR_OS_UNSUPPORTED":                    "Система не поддерживается: %s (пакетный менеджер: %s). Поддерживаются только Debian 11+ и Ubuntu 22.04+.",
 	"MAINT_TITLE":                             "Версии, диагностика и миграция",
 	"MAINT_VERSIONS":                          "Показать установленные версии",

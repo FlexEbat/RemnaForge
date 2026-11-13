@@ -16,12 +16,12 @@ import (
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/api"
+	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
-	"github.com/FlexEbat/RemnaForge/internal/stack"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -386,7 +386,7 @@ func installPanelCaddy() (*panelState, error) {
 		state.metricsUser, state.metricsPass,
 	)
 	dotEnv = genutil.HardenEnv(dotEnv)
-	if stack.VolumeExists("remnawave-db-data") {
+	if dockercheck.VolumeExists("remnawave-db-data") {
 		fmt.Printf("%s"+i18n.T("DB_VOLUME_EXISTS")+"%s\n", ui.ColorRed, "remnawave-db-data", ui.ColorReset)
 		return nil, fmt.Errorf("existing database volume")
 	}

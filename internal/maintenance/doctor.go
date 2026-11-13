@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
@@ -56,8 +57,7 @@ func Doctor() {
 func runChecks() []check {
 	var checks []check
 
-	out, err := execx.Command("docker", "compose", "version", "--short").Output()
-	checks = append(checks, check{"docker compose", err == nil, strings.TrimSpace(string(out))})
+	checks = append(checks, dockerChecks(dockercheck.Inspect(dockercheck.DefaultEnv()))...)
 
 	for _, dir := range []string{panelDir, nodeDir} {
 		if exists(filepath.Join(dir, "docker-compose.yml")) {
@@ -72,6 +72,38 @@ func runChecks() []check {
 
 	checks = append(checks, certChecks()...)
 	checks = append(checks, diskCheck())
+	return checks
+}
+
+// dockerChecks turns the Docker state into doctor checks: engine, Compose
+// v2, the context in use, and a compose project name that another
+// directory already owns.
+func dockerChecks(st dockercheck.Status) []check {
+	if !st.Installed {
+		return []check{{"docker", false, "not installed"}}
+	}
+	var checks []check
+	if st.Daemon {
+		checks = append(checks, check{"docker engine", true, st.ServerVersion})
+	} else {
+		checks = append(checks, check{"docker engine", false, "the daemon does not answer"})
+	}
+	switch {
+	case st.ComposeV2:
+		checks = append(checks, check{"docker compose", true, st.ComposeVersion})
+	case st.ComposeVersion != "":
+		checks = append(checks, check{"docker compose", false, st.ComposeVersion + ", version 2 is required"})
+	default:
+		checks = append(checks, check{"docker compose", false, "the plugin is missing"})
+	}
+	if st.Context != "" && st.Context != "default" {
+		checks = append(checks, check{"docker context", false, st.Context + " (not the default one)"})
+	}
+	for _, dir := range []string{panelDir, nodeDir} {
+		if c := dockercheck.ConflictFor(st.Projects, dir); c != nil {
+			checks = append(checks, check{"compose project " + c.Name, false, "also used by " + strings.Join(c.Dirs[:len(c.Dirs)-1], ", ")})
+		}
+	}
 	return checks
 }
 
