@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/stack"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
@@ -57,6 +58,7 @@ func removeScriptOnly() {
 	}
 
 	_ = os.RemoveAll(dirRemnawave)
+	_ = cfgfile.Forget(dirRemnawave, "remnawave.")
 	removeBinary()
 
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("SCRIPT_REMOVED"), ui.ColorReset)
@@ -86,6 +88,7 @@ func removeScriptAndPanel() {
 	}
 
 	_ = os.RemoveAll(dirRemnawave)
+	_ = cfgfile.Forget(dirRemnawave, "remnawave.")
 	removeBinary()
 
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("ALL_REMOVED"), ui.ColorReset)

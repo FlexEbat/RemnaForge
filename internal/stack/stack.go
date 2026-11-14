@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
@@ -31,7 +32,12 @@ func Teardown(dir string) error {
 			return fmt.Errorf("docker compose down in %s: %v: %s", dir, err, out)
 		}
 	}
-	return os.RemoveAll(dir)
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	// A removed stack starts from fresh values the next time.
+	_ = cfgfile.Forget(dir, filepath.Base(dir)+".")
+	return nil
 }
 
 // BackupPanel writes a gzip-compressed pg_dump of the panel database
@@ -59,7 +65,7 @@ func backupPanelTo(dir, dest string) (err error) {
 	}()
 
 	if data, readErr := os.ReadFile(filepath.Join(dir, ".env")); readErr == nil {
-		if err = os.WriteFile(filepath.Join(dest, ".env"), data, 0600); err != nil {
+		if err = cfgfile.Replace(filepath.Join(dest, ".env"), string(data), cfgfile.Opts{}); err != nil {
 			return err
 		}
 	}

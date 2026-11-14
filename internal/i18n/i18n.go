@@ -7,6 +7,12 @@ package i18n
 var Lang map[string]string
 
 var english = map[string]string{
+	"CFGFILE_CHANGED":                     "The file %s differs from what the installer wants to write, and it was changed since the installer last wrote it (or was not written by it). Differences (- your file, + installer):",
+	"CFGFILE_KEEP":                        "keep your file as it is",
+	"CFGFILE_LEGEND":                      "What should happen to it?",
+	"CFGFILE_MERGE":                       "merge: the installer's blocks replace theirs, blocks only your file has stay",
+	"CFGFILE_PROMPT":                      "Choice (%s, empty keeps your file):",
+	"CFGFILE_REPLACE":                     "replace it with the installer's version (a backup is made)",
 	"CHECK_DOMAIN_AAAA_INSTRUCTION":       "Remove the AAAA record, or point it at this server's public IPv6 address, then continue.",
 	"CHECK_DOMAIN_AAAA_MISMATCH":          "The AAAA record of %s points to %s, which differs from this server's IPv6 address (%s).",
 	"CHECK_DOMAIN_AAAA_NO_SERVER":         "The domain %s has an AAAA record (%s) but this server has no public IPv6 address. Let's Encrypt connects over IPv6 first, so the certificate check would fail.",
@@ -466,6 +472,12 @@ var english = map[string]string{
 	"WILDCARD_CERT_FOUND":                     "Wildcard certificate found in /etc/letsencrypt/live/",
 }
 var russian = map[string]string{
+	"CFGFILE_CHANGED":                         "Файл %s отличается от того, что хочет записать установщик, и менялся после последней записи установщиком (или создан не им). Отличия (- ваш файл, + установщик):",
+	"CFGFILE_KEEP":                            "оставить ваш файл как есть",
+	"CFGFILE_LEGEND":                          "Что с ним сделать?",
+	"CFGFILE_MERGE":                           "объединить: блоки установщика заменят ваши, блоки только из вашего файла останутся",
+	"CFGFILE_PROMPT":                          "Выбор (%s, пустой ответ оставляет ваш файл):",
+	"CFGFILE_REPLACE":                         "заменить версией установщика (будет сделана копия)",
 	"CHECK_DOMAIN_AAAA_INSTRUCTION":           "Удалите AAAA-запись или направьте её на публичный IPv6-адрес этого сервера, затем продолжайте.",
 	"CHECK_DOMAIN_AAAA_MISMATCH":              "AAAA-запись домена %s указывает на %s, что отличается от IPv6-адреса этого сервера (%s).",
 	"CHECK_DOMAIN_AAAA_NO_SERVER":             "У домена %s есть AAAA-запись (%s), но у этого сервера нет публичного IPv6-адреса. Let's Encrypt подключается сначала по IPv6, поэтому проверка сертификата не пройдёт.",

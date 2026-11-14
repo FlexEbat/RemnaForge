@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
@@ -317,7 +318,7 @@ func fileModTime(path string) int64 {
 // tells the operator when that fails. A silent failure here would only
 // surface later as a failed certificate renewal.
 func reportCredentialsWrite(path, content string) {
-	if err := writeSecretFile(path, content); err != nil {
+	if err := cfgfile.WriteSecret(path, content); err != nil {
 		fmt.Printf("%s%s: %v%s\n", ui.ColorRed, i18n.T("CERT_CREDENTIALS_WRITE_FAILED"), err, ui.ColorReset)
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
@@ -184,10 +185,10 @@ func installNodeCaddy() (*nodeState, error) {
 	}
 
 	dockerCompose := fmt.Sprintf(dockerComposeTemplate, selfstealDomain, certificate)
-	if err := os.WriteFile(filepath.Join(nodeDir, "docker-compose.yml"), []byte(dockerCompose), 0600); err != nil {
+	if _, err := cfgfile.Write(filepath.Join(nodeDir, "docker-compose.yml"), dockerCompose, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(filepath.Join(nodeDir, "Caddyfile"), []byte(caddyfileTemplate), 0600); err != nil {
+	if _, err := cfgfile.Write(filepath.Join(nodeDir, "Caddyfile"), caddyfileTemplate, cfgfile.Opts{Kind: cfgfile.KindCaddy}); err != nil {
 		return nil, err
 	}
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/api"
 	"github.com/FlexEbat/RemnaForge/internal/certs"
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
@@ -232,11 +233,11 @@ func installPanelNginx() (*panelState, error) {
 		subBaseDomain:   domain.ExtractDomain(subDomain),
 		superadminUser:  genutil.GenerateUser(),
 		superadminPass:  genutil.GeneratePassword(),
-		cookiesRandom1:  genutil.GenerateUser(),
-		cookiesRandom2:  genutil.GenerateUser(),
-		metricsUser:     genutil.GenerateUser(),
-		metricsPass:     genutil.GenerateUser(),
-		appSecret:       genutil.GenerateAlnumSecret(64),
+		cookiesRandom1:  cfgfile.StableOr("remnawave.cookie1", genutil.GenerateUser),
+		cookiesRandom2:  cfgfile.StableOr("remnawave.cookie2", genutil.GenerateUser),
+		metricsUser:     cfgfile.StableOr("remnawave.metrics_user", genutil.GenerateUser),
+		metricsPass:     cfgfile.StableOr("remnawave.metrics_pass", genutil.GenerateUser),
+		appSecret:       cfgfile.StableOr("remnawave.app_secret", func() string { return genutil.GenerateAlnumSecret(64) }),
 	}
 
 	dotEnv := fmt.Sprintf(dotEnvTemplate,
@@ -249,11 +250,7 @@ func installPanelNginx() (*panelState, error) {
 		fmt.Printf("%s"+i18n.T("DB_VOLUME_EXISTS")+"%s\n", ui.ColorRed, "remnawave-db-data", ui.ColorReset)
 		return nil, fmt.Errorf("existing database volume")
 	}
-	if err := os.WriteFile(filepath.Join(panelDir, ".env"), []byte(dotEnv), 0600); err != nil {
-		return nil, err
-	}
-
-	if err := os.WriteFile(filepath.Join(panelDir, "docker-compose.yml"), []byte(dockerComposeHead), 0600); err != nil {
+	if _, err := cfgfile.Write(filepath.Join(panelDir, ".env"), dotEnv, cfgfile.Opts{Kind: cfgfile.KindEnv}); err != nil {
 		return nil, err
 	}
 
@@ -486,8 +483,7 @@ volumes:
     external: false
 `
 	composePath := filepath.Join(panelDir, "docker-compose.yml")
-	existing, _ := os.ReadFile(composePath)
-	if err := os.WriteFile(composePath, append(existing, []byte(composeTail)...), 0600); err != nil {
+	if _, err := cfgfile.Write(composePath, dockerComposeHead+composeTail, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return err
 	}
 
@@ -497,7 +493,7 @@ volumes:
 		state.panelDomain, panelCertDomain,
 		state.subDomain, subCertDomain,
 	)
-	if err := os.WriteFile(filepath.Join(panelDir, "nginx.conf"), []byte(nginxConf), 0600); err != nil {
+	if _, err := cfgfile.Write(filepath.Join(panelDir, "nginx.conf"), nginxConf, cfgfile.Opts{Kind: cfgfile.KindNginx}); err != nil {
 		return err
 	}
 

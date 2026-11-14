@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/api"
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
@@ -373,11 +374,11 @@ func installPanelCaddy() (*panelState, error) {
 		selfstealDomain: selfstealDomain,
 		superadminUser:  genutil.GenerateUser(),
 		superadminPass:  genutil.GeneratePassword(),
-		cookiesRandom1:  genutil.GenerateUser(),
-		cookiesRandom2:  genutil.GenerateUser(),
-		metricsUser:     genutil.GenerateUser(),
-		metricsPass:     genutil.GenerateUser(),
-		appSecret:       genutil.GenerateAlnumSecret(64),
+		cookiesRandom1:  cfgfile.StableOr("remnawave.cookie1", genutil.GenerateUser),
+		cookiesRandom2:  cfgfile.StableOr("remnawave.cookie2", genutil.GenerateUser),
+		metricsUser:     cfgfile.StableOr("remnawave.metrics_user", genutil.GenerateUser),
+		metricsPass:     cfgfile.StableOr("remnawave.metrics_pass", genutil.GenerateUser),
+		appSecret:       cfgfile.StableOr("remnawave.app_secret", func() string { return genutil.GenerateAlnumSecret(64) }),
 	}
 
 	dotEnv := fmt.Sprintf(dotEnvTemplate,
@@ -390,7 +391,7 @@ func installPanelCaddy() (*panelState, error) {
 		fmt.Printf("%s"+i18n.T("DB_VOLUME_EXISTS")+"%s\n", ui.ColorRed, "remnawave-db-data", ui.ColorReset)
 		return nil, fmt.Errorf("existing database volume")
 	}
-	if err := os.WriteFile(filepath.Join(panelDir, ".env"), []byte(dotEnv), 0600); err != nil {
+	if _, err := cfgfile.Write(filepath.Join(panelDir, ".env"), dotEnv, cfgfile.Opts{Kind: cfgfile.KindEnv}); err != nil {
 		return nil, err
 	}
 
@@ -399,12 +400,12 @@ func installPanelCaddy() (*panelState, error) {
 	dockerCompose := fmt.Sprintf(dockerComposeTemplate,
 		state.panelDomain, state.subDomain, "$api_token",
 	)
-	if err := os.WriteFile(filepath.Join(panelDir, "docker-compose.yml"), []byte(dockerCompose), 0600); err != nil {
+	if _, err := cfgfile.Write(filepath.Join(panelDir, "docker-compose.yml"), dockerCompose, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return nil, err
 	}
 
 	caddyfile := fmt.Sprintf(caddyfileTemplate, state.cookiesRandom1, state.cookiesRandom2)
-	if err := os.WriteFile(filepath.Join(panelDir, "Caddyfile"), []byte(caddyfile), 0600); err != nil {
+	if _, err := cfgfile.Write(filepath.Join(panelDir, "Caddyfile"), caddyfile, cfgfile.Opts{Kind: cfgfile.KindCaddy}); err != nil {
 		return nil, err
 	}
 

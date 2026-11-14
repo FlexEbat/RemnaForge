@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
@@ -231,7 +232,7 @@ func openPanelAccess() {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
 		return
 	}
-	if err := os.WriteFile(confPath, []byte(updated), 0600); err != nil {
+	if err := cfgfile.Replace(confPath, updated, cfgfile.Opts{}); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
 		return
 	}
@@ -303,7 +304,7 @@ func openPanelAccessCaddy(dir string) {
 	// block, so this is a no-op there).
 	caddyfile = removeLineInBlock(caddyfile, "https://{$PANEL_DOMAIN}:8443 {", "bind unix/{$CADDY_SOCKET_PATH}")
 
-	if err := os.WriteFile(caddyfilePath, []byte(caddyfile), 0600); err != nil {
+	if err := cfgfile.Replace(caddyfilePath, caddyfile, cfgfile.Opts{}); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
 		return
 	}
@@ -395,7 +396,7 @@ func closePanelAccess() {
 		after := conf[block.BodyEnd-1:]
 		updated := before + body + after
 
-		if err := os.WriteFile(confPath, []byte(updated), 0600); err != nil {
+		if err := cfgfile.Replace(confPath, updated, cfgfile.Opts{}); err != nil {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
 			return
 		}
@@ -466,7 +467,7 @@ func closePanelAccessCaddy(dir string) {
 			"redir https://{$PANEL_DOMAIN}:8443{uri} permanent",
 			"redir https://{$PANEL_DOMAIN}{uri} permanent")
 
-		if err := os.WriteFile(caddyfilePath, []byte(caddyfile), 0600); err != nil {
+		if err := cfgfile.Replace(caddyfilePath, caddyfile, cfgfile.Opts{}); err != nil {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
 			return
 		}
