@@ -104,7 +104,9 @@ func EnableFileLogging() (cleanup func(), err error) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _ = io.Copy(io.MultiWriter(realStdout, &logWriter{f: logFile}), pipeReader)
+		lw := &logWriter{f: logFile}
+		_, _ = io.Copy(io.MultiWriter(realStdout, lw), pipeReader)
+		lw.flush()
 	}()
 
 	closed := false
@@ -127,17 +129,54 @@ func EnableFileLogging() (cleanup func(), err error) {
 // logMu serialises writes to the log file.
 var logMu sync.Mutex
 
-// logWriter appends to the log file with ANSI colour codes removed, so
-// the log stays readable without a separate cleanup pass.
-type logWriter struct{ f *os.File }
+// logWriter appends to the log file with ANSI colour codes removed and
+// secrets masked. It works on whole lines: a secret split across two writes
+// of the pipe would otherwise slip through both halves.
+type logWriter struct {
+	f   *os.File
+	buf []byte
+}
 
 func (w *logWriter) Write(p []byte) (int, error) {
 	logMu.Lock()
 	defer logMu.Unlock()
-	if _, err := w.f.Write(ansiEscape.ReplaceAll(p, nil)); err != nil {
-		return 0, err
+	w.buf = append(w.buf, p...)
+	for {
+		i := indexByte(w.buf, '\n')
+		if i < 0 {
+			break
+		}
+		if err := w.writeLine(w.buf[:i+1]); err != nil {
+			return 0, err
+		}
+		w.buf = w.buf[i+1:]
 	}
 	return len(p), nil
+}
+
+func indexByte(b []byte, c byte) int {
+	for i, x := range b {
+		if x == c {
+			return i
+		}
+	}
+	return -1
+}
+
+func (w *logWriter) writeLine(line []byte) error {
+	clean := ansiEscape.ReplaceAll(line, nil)
+	_, err := w.f.WriteString(Redact(string(clean)))
+	return err
+}
+
+// flush writes a last line that has no newline yet.
+func (w *logWriter) flush() {
+	logMu.Lock()
+	defer logMu.Unlock()
+	if len(w.buf) > 0 {
+		_ = w.writeLine(w.buf)
+		w.buf = nil
+	}
 }
 
 // LogClear removes any leftover ANSI escape codes from the log file.
@@ -156,4 +195,24 @@ func LogClear() error {
 		return nil
 	}
 	return os.WriteFile(LogFile, cleaned, 0600)
+}
+
+// ReadSecret reads a line from the terminal without echoing it, for
+// passphrases. It shares the scanner of Reading, so no buffered input is
+// lost. Where the terminal cannot be switched (a pipe in a test), it reads
+// the line as it is.
+func ReadSecret(prompt string) string {
+	restore := disableEcho()
+	defer restore()
+	line := Reading(prompt)
+	fmt.Println()
+	return line
+}
+
+// ReadingSecret is Reading for a token or a password: whatever the operator
+// types is masked in the log from then on.
+func ReadingSecret(prompt string) string {
+	v := Reading(prompt)
+	RegisterSecret(v)
+	return v
 }

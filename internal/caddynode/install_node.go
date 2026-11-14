@@ -189,6 +189,7 @@ func installNodeCaddy() (*nodeState, error) {
 	if _, err := cfgfile.Write(filepath.Join(nodeDir, "docker-compose.yml"), dockerCompose, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return nil, err
 	}
+	_ = cfgfile.EnsureGitignore(nodeDir)
 	if _, err := cfgfile.Write(filepath.Join(nodeDir, "Caddyfile"), caddyfileTemplate, cfgfile.Opts{Kind: cfgfile.KindCaddy}); err != nil {
 		return nil, err
 	}

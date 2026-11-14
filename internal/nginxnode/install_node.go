@@ -212,6 +212,7 @@ func installationNode() error {
 	if _, err := cfgfile.Write(composePath, dockerComposeHead+composeTail, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return err
 	}
+	_ = cfgfile.EnsureGitignore(filepath.Dir(composePath))
 
 	// Nginx.conf.
 	nginxConf := fmt.Sprintf(`server_names_hash_bucket_size 64;

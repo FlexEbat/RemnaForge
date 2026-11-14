@@ -14,8 +14,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
+
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 // Owner says who is responsible for a file.
@@ -49,6 +53,9 @@ type Entry struct {
 	// Proposed is the hash of the content the installer last offered, so a
 	// "keep" decision is not asked again for the same offer.
 	Proposed string `json:"proposed,omitempty"`
+	// Secret marks a file that holds credentials: it must be 0600 in a
+	// directory that only its owner can open.
+	Secret bool `json:"secret,omitempty"`
 }
 
 // Manifest is the content of the manifest file.
@@ -104,10 +111,12 @@ func Stable(name string, generate func() string) (string, error) {
 		return "", err
 	}
 	if v, ok := m.Values[name]; ok && v != "" {
+		registerIfSecret(name, v)
 		return v, nil
 	}
 	v := generate()
 	m.Values[name] = v
+	registerIfSecret(name, v)
 	return v, saveManifest(m)
 }
 
@@ -152,4 +161,30 @@ func StableOr(name string, generate func() string) string {
 		return generate()
 	}
 	return v
+}
+
+// SecretPaths lists the files the manifest knows to hold credentials.
+func SecretPaths() []string {
+	m, err := loadManifest()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for p, e := range m.Files {
+		if e.Secret {
+			out = append(out, p)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+var secretNameRE = regexp.MustCompile(`(?i)pass|secret|token|key`)
+
+// registerIfSecret lets the log redact a stable value whose name says it is
+// a credential.
+func registerIfSecret(name, value string) {
+	if secretNameRE.MatchString(name) {
+		ui.RegisterSecret(value)
+	}
 }

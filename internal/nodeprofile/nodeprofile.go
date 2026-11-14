@@ -178,7 +178,7 @@ func existingPrivateKey(byTag map[string]map[string]any, realityTag string) stri
 func ManageNodeProfile() {
 	fmt.Println()
 	domainURL := strings.TrimSpace(ui.Reading(i18n.T("NODE_PROFILE_ENTER_PANEL_URL")))
-	token := strings.TrimSpace(ui.Reading(i18n.T("NODE_PROFILE_ENTER_TOKEN")))
+	token := strings.TrimSpace(ui.ReadingSecret(i18n.T("NODE_PROFILE_ENTER_TOKEN")))
 	profileName := ui.Reading(i18n.T("NODE_PROFILE_ENTER_NAME"))
 
 	profileUUID, config, err := api.FindConfigProfileByName(domainURL, token, profileName)

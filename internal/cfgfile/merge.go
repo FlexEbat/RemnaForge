@@ -330,3 +330,23 @@ func reindent(text string, target int) string {
 // trimBlank ends a chunk with exactly one newline, so blank lines do not pile
 // up when merged chunks are joined again and again.
 func trimBlank(s string) string { return strings.TrimRight(s, "\n") + "\n" }
+
+// MergeLines keeps the existing file and adds the proposed lines it lacks.
+// Comment and blank lines of the proposal are added only when something else
+// is added with them, so a second merge changes nothing.
+func MergeLines(existing, proposed string) string {
+	have := map[string]bool{}
+	for _, l := range strings.Split(existing, "\n") {
+		have[strings.TrimSpace(l)] = true
+	}
+	out := ensureNewline(existing)
+	for _, l := range strings.Split(proposed, "\n") {
+		t := strings.TrimSpace(l)
+		if t == "" || strings.HasPrefix(t, "#") || have[t] {
+			continue
+		}
+		have[t] = true
+		out += l + "\n"
+	}
+	return out
+}

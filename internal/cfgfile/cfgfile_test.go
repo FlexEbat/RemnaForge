@@ -1,6 +1,7 @@
 package cfgfile
 
 import (
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -730,5 +731,131 @@ func TestFlowsDrawRandomValuesFromStable(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func perm(t *testing.T, path string) os.FileMode {
+	t.Helper()
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fi.Mode().Perm()
+}
+
+// Every file the manifest knows to hold credentials is 0600 in a directory
+// that only the owner can open.
+func TestEverySecretPathIs0600In0700(t *testing.T) {
+	dir, _ := setup(t)
+	panel := filepath.Join(dir, "opt", "remnawave")
+	_ = os.MkdirAll(panel, 0755)
+	// A .env that already exists with loose permissions.
+	_ = os.WriteFile(filepath.Join(panel, ".env"), []byte("JWT_AUTH_SECRET=old-secret-value\n"), 0644)
+	node := filepath.Join(dir, "opt", "remnanode")
+	_ = os.MkdirAll(node, 0755)
+
+	mustWrite(t, filepath.Join(panel, ".env"), "JWT_AUTH_SECRET=new-secret-value\nAPP_PORT=1\n", Opts{Kind: KindEnv})
+	mustWrite(t, filepath.Join(node, ".env"), "SECRET_KEY=node-secret-value\n", Opts{Kind: KindEnv})
+	mustWrite(t, filepath.Join(panel, "docker-compose.yml"), "services: {}\n", Opts{Kind: KindCompose})
+	if err := WriteSecret(filepath.Join(dir, "root", ".secrets", "certbot", "cloudflare.ini"), "dns_cloudflare_api_token = x\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Replace(filepath.Join(panel, "token"), "tok\n", Opts{Secret: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	paths := SecretPaths()
+	if len(paths) != 4 {
+		t.Fatalf("secret paths: %v", paths)
+	}
+	for _, p := range paths {
+		if m := perm(t, p); m != 0600 {
+			t.Errorf("%s is %v, want 0600", p, m)
+		}
+		if m := perm(t, filepath.Dir(p)); m&0077 != 0 {
+			t.Errorf("the directory of %s is %v, want no group or other access", p, m)
+		}
+	}
+	for _, p := range paths {
+		if strings.HasSuffix(p, "docker-compose.yml") {
+			t.Error("a compose file was marked secret")
+		}
+	}
+	// A secret file that is already right is still tightened when nothing changes.
+	_ = os.Chmod(filepath.Join(node, ".env"), 0644)
+	mustWrite(t, filepath.Join(node, ".env"), "SECRET_KEY=node-secret-value\n", Opts{Kind: KindEnv})
+	if m := perm(t, filepath.Join(node, ".env")); m != 0600 {
+		t.Errorf("an unchanged loose file stayed %v", m)
+	}
+}
+
+func TestSecretsWrittenAreMaskedInTheLog(t *testing.T) {
+	dir, _ := setup(t)
+	ui.ForgetSecrets()
+	mustWrite(t, filepath.Join(dir, ".env"), "POSTGRES_PASSWORD=pg-pass-value-1\nHOST=example.com\n", Opts{Kind: KindEnv})
+	_ = WriteSecret(filepath.Join(dir, "s", "x.ini"), "dns_cloudflare_api_token = cf-token-value-2\n")
+	got := ui.Redact("pg-pass-value-1 cf-token-value-2 example.com")
+	if strings.Contains(got, "pg-pass-value-1") || strings.Contains(got, "cf-token-value-2") || !strings.Contains(got, "example.com") {
+		t.Errorf("got %q", got)
+	}
+	ui.ForgetSecrets()
+	if _, err := Stable("remnawave.app_secret", func() string { return "stable-secret-value-3" }); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(ui.Redact("stable-secret-value-3"), "stable-secret-value-3") {
+		t.Error("a stable secret is not masked")
+	}
+	ui.ForgetSecrets()
+	_, _ = Stable("remnawave.cookie1", func() string { return "cookie-name-value-4" })
+	if !strings.Contains(ui.Redact("cookie-name-value-4"), "cookie-name-value-4") {
+		// "cookie" is not a secret name; the value is public in the page source
+		t.Log("cookie names are not masked")
+	}
+}
+
+func TestEnsureGitignore(t *testing.T) {
+	dir, a := setup(t)
+	stack := filepath.Join(dir, "opt", "remnawave")
+	if err := EnsureGitignore(stack); err != nil {
+		t.Fatal(err)
+	}
+	got := read(t, filepath.Join(stack, ".gitignore"))
+	for _, want := range []string{".env", ".secrets/", "*.ini", "*.pem"} {
+		if !strings.Contains(got, want) {
+			t.Errorf(".gitignore misses %s:\n%s", want, got)
+		}
+	}
+	if perm(t, filepath.Join(stack, ".gitignore")) != 0644 {
+		t.Errorf("mode %v", perm(t, filepath.Join(stack, ".gitignore")))
+	}
+	// The operator's own lines stay, nothing is duplicated, nobody is asked.
+	_ = os.WriteFile(filepath.Join(stack, ".gitignore"), []byte("node_modules/\n.env\n"), 0644)
+	if err := EnsureGitignore(stack); err != nil {
+		t.Fatal(err)
+	}
+	merged := read(t, filepath.Join(stack, ".gitignore"))
+	envLines := 0
+	for _, l := range strings.Split(merged, "\n") {
+		if l == ".env" {
+			envLines++
+		}
+	}
+	if !strings.Contains(merged, "node_modules/") || envLines != 1 {
+		t.Errorf("merged:\n%s", merged)
+	}
+	if strings.Count(merged, "*.ini") != 1 {
+		t.Errorf("duplicated:\n%s", merged)
+	}
+	if err := EnsureGitignore(stack); err != nil || read(t, filepath.Join(stack, ".gitignore")) != merged {
+		t.Error("a second run changed the file")
+	}
+	if a.calls != 0 {
+		t.Errorf("asked %d times", a.calls)
+	}
+}
+
+func TestMergeLines(t *testing.T) {
+	if got := MergeLines("a\nb", "b\n# c\nc\n\nd"); got != "a\nb\nc\nd\n" {
+		t.Errorf("got %q", got)
 	}
 }

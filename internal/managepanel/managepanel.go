@@ -14,6 +14,7 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/rotate"
 	"github.com/FlexEbat/RemnaForge/internal/stack"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -66,6 +67,7 @@ func ManagePanel() {
 		fmt.Printf("%s4. %s%s\n", ui.ColorYellow, i18n.T("VIEW_LOGS"), ui.ColorReset)
 		fmt.Printf("%s5. %s%s\n", ui.ColorYellow, i18n.T("REMNAWAVE_CLI"), ui.ColorReset)
 		fmt.Printf("%s6. %s%s\n", ui.ColorYellow, i18n.T("ACCESS_PANEL"), ui.ColorReset)
+		fmt.Printf("%s7. %s%s\n", ui.ColorYellow, i18n.T("ROTATE_NAME"), ui.ColorReset)
 		fmt.Println()
 		fmt.Printf("%s0. %s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
 		fmt.Println()
@@ -84,6 +86,8 @@ func ManagePanel() {
 			runRemnawaveCLI()
 		case "6":
 			managePanelAccess()
+		case "7":
+			rotate.Run(rotate.DefaultEnv("/opt/remnawave"), ui.Reading)
 		case "0":
 			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
 			return
