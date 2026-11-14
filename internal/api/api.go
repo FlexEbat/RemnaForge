@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -198,7 +199,7 @@ func GetPanelToken() (string, error) {
 		}
 
 		if err := os.MkdirAll(DirRemnawave, 0700); err == nil {
-			_ = os.WriteFile(tokenFile, []byte(token), 0600)
+			_ = cfgfile.WriteSecret(tokenFile, token)
 		}
 		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("TOKEN_RECEIVED_AND_SAVED"), ui.ColorReset)
 	} else {
@@ -932,7 +933,7 @@ func CreateAPIToken(domainURL, token, targetDir, tokenName string) error {
 		return fmt.Errorf("%s", msg)
 	}
 
-	if err := setComposeEnv(targetDir+"/docker-compose.yml", "REMNAWAVE_API_TOKEN", apiToken); err != nil {
+	if err := cfgfile.SetComposeEnv(targetDir+"/docker-compose.yml", "REMNAWAVE_API_TOKEN", apiToken); err != nil {
 		fmt.Fprintf(os.Stderr, "%s%s: %v%s\n", ui.ColorRed, i18n.T("ERROR_CREATE_API_TOKEN"), err, ui.ColorReset)
 		return err
 	}

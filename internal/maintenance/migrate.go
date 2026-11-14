@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/stack"
@@ -106,11 +107,11 @@ func MigrateV2ToV3() {
 	}
 	fmt.Printf("%s"+i18n.T("BACKUP_DONE")+"%s\n", ui.ColorGreen, dest, ui.ColorReset)
 
-	if err := os.WriteFile(envPath, []byte(newEnv), 0600); err != nil {
+	if err := cfgfile.Replace(envPath, newEnv, cfgfile.Opts{}); err != nil {
 		fmt.Printf("%s%v%s\n", ui.ColorRed, err, ui.ColorReset)
 		return
 	}
-	if err := os.WriteFile(composePath, []byte(newCompose), 0600); err != nil {
+	if err := cfgfile.Replace(composePath, newCompose, cfgfile.Opts{}); err != nil {
 		fmt.Printf("%s%v%s\n", ui.ColorRed, err, ui.ColorReset)
 		return
 	}
@@ -135,7 +136,7 @@ func patchProxyCompression() {
 	confPath := filepath.Join(panelDir, "nginx.conf")
 	if data, err := os.ReadFile(confPath); err == nil {
 		if patched, changed := ensureGzip(string(data)); changed {
-			_ = os.WriteFile(confPath, []byte(patched), 0600)
+			_ = cfgfile.Replace(confPath, patched, cfgfile.Opts{})
 		}
 		return
 	}

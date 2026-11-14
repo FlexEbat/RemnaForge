@@ -1,7 +1,6 @@
 package api
 
 import (
-	"os"
 	"testing"
 )
 
@@ -44,26 +43,5 @@ func TestBaseURL(t *testing.T) {
 		if got := BaseURL(in); got != want {
 			t.Errorf("BaseURL(%q) = %q, want %q", in, got, want)
 		}
-	}
-}
-
-func TestSetComposeEnvKeepsIndent(t *testing.T) {
-	dir := t.TempDir()
-	p := dir + "/docker-compose.yml"
-	orig := "    environment:\n      - APP_PORT=3010\n      - REMNAWAVE_API_TOKEN=$api_token\n"
-	if err := writeKeepMode(p, []byte(orig)); err != nil {
-		t.Fatal(err)
-	}
-	if err := setComposeEnv(p, "REMNAWAVE_API_TOKEN", "abc.def"); err != nil {
-		t.Fatal(err)
-	}
-	b, _ := os.ReadFile(p)
-	got := string(b)
-	want := "    environment:\n      - APP_PORT=3010\n      - REMNAWAVE_API_TOKEN=abc.def\n"
-	if got != want {
-		t.Fatalf("got %q want %q", got, want)
-	}
-	if err := setComposeEnv(p, "MISSING", "x"); err == nil {
-		t.Fatal("expected error for missing key")
 	}
 }

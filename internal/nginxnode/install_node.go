@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/certs"
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
@@ -93,10 +94,6 @@ func installNodeNginx() (*nodeState, error) {
 	}
 
 	selfstealBaseDomain := domain.ExtractDomain(selfstealDomain)
-
-	if err := os.WriteFile(filepath.Join(nodeDir, "docker-compose.yml"), []byte(dockerComposeHead), 0600); err != nil {
-		return nil, err
-	}
 
 	return &nodeState{
 		selfstealDomain:     selfstealDomain,
@@ -207,8 +204,7 @@ func InstallationNode() error {
 `, state.certificate, certFullchain, certFullchain, certPrivkey, certPrivkey)
 
 	composePath := filepath.Join(nodeDir, "docker-compose.yml")
-	existing, _ := os.ReadFile(composePath)
-	if err := os.WriteFile(composePath, append(existing, []byte(composeTail)...), 0600); err != nil {
+	if _, err := cfgfile.Write(composePath, dockerComposeHead+composeTail, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return err
 	}
 
@@ -294,7 +290,7 @@ server {
 }
 `, state.selfstealDomain, nodeCertDomain, nodeCertDomain, nodeCertDomain)
 
-	if err := os.WriteFile(filepath.Join(nodeDir, "nginx.conf"), []byte(nginxConf), 0600); err != nil {
+	if _, err := cfgfile.Write(filepath.Join(nodeDir, "nginx.conf"), nginxConf, cfgfile.Opts{Kind: cfgfile.KindNginx}); err != nil {
 		return err
 	}
 

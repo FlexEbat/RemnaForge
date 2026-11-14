@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
@@ -26,16 +27,6 @@ func secretsDir() string {
 		return filepath.Join(u.HomeDir, ".secrets", "certbot")
 	}
 	return "/root/.secrets/certbot"
-}
-
-// writeSecretFile writes a DNS API credentials file. The directory is
-// 0700 and the file 0600: both hold a token that can edit the zone, and
-// certbot refuses credentials files that other users can read.
-func writeSecretFile(path, content string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(content), 0600)
 }
 
 // Validates Cloudflare credentials against the Cloudflare API, prompting
@@ -113,7 +104,7 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 		} else {
 			ini = fmt.Sprintf("dns_cloudflare_email = %s\ndns_cloudflare_api_key = %s\n", validEmail, validKey)
 		}
-		if err := writeSecretFile(iniPath, ini); err != nil {
+		if err := cfgfile.WriteSecret(iniPath, ini); err != nil {
 			return err
 		}
 
@@ -170,7 +161,7 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 		gcoreAPIKey := ui.Reading(i18n.T("ENTER_GCORE_TOKEN"))
 
 		iniPath := filepath.Join(secretsDir(), "gcore.ini")
-		if err := writeSecretFile(iniPath, fmt.Sprintf("dns_gcore_apitoken = %s\n", gcoreAPIKey)); err != nil {
+		if err := cfgfile.WriteSecret(iniPath, fmt.Sprintf("dns_gcore_apitoken = %s\n", gcoreAPIKey)); err != nil {
 			return err
 		}
 
