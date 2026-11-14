@@ -16,6 +16,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/journal"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -82,6 +83,7 @@ func runCertbot(args ...string) error {
 }
 
 func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
+	journal.Add("certificate", fmt.Sprintf(i18n.T("JOURNAL_CERT"), domainName))
 	baseDomain := domain.ExtractDomain(domainName)
 	wildcardDomain := "*." + baseDomain
 

@@ -24,6 +24,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
+	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -242,6 +243,10 @@ func readCertificate() string {
 
 // InstallationNode installs a standalone Caddy-fronted node.
 func InstallationNode() error {
+	return txn.Run("caddynode", installationNode)
+}
+
+func installationNode() error {
 	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
 	// if missing, so this doesn't just fail deep inside a later step with
 	// a confusing error. certbot itself is unused by the Caddy flow, but

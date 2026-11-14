@@ -23,6 +23,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -414,6 +415,10 @@ func installPanelCaddy() (*panelState, error) {
 
 // InstallationPanelOnly installs the panel alone behind Caddy.
 func InstallationPanelOnly() error {
+	return txn.Run("caddypanelonly", installationPanelOnly)
+}
+
+func installationPanelOnly() error {
 	if err := preflight.EnsureInstalled(); err != nil {
 		return err
 	}

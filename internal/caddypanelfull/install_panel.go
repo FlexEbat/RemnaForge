@@ -28,6 +28,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
+	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -484,6 +485,10 @@ func installPanelNodeCaddy() (*state, error) {
 // InstallationPanelNode installs the panel plus a co-located node
 // behind Caddy.
 func InstallationPanelNode() error {
+	return txn.Run("caddypanelfull", installationPanelNode)
+}
+
+func installationPanelNode() error {
 	if err := preflight.EnsureInstalled(); err != nil {
 		return err
 	}

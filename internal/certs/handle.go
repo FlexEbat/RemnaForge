@@ -22,6 +22,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/journal"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -169,6 +170,7 @@ func HandleCertificates(domainsToCheck []string, certMethod, letsencryptEmail, t
 // certbot renewal, replacing it if the certificate is close to expiry
 // and the entry doesn't already match.
 func syncCertRenewalCron(cronCommand string, minDaysLeft int) {
+	journal.Add("cron", i18n.T("JOURNAL_CRON"))
 	existing := currentCrontab()
 
 	hasRenewLine := strings.Contains(existing, "/usr/bin/certbot renew")
