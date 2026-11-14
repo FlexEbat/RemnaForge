@@ -65,7 +65,7 @@ func CheckAPI(apiKey, email string) (validAPIKey, validEmail string, err error) 
 
 		fmt.Printf(ui.ColorRed+i18n.T("CF_INVALID_ATTEMPT")+ui.ColorReset+"\n", attempt, attempts)
 		if attempt < attempts {
-			apiKey = ui.Reading(i18n.T("ENTER_CF_TOKEN"))
+			apiKey = ui.ReadingSecret(i18n.T("ENTER_CF_TOKEN"))
 			email = ui.Reading(i18n.T("ENTER_CF_EMAIL"))
 		}
 	}
@@ -91,7 +91,7 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 
 	switch certMethod {
 	case "1": // Cloudflare DNS-01 (wildcard)
-		apiKey := ui.Reading(i18n.T("ENTER_CF_TOKEN"))
+		apiKey := ui.ReadingSecret(i18n.T("ENTER_CF_TOKEN"))
 		email := ui.Reading(i18n.T("ENTER_CF_EMAIL"))
 
 		validKey, validEmail, err := CheckAPI(apiKey, email)
@@ -160,7 +160,7 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 			fmt.Printf("%sGcore plugin already available.%s\n", ui.ColorGreen, ui.ColorReset)
 		}
 
-		gcoreAPIKey := ui.Reading(i18n.T("ENTER_GCORE_TOKEN"))
+		gcoreAPIKey := ui.ReadingSecret(i18n.T("ENTER_GCORE_TOKEN"))
 
 		iniPath := filepath.Join(secretsDir(), "gcore.ini")
 		if err := cfgfile.WriteSecret(iniPath, fmt.Sprintf("dns_gcore_apitoken = %s\n", gcoreAPIKey)); err != nil {

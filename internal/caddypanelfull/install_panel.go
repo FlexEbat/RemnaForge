@@ -473,6 +473,7 @@ func installPanelNodeCaddy() (*state, error) {
 	if _, err := cfgfile.Write(filepath.Join(panelDir, "docker-compose.yml"), dockerCompose, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return nil, err
 	}
+	_ = cfgfile.EnsureGitignore(panelDir)
 
 	caddyfile := fmt.Sprintf(caddyfileTemplate, st.cookiesRandom1, st.cookiesRandom2)
 	if _, err := cfgfile.Write(filepath.Join(panelDir, "Caddyfile"), caddyfile, cfgfile.Opts{Kind: cfgfile.KindCaddy}); err != nil {

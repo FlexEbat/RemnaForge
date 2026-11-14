@@ -578,6 +578,7 @@ volumes:
 	if _, err := cfgfile.Write(composePath, dockerComposeHead+composeTail, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return err
 	}
+	_ = cfgfile.EnsureGitignore(filepath.Dir(composePath))
 
 	// Nginx.conf.
 	nginxConf := fmt.Sprintf(nginxConfTemplate,

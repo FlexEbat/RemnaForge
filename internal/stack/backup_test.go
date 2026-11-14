@@ -2,6 +2,7 @@ package stack
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -57,5 +58,42 @@ func TestBackupPanelToWritesDumpAndEnv(t *testing.T) {
 		if fi.Mode().Perm() != 0600 {
 			t.Errorf("%s mode = %o, want 0600", name, fi.Mode().Perm())
 		}
+	}
+}
+
+func TestEncryptBackupEncryptsEnvAndDumpAndRemovesPlaintext(t *testing.T) {
+	if _, err := exec.LookPath("gpg"); err != nil {
+		t.Skip("gpg is not installed")
+	}
+	home, _ := os.MkdirTemp("", "g")
+	defer os.RemoveAll(home)
+	t.Setenv("GNUPGHOME", home)
+	dest := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dest, ".env"), []byte("POSTGRES_PASSWORD=db-pass-123456\n"), 0600)
+	_ = os.WriteFile(filepath.Join(dest, "db.sql.gz"), []byte("dump"), 0600)
+
+	if err := encryptBackup(dest, func() (string, bool) { return "a-long-passphrase", true }); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{".env.gpg", "db.sql.gz.gpg"} {
+		if fi, err := os.Stat(filepath.Join(dest, name)); err != nil || fi.Mode().Perm() != 0600 {
+			t.Errorf("%s: %v %v", name, fi, err)
+		}
+	}
+	for _, name := range []string{".env", "db.sql.gz"} {
+		if _, err := os.Stat(filepath.Join(dest, name)); !os.IsNotExist(err) {
+			t.Errorf("plaintext %s survived", name)
+		}
+	}
+}
+
+func TestEncryptBackupCancelledEncryptsNothing(t *testing.T) {
+	dest := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dest, ".env"), []byte("A=1\n"), 0600)
+	if err := encryptBackup(dest, func() (string, bool) { return "", false }); err == nil {
+		t.Error("a cancelled passphrase prompt succeeded")
+	}
+	if _, err := os.Stat(filepath.Join(dest, ".env")); err != nil {
+		t.Error("the plaintext was touched")
 	}
 }

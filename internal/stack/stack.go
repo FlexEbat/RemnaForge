@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/backupcrypt"
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
@@ -123,8 +124,28 @@ func PromptBackup(dir string) bool {
 		fmt.Printf("%s%s: %v%s\n", ui.ColorRed, i18n.T("BACKUP_FAILED"), err, ui.ColorReset)
 		return false
 	}
+	if answer := ui.Reading(i18n.T("BACKUP_ENCRYPT")); answer == "y" || answer == "Y" {
+		if err := encryptBackup(keep, backupcrypt.Prompt); err != nil {
+			fmt.Printf("%s%s: %v%s\n", ui.ColorRed, i18n.T("BACKUP_ENCRYPT_FAILED"), err, ui.ColorReset)
+			// A backup the operator asked to be encrypted must not stay behind
+			// in plain text, and the caller must not go on without one.
+			_ = os.RemoveAll(keep)
+			return false
+		}
+		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("BACKUP_ENCRYPTED"), ui.ColorReset)
+	}
 	fmt.Printf("%s"+i18n.T("BACKUP_DONE")+"%s\n", ui.ColorGreen, keep, ui.ColorReset)
 	return true
+}
+
+// encryptBackup encrypts the files of a finished backup. prompt returns the
+// passphrase, or false when the operator cancels.
+func encryptBackup(dest string, prompt func() (string, bool)) error {
+	pass, ok := prompt()
+	if !ok {
+		return fmt.Errorf("cancelled")
+	}
+	return backupcrypt.EncryptFiles(dest, pass, ".env", "db.sql.gz")
 }
 
 // ConfirmDelete asks the operator to type DELETE.

@@ -163,7 +163,7 @@ func GetPanelToken() (string, error) {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("WARNING_LABEL"), ui.ColorReset)
 			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("TELEGRAM_OAUTH_WARNING"), ui.ColorReset)
 			fmt.Printf("%s%s%s\n", ui.ColorYellow, fmt.Sprintf(i18n.T("CREATE_API_TOKEN_INSTRUCTION"), PanelDomain), ui.ColorReset)
-			token = ui.Reading(i18n.T("ENTER_API_TOKEN"))
+			token = ui.ReadingSecret(i18n.T("ENTER_API_TOKEN"))
 			if token == "" {
 				fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("EMPTY_TOKEN_ERROR"), ui.ColorReset)
 				return "", fmt.Errorf("empty token")
@@ -176,7 +176,7 @@ func GetPanelToken() (string, error) {
 			}
 		} else {
 			username := ui.Reading(i18n.T("ENTER_PANEL_USERNAME"))
-			password := ui.Reading(i18n.T("ENTER_PANEL_PASSWORD"))
+			password := ui.ReadingSecret(i18n.T("ENTER_PANEL_PASSWORD"))
 
 			loginBody, _ := json.Marshal(map[string]string{"username": username, "password": password})
 			loginResponse := MakeAPIRequest("POST", BaseURL(domainURL)+"/api/auth/login", "", string(loginBody))
@@ -192,6 +192,7 @@ func GetPanelToken() (string, error) {
 			if token == "" {
 				token = parsed.AccessToken
 			}
+			ui.RegisterSecret(token)
 			if token == "" {
 				fmt.Printf("%s%s: %s%s\n", ui.ColorRed, i18n.T("ERROR_TOKEN"), string(loginResponse), ui.ColorReset)
 				return "", fmt.Errorf("login failed")

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 // Kind says how a file is merged.
@@ -23,6 +25,8 @@ const (
 	KindCaddy
 	// KindCompose is a docker-compose.yml, merged by service, network and volume.
 	KindCompose
+	// KindLines is a file of independent lines (.gitignore), merged by line.
+	KindLines
 )
 
 // Opts tune a write.
@@ -31,7 +35,13 @@ type Opts struct {
 	// Mode is the permission of a new file; it defaults to 0600. A file that
 	// already exists keeps its permission.
 	Mode os.FileMode
+	// Secret marks a file that holds credentials. Its directory is closed to
+	// everyone but the owner, its values are registered for redaction in the
+	// log, and the manifest remembers it. A .env file is always secret.
+	Secret bool
 }
+
+func (o Opts) secret() bool { return o.Secret || o.Kind == KindEnv }
 
 // Outcome says what a write did.
 type Outcome int
@@ -152,11 +162,35 @@ func modeFor(path string, o Opts) os.FileMode {
 	return 0600
 }
 
-func record(m *Manifest, path string, owner Owner, content, proposed string) {
-	m.Files[path] = Entry{Owner: owner, SHA256: hash(content), Proposed: hash(proposed)}
+func record(m *Manifest, path string, owner Owner, content, proposed string, secret bool) {
+	m.Files[path] = Entry{Owner: owner, SHA256: hash(content), Proposed: hash(proposed), Secret: secret}
+}
+
+// closeSecret takes group and other permissions from a secret file that
+// already exists, and from its directory.
+func closeSecret(path string) {
+	if fi, err := os.Stat(path); err == nil && fi.Mode().Perm()&0077 != 0 {
+		_ = os.Chmod(path, fi.Mode().Perm()&^0077)
+	}
+	tightenDir(filepath.Dir(path))
+}
+
+// tightenDir closes a directory to everyone but its owner. It only ever
+// removes permissions.
+func tightenDir(dir string) {
+	if fi, err := os.Stat(dir); err == nil && fi.IsDir() && fi.Mode().Perm()&0077 != 0 {
+		_ = os.Chmod(dir, fi.Mode().Perm()&^0077)
+	}
 }
 
 func commit(path, content string, o Opts, m *Manifest, owner Owner, proposed string) error {
+	if o.secret() {
+		ui.RegisterSecretsFromText(content)
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			return err
+		}
+		tightenDir(filepath.Dir(path))
+	}
 	if Observe != nil {
 		if snap, err := takeSnapshot(path, *m); err == nil {
 			Observe(snap)
@@ -165,10 +199,14 @@ func commit(path, content string, o Opts, m *Manifest, owner Owner, proposed str
 	if err := backup(path); err != nil {
 		return err
 	}
-	if err := atomicWrite(path, []byte(content), modeFor(path, o)); err != nil {
+	mode := modeFor(path, o)
+	if o.secret() {
+		mode &^= 0077
+	}
+	if err := atomicWrite(path, []byte(content), mode); err != nil {
 		return err
 	}
-	record(m, path, owner, content, proposed)
+	record(m, path, owner, content, proposed, o.secret())
 	return saveManifest(*m)
 }
 
@@ -182,6 +220,8 @@ func merged(kind Kind, existing, proposed string) (string, bool) {
 		return MergeCaddy(existing, proposed), true
 	case KindCompose:
 		return MergeCompose(existing, proposed), true
+	case KindLines:
+		return MergeLines(existing, proposed), true
 	}
 	return "", false
 }
@@ -216,18 +256,24 @@ func Write(path, proposed string, o Opts) (Outcome, error) {
 	}
 	existing := string(existingBytes)
 	entry, known := m.Files[path]
+	if o.secret() {
+		ui.RegisterSecretsFromText(existing)
+		closeSecret(path)
+	}
 
 	if existing == proposed {
 		// The file already is the installer's version, whatever its history.
 		if !known || entry.Owner != OwnerInstaller || entry.SHA256 != hash(existing) {
-			record(&m, path, OwnerInstaller, existing, proposed)
+			record(&m, path, OwnerInstaller, existing, proposed, o.secret())
 			return Unchanged, saveManifest(m)
 		}
 		return Unchanged, nil
 	}
 
-	if o.Kind == KindEnv {
-		out, _ := merged(KindEnv, existing, proposed)
+	if o.Kind == KindEnv || o.Kind == KindLines {
+		// Files of independent entries are merged whatever their history:
+		// the operator's entries stay and missing ones are added.
+		out, _ := merged(o.Kind, existing, proposed)
 		if out == existing {
 			return Unchanged, nil
 		}
@@ -260,7 +306,7 @@ func Write(path, proposed string, o Opts) (Outcome, error) {
 		}
 		fallthrough
 	case Keep:
-		record(&m, path, OwnerUser, existing, proposed)
+		record(&m, path, OwnerUser, existing, proposed, o.secret())
 		return Kept, saveManifest(m)
 	default:
 		if err := commit(path, proposed, o, &m, OwnerInstaller, proposed); err != nil {
@@ -279,9 +325,12 @@ func Replace(path, content string, o Opts) error {
 	if err != nil {
 		return err
 	}
+	if _, err := os.Stat(path); err == nil && o.secret() {
+		closeSecret(path)
+	}
 	if cur, err := os.ReadFile(path); err == nil && string(cur) == content {
 		if e, ok := m.Files[path]; !ok || e.SHA256 != hash(content) {
-			record(&m, path, OwnerInstaller, content, content)
+			record(&m, path, OwnerInstaller, content, content, o.secret())
 			return saveManifest(m)
 		}
 		return nil
@@ -295,7 +344,7 @@ func WriteSecret(path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
-	return Replace(path, content, Opts{Mode: 0600})
+	return Replace(path, content, Opts{Mode: 0600, Secret: true})
 }
 
 // SetComposeEnv sets KEY=value in an environment list entry of a compose
@@ -367,4 +416,15 @@ func (s Snapshot) Restore() error {
 		delete(m.Files, s.Path)
 	}
 	return saveManifest(m)
+}
+
+// gitignoreLines keeps secrets out of version control when an operator puts
+// a stack directory under git.
+const gitignoreText = "# Written by RemnaForge: keep secrets out of version control.\n.env\n*.env\n.secrets/\n*.ini\n*.key\n*.pem\n"
+
+// EnsureGitignore writes a .gitignore into a stack directory that excludes
+// the .env file and secret files. An existing .gitignore keeps its lines.
+func EnsureGitignore(dir string) error {
+	_, err := Write(filepath.Join(dir, ".gitignore"), gitignoreText, Opts{Kind: KindLines, Mode: 0644})
+	return err
 }
