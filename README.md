@@ -57,6 +57,7 @@ Found a bug? Open an issue on GitHub.
 - Prints an environment block (distribution, kernel, memory, free disk, repositories) at the start of an install flow, refuses a host with less than 1 GiB of memory and warns about low memory, low disk and an old kernel.
 - Runs pre-flight checks before an install (system clock synchronized, ports 80 and 443 free, certificate renewal in place) and prints one table with a remedy per problem; asks before it goes on after a failure. Checks every domain you enter for AAAA records that point elsewhere, Cloudflare proxying and an invalid name, and tests HTTP-01 issuance with a certbot dry run before the real request.
 - Never overwrites a configuration file you changed: it records what it wrote (`/usr/local/remnawave_reverse/manifest.json`), replaces only files that are still as it left them, shows a diff for the others and lets you keep, merge or replace, merges `.env` by key, and backs up every file before a change (`/usr/local/remnawave_reverse/backups/<time>/`). Writes are atomic, and running an install twice leaves the files identical.
+- Treats every install as a transaction: if it fails, the files it changed go back byte for byte, containers and networks it created are removed, and it lists what it cannot revert (installed packages, requested certificates, cron entries). Volumes and databases are never touched.
 - Installs dependencies on a fresh server before the first install: `docker`, `docker compose`, `certbot`, `ufw`, `cron`. It changes no host setting on its own: BBR, automatic security updates, a system package upgrade and the firewall are switched on by hand in the "System tuning" menu. The firewall flow shows what is installed and listening, asks which tool to configure (ufw, firewalld, nftables or iptables), opens your SSH port first, shows every command, and changes nothing until you confirm; each answer is written to `/var/log/remnaforge-consent.log`. It can also install fail2ban or CrowdSec.
 - Panel backup and restore — delegates to the third-party [distillium/remnawave-backup-restore](https://github.com/distillium/remnawave-backup-restore) (MIT) rather than implementing it itself.
 - Removes the install entirely (containers, images, volumes) or just RemnaForge's own state.
@@ -144,6 +145,8 @@ internal/
   dockercheck/            Docker engine, Compose v2, context, registry, project name conflicts; installs Docker
   firewall/               firewall detection and opt-in setup (ufw, firewalld, nftables, iptables), fail2ban, CrowdSec
   cfgfile/                writes of .env, docker-compose.yml, nginx.conf, Caddyfile and credentials: manifest, backup, atomic, merge
+  txn/                    install transaction: reverts files, containers and networks of a failed run
+  journal/                notes about changes a failed run cannot revert
   domain/                 base-domain extraction, DNS checks, Cloudflare detection
   execx/                  external commands with a timeout per command class
   genutil/                password, username, and secret generation

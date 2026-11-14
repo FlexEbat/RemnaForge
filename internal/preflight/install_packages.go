@@ -10,6 +10,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/journal"
 	"github.com/FlexEbat/RemnaForge/internal/sysinfo"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -94,6 +95,7 @@ func packagesAlreadySatisfied() bool {
 // live in the System tuning menu (internal/systune).
 func InstallPackages() error {
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("INSTALL_PACKAGES"), ui.ColorReset)
+	journal.Add("packages", i18n.T("JOURNAL_PACKAGES"))
 
 	if err := run("apt-get", "update", "-y"); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_UPDATE_LIST"), ui.ColorReset)

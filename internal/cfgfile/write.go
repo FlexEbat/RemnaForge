@@ -157,6 +157,11 @@ func record(m *Manifest, path string, owner Owner, content, proposed string) {
 }
 
 func commit(path, content string, o Opts, m *Manifest, owner Owner, proposed string) error {
+	if Observe != nil {
+		if snap, err := takeSnapshot(path, *m); err == nil {
+			Observe(snap)
+		}
+	}
 	if err := backup(path); err != nil {
 		return err
 	}
@@ -306,4 +311,60 @@ func SetComposeEnv(path, key, value string) error {
 	}
 	out := re.ReplaceAllString(string(data), "${1}"+strings.ReplaceAll(value, "$", "$$"))
 	return Replace(path, out, Opts{})
+}
+
+// Observe, when set, receives a Snapshot of a file just before cfgfile
+// changes or creates it. The install transaction uses it to put every file
+// back if a run fails.
+var Observe func(Snapshot)
+
+// Snapshot is a file as it was before a change: its bytes, permission and
+// manifest entry, or the fact that it did not exist.
+type Snapshot struct {
+	Path     string
+	Existed  bool
+	Data     []byte
+	Mode     os.FileMode
+	Entry    Entry
+	HadEntry bool
+}
+
+func takeSnapshot(path string, m Manifest) (Snapshot, error) {
+	s := Snapshot{Path: path}
+	s.Entry, s.HadEntry = m.Files[path]
+	fi, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return s, nil
+	}
+	if err != nil {
+		return s, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return s, err
+	}
+	s.Existed, s.Data, s.Mode = true, data, fi.Mode().Perm()
+	return s, nil
+}
+
+// Restore puts the file and its manifest entry back as the snapshot has
+// them, byte for byte. A file that did not exist is removed.
+func (s Snapshot) Restore() error {
+	m, err := loadManifest()
+	if err != nil {
+		return err
+	}
+	if s.Existed {
+		if err := atomicWrite(s.Path, s.Data, s.Mode); err != nil {
+			return err
+		}
+	} else if err := os.Remove(s.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if s.HadEntry {
+		m.Files[s.Path] = s.Entry
+	} else {
+		delete(m.Files, s.Path)
+	}
+	return saveManifest(m)
 }

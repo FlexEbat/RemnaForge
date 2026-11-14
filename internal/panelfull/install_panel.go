@@ -21,6 +21,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
+	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -469,6 +470,10 @@ server {
 `
 
 func InstallationPanelNode() error {
+	return txn.Run("panelfull", installationPanelNode)
+}
+
+func installationPanelNode() error {
 	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
 	// if missing, so this doesn't just fail deep inside a later step with
 	// a confusing error.

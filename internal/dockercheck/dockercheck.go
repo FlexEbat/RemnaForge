@@ -19,6 +19,7 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/journal"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -331,6 +332,7 @@ func toolObjects(all []Object) []Object {
 func Ensure(env Env) error {
 	if !Working(env) {
 		fmt.Printf("%sInstalling Docker via get.docker.com...%s\n", ui.ColorYellow, ui.ColorReset)
+		journal.Add("docker", i18n.T("JOURNAL_DOCKER"))
 		script, err := env.Fetch(installScriptURL)
 		if err != nil {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOWNLOAD_DOCKER_KEY"), ui.ColorReset)
