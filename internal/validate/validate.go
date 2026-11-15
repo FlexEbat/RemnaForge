@@ -2,8 +2,9 @@
 // written before anything is started: the compose file with
 // `docker compose config`, and the proxy configuration (nginx or Caddy) in a
 // throwaway container that has the mounts and the image the real service
-// will have. A failure stops the flow with the tool's own output, before
-// `docker compose up` changes anything.
+// will have: `nginx -t`, `caddy validate` on an image checked to carry the
+// proxy module, or `haproxy -c -f`. A failure stops the flow with the tool's
+// own output, before `docker compose up` changes anything.
 package validate
 
 import (
@@ -132,6 +133,10 @@ func stack(env Env, dir string) error {
 			if err := caddy(env, dir, cf.Name, n, svc); err != nil {
 				return err
 			}
+		case "haproxy":
+			if err := haproxy(env, dir, n, svc); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -140,6 +145,8 @@ func stack(env Env, dir string) error {
 func kind(name string, s composeService) string {
 	img := strings.ToLower(s.Image)
 	switch {
+	case strings.Contains(img, "haproxy") || strings.Contains(strings.ToLower(name), "haproxy"):
+		return "haproxy"
 	case strings.Contains(img, "nginx") || strings.Contains(strings.ToLower(name), "nginx"):
 		return "nginx"
 	case strings.Contains(img, "caddy") || strings.Contains(strings.ToLower(name), "caddy"):
@@ -232,9 +239,65 @@ func nginx(env Env, dir, name string, s composeService) error {
 	return nil
 }
 
+// CaddyProxyModule is the Caddy module the tool's proxy configuration needs:
+// it reads the PROXY protocol that the Xray front sends. The stock Caddy
+// image does not have it, so the image is built with xcaddy.
+const CaddyProxyModule = "github.com/mastercactapus/caddy2-proxyprotocol"
+
+// caddyModuleID is how the module shows up in `caddy list-modules`.
+const caddyModuleID = "proxy_protocol"
+
+type buildSpec struct {
+	Context          string `json:"context"`
+	Dockerfile       string `json:"dockerfile"`
+	DockerfileInline string `json:"dockerfile_inline"`
+}
+
+// recipeHasModule reports whether the build recipe of a Caddy service
+// compiles the proxy module in. known is false when the recipe cannot be
+// read (a Dockerfile that is not there), and the image check decides alone.
+func recipeHasModule(env Env, s composeService) (has, known bool) {
+	var b buildSpec
+	if err := json.Unmarshal(s.Build, &b); err != nil {
+		return false, false
+	}
+	if b.DockerfileInline != "" {
+		return strings.Contains(b.DockerfileInline, CaddyProxyModule), true
+	}
+	name := b.Dockerfile
+	if name == "" {
+		name = "Dockerfile"
+	}
+	data, err := env.ReadFile(filepath.Join(b.Context, name))
+	if err != nil {
+		return false, false
+	}
+	return strings.Contains(string(data), CaddyProxyModule), true
+}
+
+// caddyfileUsesProxyProtocol reports whether a mounted Caddyfile has the
+// proxy_protocol directive, which only the module provides.
+func caddyfileUsesProxyProtocol(env Env, sources []string) bool {
+	for _, src := range sources {
+		if filepath.Base(src) != "Caddyfile" {
+			continue
+		}
+		if b, err := env.ReadFile(src); err == nil && regexp.MustCompile(`(?m)^\s*proxy_protocol\b`).Match(b) {
+			return true
+		}
+	}
+	return false
+}
+
 func caddy(env Env, dir, project, name string, s composeService) error {
 	image := s.Image
 	if s.builds() {
+		// The recipe must compile the proxy module in. Say so before a
+		// long build, not after it.
+		if has, known := recipeHasModule(env, s); known && !has {
+			return &Error{Step: "caddy build recipe (" + name + ")",
+				Err: fmt.Errorf("the build does not include %s, which the proxy configuration needs (add `RUN xcaddy build --with %s`)", CaddyProxyModule, CaddyProxyModule)}
+		}
 		// The image carries modules the stock one lacks, so it has to be
 		// built before its Caddyfile can be checked. `up --build` reuses it.
 		if err := env.Stream(dir, "docker", "compose", "build", name); err != nil {
@@ -248,6 +311,17 @@ func caddy(env Env, dir, project, name string, s composeService) error {
 		return nil
 	}
 	mounts, sources := bindMounts(env, s)
+	// Whatever the recipe says, the image that will run must have the module
+	// when it is built for it or when the Caddyfile uses it. A flow that runs
+	// the stock image with a Caddyfile that does not need the module is fine.
+	if s.builds() || caddyfileUsesProxyProtocol(env, sources) {
+		if out, err := env.Run(dir, "docker", "run", "--rm", "--entrypoint", "caddy", image, "list-modules"); err != nil {
+			return &Error{Step: "caddy list-modules (" + name + ")", Output: out, Err: err}
+		} else if !strings.Contains(out, caddyModuleID) {
+			return &Error{Step: "caddy modules (" + name + ")",
+				Err: fmt.Errorf("the image %s was built without %s: its module list has no %s", image, CaddyProxyModule, caddyModuleID)}
+		}
+	}
 	target := "/etc/caddy/Caddyfile"
 	for i, src := range sources {
 		if filepath.Base(src) == "Caddyfile" {
@@ -267,6 +341,50 @@ func caddy(env Env, dir, project, name string, s composeService) error {
 	args = append(args, image, "validate", "--config", target, "--adapter", "caddyfile")
 	if out, err := env.Run(dir, "docker", args...); err != nil {
 		return &Error{Step: "caddy validate (" + name + ")", Output: out, Err: err}
+	}
+	return nil
+}
+
+// haproxyServerRE finds the host of a `server name host:port` line.
+var haproxyServerRE = regexp.MustCompile(`(?m)^\s*server\s+\S+\s+([A-Za-z0-9_.-]+):\d+`)
+
+// haproxy checks a HAProxy configuration with `haproxy -c -f`. HAProxy
+// resolves the server names of its backends when it loads the file, and the
+// compose network does not exist yet, so the names the file uses are
+// pointed at the loopback address in the throwaway container.
+func haproxy(env Env, dir, name string, s composeService) error {
+	if s.Image == "" {
+		return nil
+	}
+	mounts, sources := bindMounts(env, s)
+	target := "/usr/local/etc/haproxy/haproxy.cfg"
+	hosts := map[string]bool{}
+	for i, src := range sources {
+		if !strings.HasSuffix(src, ".cfg") && filepath.Base(src) != "haproxy.cfg" {
+			continue
+		}
+		target = strings.Split(mounts[2*i+1], ":")[1]
+		if b, err := env.ReadFile(src); err == nil {
+			for _, m := range haproxyServerRE.FindAllStringSubmatch(string(b), -1) {
+				if h := m[1]; !looksLikeIP(h) && !strings.EqualFold(h, "localhost") {
+					hosts[h] = true
+				}
+			}
+		}
+	}
+	var hs []string
+	for h := range hosts {
+		hs = append(hs, h)
+	}
+	sort.Strings(hs)
+	args := []string{"run", "--rm", "--entrypoint", "haproxy"}
+	args = append(args, mounts...)
+	for _, h := range hs {
+		args = append(args, "--add-host", h+":127.0.0.1")
+	}
+	args = append(args, s.Image, "-c", "-f", target)
+	if out, err := env.Run(dir, "docker", args...); err != nil {
+		return &Error{Step: "haproxy -c (" + name + ")", Output: out, Err: err}
 	}
 	return nil
 }

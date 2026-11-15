@@ -64,13 +64,17 @@ func (h *host) env() Env {
 					}
 				}
 			}
-			for p, o := range h.out {
-				if strings.HasPrefix(line, p) {
-					if h.fail[p] {
-						return o, errors.New("exit status 1")
-					}
-					return o, nil
+			best := ""
+			for p := range h.out {
+				if strings.HasPrefix(line, p) && len(p) > len(best) {
+					best = p
 				}
+			}
+			if best != "" {
+				if h.fail[best] {
+					return h.out[best], errors.New("exit status 1")
+				}
+				return h.out[best], nil
 			}
 			return "", nil
 		},
@@ -186,8 +190,16 @@ func TestUpstreamHosts(t *testing.T) {
 	}
 }
 
+const caddyModules = `admin.api.load
+caddy.listeners.proxy_protocol
+http.handlers.reverse_proxy
+tls.issuance.acme
+`
+
+const caddyListModules = "docker run --rm --entrypoint caddy remnaforge-caddy-proxyprotocol:2.11.2 list-modules"
+
 const caddyJSON = `{"name":"remnawave","services":{"remnawave-caddy":{
- "image":"remnaforge-caddy-proxyprotocol:2.11.2","build":{"context":"/opt/remnawave"},
+ "image":"remnaforge-caddy-proxyprotocol:2.11.2","build":{"context":"/opt/remnawave","dockerfile_inline":"FROM caddy:2.11.2-builder AS builder\nRUN xcaddy build --with github.com/mastercactapus/caddy2-proxyprotocol\nFROM caddy:2.11.2\n"},
  "volumes":[{"type":"bind","source":"/opt/remnawave/Caddyfile","target":"/etc/caddy/Caddyfile"},
             {"type":"bind","source":"/var/www/html","target":"/var/www/html"},
             {"type":"volume","source":"caddy_data","target":"/data"}],
@@ -198,6 +210,7 @@ func TestCaddyIsBuiltThenValidatedWithItsEnvironmentInAFile(t *testing.T) {
 	h.files["/opt/remnawave/Caddyfile"] = "x"
 	h.files["/var/www/html"] = "dir"
 	h.out["docker compose config --format json"] = caddyJSON
+	h.out[caddyListModules] = caddyModules
 	if err := stack(h.env(), "/opt/remnawave"); err != nil {
 		t.Fatal(err)
 	}
@@ -241,6 +254,7 @@ func TestCaddyDefaultImageNameAndCaddyfileTarget(t *testing.T) {
 	h.files["/c/Caddyfile"] = "x"
 	h.out["docker compose config --format json"] = `{"name":"remnanode","services":{"proxy-caddy":{"build":{"context":"."},
 	  "volumes":[{"type":"bind","source":"/c/Caddyfile","target":"/srv/Caddyfile"}]}}}`
+	h.out["docker run --rm --entrypoint caddy remnanode-proxy-caddy list-modules"] = caddyModules
 	if err := stack(h.env(), "/c"); err != nil {
 		t.Fatal(err)
 	}
@@ -254,8 +268,9 @@ func TestBrokenCaddyfileAndFailedBuildStopTheFlow(t *testing.T) {
 	h := newHost()
 	h.files["/opt/remnawave/Caddyfile"] = "x"
 	h.out["docker compose config --format json"] = caddyJSON
-	h.out["docker run"] = caddyBroken
-	h.fail["docker run"] = true
+	h.out[caddyListModules] = caddyModules
+	h.out["docker run --rm --entrypoint caddy --env-file"] = caddyBroken
+	h.fail["docker run --rm --entrypoint caddy --env-file"] = true
 	err := stack(h.env(), "/opt/remnawave")
 	if err == nil || !strings.Contains(err.Error(), "unrecognized directive: reverse_prox") || !strings.Contains(err.Error(), "caddy validate") {
 		t.Errorf("err = %v", err)
@@ -357,5 +372,223 @@ func TestEveryFlowValidatesBeforeComposeUp(t *testing.T) {
 	}
 	if total != 10 {
 		t.Errorf("found %d compose up commands in the flows, expected 10", total)
+	}
+}
+
+// ---- the proxy module of Caddy ----
+
+func TestCaddyRecipeWithoutTheProxyModuleStopsBeforeTheBuild(t *testing.T) {
+	h := newHost()
+	h.files["/opt/remnawave/Caddyfile"] = "x"
+	h.out["docker compose config --format json"] = strings.Replace(caddyJSON, "--with github.com/mastercactapus/caddy2-proxyprotocol", "", 1)
+	err := stack(h.env(), "/opt/remnawave")
+	if err == nil || !strings.Contains(err.Error(), "caddy2-proxyprotocol") || !strings.Contains(err.Error(), "build recipe") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(h.built) != 0 {
+		t.Error("a long build ran for a recipe that cannot work")
+	}
+}
+
+func TestCaddyImageWithoutTheModuleIsRefused(t *testing.T) {
+	h := newHost()
+	h.files["/opt/remnawave/Caddyfile"] = "x"
+	h.out["docker compose config --format json"] = caddyJSON
+	// A stale image under the same tag, built before the module was added.
+	h.out[caddyListModules] = "admin.api.load\nhttp.handlers.reverse_proxy\n"
+	err := stack(h.env(), "/opt/remnawave")
+	if err == nil || !strings.Contains(err.Error(), "built without") || !strings.Contains(err.Error(), "proxy_protocol") {
+		t.Fatalf("err = %v", err)
+	}
+	for _, r := range h.runs {
+		if strings.Contains(r, "validate --config") {
+			t.Error("the Caddyfile was validated on an image without the module")
+		}
+	}
+}
+
+func TestCaddyModuleListFailureIsReported(t *testing.T) {
+	h := newHost()
+	h.out["docker compose config --format json"] = caddyJSON
+	h.out[caddyListModules] = "Error: caddy: executable not found"
+	h.fail[caddyListModules] = true
+	err := stack(h.env(), "/opt/remnawave")
+	var ve *Error
+	if !errors.As(err, &ve) || !strings.HasPrefix(ve.Step, "caddy list-modules") || !strings.Contains(err.Error(), "executable not found") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestCaddyRecipeFromADockerfile(t *testing.T) {
+	json := `{"name":"p","services":{"web-caddy":{"image":"img:1","build":{"context":"/ctx","dockerfile":"Caddy.Dockerfile"},
+	 "volumes":[{"type":"bind","source":"/ctx/Caddyfile","target":"/etc/caddy/Caddyfile"}]}}}`
+	h := newHost()
+	h.files["/ctx/Caddyfile"] = "x"
+	h.files["/ctx/Caddy.Dockerfile"] = "RUN xcaddy build --with github.com/mastercactapus/caddy2-proxyprotocol\n"
+	h.out["docker compose config --format json"] = json
+	h.out["docker run --rm --entrypoint caddy img:1 list-modules"] = caddyModules
+	if err := stack(h.env(), "/ctx"); err != nil {
+		t.Fatal(err)
+	}
+	h = newHost()
+	h.files["/ctx/Caddyfile"] = "x"
+	h.files["/ctx/Caddy.Dockerfile"] = "FROM caddy:2\n"
+	h.out["docker compose config --format json"] = json
+	if err := stack(h.env(), "/ctx"); err == nil || !strings.Contains(err.Error(), "build recipe") {
+		t.Errorf("err = %v", err)
+	}
+	// A Dockerfile that cannot be read leaves the decision to the image check.
+	h = newHost()
+	h.files["/ctx/Caddyfile"] = "x"
+	h.out["docker compose config --format json"] = json
+	h.out["docker run --rm --entrypoint caddy img:1 list-modules"] = "admin.api.load\n"
+	if err := stack(h.env(), "/ctx"); err == nil || !strings.Contains(err.Error(), "built without") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestStockCaddyImageIsRefusedWhenTheCaddyfileUsesProxyProtocol(t *testing.T) {
+	h := newHost()
+	h.files["/c/Caddyfile"] = "https://example.com {\n    bind unix//dev/shm/x.sock\n    listener_wrappers {\n        proxy_protocol\n    }\n}\n"
+	h.out["docker compose config --format json"] = `{"services":{"caddy":{"image":"caddy:2.11.2",
+	 "volumes":[{"type":"bind","source":"/c/Caddyfile","target":"/etc/caddy/Caddyfile"}]}}}`
+	h.out["docker run --rm --entrypoint caddy caddy:2.11.2 list-modules"] = "admin.api.load\n"
+	if err := stack(h.env(), "/c"); err == nil || !strings.Contains(err.Error(), "built without") {
+		t.Errorf("a stock Caddy image passed with a proxy_protocol Caddyfile: %v", err)
+	}
+	if len(h.built) != 0 {
+		t.Errorf("built: %v", h.built)
+	}
+}
+
+// The panel-only Caddy flow runs the stock image because its Caddyfile does
+// not use the module; that must keep working.
+func TestStockCaddyImageIsFineWithoutProxyProtocol(t *testing.T) {
+	h := newHost()
+	h.files["/c/Caddyfile"] = "panel.example.com {\n    reverse_proxy remnawave:3000\n}\n"
+	h.out["docker compose config --format json"] = `{"services":{"caddy":{"image":"caddy:2.11.2",
+	 "volumes":[{"type":"bind","source":"/c/Caddyfile","target":"/etc/caddy/Caddyfile"}]}}}`
+	if err := stack(h.env(), "/c"); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range h.runs {
+		if strings.Contains(r, "list-modules") {
+			t.Errorf("the module was demanded of a Caddyfile that does not use it: %s", r)
+		}
+	}
+	// A proxy_protocol word in a comment or a path is not the directive.
+	h = newHost()
+	h.files["/c/Caddyfile"] = "# proxy_protocol is not used here\nexample.com {\n    respond \"proxy_protocol\"\n}\n"
+	h.out["docker compose config --format json"] = `{"services":{"caddy":{"image":"caddy:2.11.2",
+	 "volumes":[{"type":"bind","source":"/c/Caddyfile","target":"/etc/caddy/Caddyfile"}]}}}`
+	if err := stack(h.env(), "/c"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The recipes of the install flows compile the module in wherever their
+// Caddyfile uses it, and the string the check looks for is the one they use.
+func TestFlowsThatNeedTheModuleBuildItIn(t *testing.T) {
+	needsModule := regexp.MustCompile(`(?m)^\s+proxy_protocol\s*$`)
+	for _, f := range []string{"caddypanelfull/install_panel.go", "caddypanelonly/install_panel.go", "caddynode/install_node.go"} {
+		b, err := os.ReadFile(filepath.Join("..", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		src := string(b)
+		uses := needsModule.MatchString(src)
+		builds := strings.Contains(src, "xcaddy build")
+		if uses && !strings.Contains(src, "xcaddy build --with "+CaddyProxyModule) {
+			t.Errorf("%s: the Caddyfile uses proxy_protocol but the image is not built with %s", f, CaddyProxyModule)
+		}
+		if builds && !strings.Contains(src, "--with "+CaddyProxyModule) {
+			t.Errorf("%s: a Caddy build without the proxy module", f)
+		}
+		if f == "caddypanelonly/install_panel.go" && (uses || builds) {
+			t.Errorf("%s changed: the stock-image assumption of the validation needs a second look", f)
+		}
+	}
+}
+
+// ---- HAProxy ----
+
+const haproxyCfg = `global
+    log stdout format raw local0
+defaults
+    mode tcp
+    timeout connect 5s
+frontend in
+    bind :443
+    default_backend panel
+backend panel
+    server a remnawave:3000 check
+    server b 10.0.0.4:3000 check
+    server c localhost:3001
+    server d remnawave-api:3002 check
+`
+
+const haproxyBroken = `[NOTICE]   (1) : haproxy version is 3.0.5
+[ALERT]    (1) : config : parsing [/usr/local/etc/haproxy/haproxy.cfg:7] : unknown keyword 'default_backen' in 'frontend' section
+[ALERT]    (1) : config : Fatal errors found in configuration.
+`
+
+func TestHAProxyIsCheckedWithDashC(t *testing.T) {
+	h := newHost()
+	h.files["/opt/remnawave/haproxy.cfg"] = haproxyCfg
+	h.out["docker compose config --format json"] = `{"services":{"remnawave-haproxy":{"image":"haproxy:3.0","volumes":[
+	 {"type":"bind","source":"/opt/remnawave/haproxy.cfg","target":"/usr/local/etc/haproxy/haproxy.cfg"},
+	 {"type":"bind","source":"/etc/letsencrypt/live/none","target":"/certs"}]}}}`
+	if err := stack(h.env(), "/opt/remnawave"); err != nil {
+		t.Fatal(err)
+	}
+	want := "docker run --rm --entrypoint haproxy -v /opt/remnawave/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro " +
+		"--add-host remnawave:127.0.0.1 --add-host remnawave-api:127.0.0.1 haproxy:3.0 -c -f /usr/local/etc/haproxy/haproxy.cfg"
+	if got := h.runs[len(h.runs)-1]; got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}
+
+func TestBrokenHAProxyConfigIsReportedWithItsOutput(t *testing.T) {
+	h := newHost()
+	h.files["/h/haproxy.cfg"] = "frontend in\n  default_backen x\n"
+	h.out["docker compose config --format json"] = `{"services":{"haproxy":{"image":"haproxy:lts","volumes":[
+	 {"type":"bind","source":"/h/haproxy.cfg","target":"/etc/haproxy/haproxy.cfg"}]}}}`
+	h.out["docker run --rm --entrypoint haproxy"] = haproxyBroken
+	h.fail["docker run --rm --entrypoint haproxy"] = true
+	err := stack(h.env(), "/h")
+	var ve *Error
+	if !errors.As(err, &ve) || !strings.HasPrefix(ve.Step, "haproxy -c") || !strings.Contains(err.Error(), "unknown keyword 'default_backen'") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := h.runs[len(h.runs)-1]; !strings.HasSuffix(got, "haproxy:lts -c -f /etc/haproxy/haproxy.cfg") {
+		t.Errorf("the config path of the mount was not used: %s", got)
+	}
+}
+
+func TestHAProxyWithoutAnImageOrConfigUsesDefaults(t *testing.T) {
+	h := newHost()
+	h.out["docker compose config --format json"] = `{"services":{"lb-haproxy":{}}}`
+	if err := stack(h.env(), "/h"); err != nil || len(h.runs) != 2 {
+		t.Errorf("err %v runs %v", err, h.runs)
+	}
+	h = newHost()
+	h.out["docker compose config --format json"] = `{"services":{"lb":{"image":"haproxy:3.0"}}}`
+	if err := stack(h.env(), "/h"); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.runs[len(h.runs)-1]; !strings.HasSuffix(got, "haproxy:3.0 -c -f /usr/local/etc/haproxy/haproxy.cfg") {
+		t.Errorf("got %s", got)
+	}
+}
+
+func TestKind(t *testing.T) {
+	cases := map[string]string{"remnawave-nginx": "nginx", "remnawave-caddy": "caddy", "lb-haproxy": "haproxy", "db": "", "proxy": ""}
+	for name, want := range cases {
+		if got := kind(name, composeService{}); got != want {
+			t.Errorf("%s: %q", name, got)
+		}
+	}
+	if kind("x", composeService{Image: "haproxy:3.0"}) != "haproxy" || kind("x", composeService{Image: "nginx:1.28"}) != "nginx" || kind("x", composeService{Image: "caddy:2"}) != "caddy" {
+		t.Error("kind by image")
 	}
 }
