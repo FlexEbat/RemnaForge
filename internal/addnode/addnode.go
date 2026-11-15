@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/api"
+	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -50,7 +51,7 @@ func AddNodeToPanel() {
 	// Prompt for the node's selfsteal domain until it checks out.
 	var selfstealDomain string
 	for {
-		selfstealDomain = ui.Reading(i18n.T("ENTER_NODE_DOMAIN"))
+		selfstealDomain = domain.Read("ENTER_NODE_DOMAIN")
 		if api.CheckNodeDomain(domainURL, token, selfstealDomain) == nil {
 			break
 		}
