@@ -25,6 +25,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/validate"
 )
 
 const panelDir = "/opt/remnawave"
@@ -433,6 +434,9 @@ func installationPanelOnly() error {
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	_ = execx.Command("ufw", "allow", "80/tcp", "comment", "HTTP").Run()
+	if err := validate.CheckStack(panelDir); err != nil {
+		return err
+	}
 	upCmd := execx.Command("docker", "compose", "up", "-d")
 	upCmd.Dir = panelDir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
@@ -544,6 +548,9 @@ func installationPanelOnly() error {
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_REMNAWAVE_SUBSCRIPTION_PAGE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
+	if err := validate.CheckStack(panelDir); err != nil {
+		return err
+	}
 	upSub := execx.Command("docker", "compose", "up", "-d", "remnawave-subscription-page")
 	upSub.Dir = panelDir
 	if err := upSub.Run(); err != nil {

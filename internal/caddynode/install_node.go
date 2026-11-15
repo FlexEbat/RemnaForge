@@ -26,6 +26,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/validate"
 )
 
 const nodeDir = "/opt/remnanode"
@@ -274,6 +275,9 @@ func installationNode() error {
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_NODE"), ui.ColorReset)
 	time.Sleep(3 * time.Second)
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
+	if err := validate.CheckStack(nodeDir); err != nil {
+		return err
+	}
 	upCmd := execx.Command("docker", "compose", "up", "-d", "--build")
 	upCmd.Dir = nodeDir
 	if err := upCmd.Run(); err != nil {
