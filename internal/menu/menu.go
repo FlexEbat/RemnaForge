@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/addnode"
+	"github.com/FlexEbat/RemnaForge/internal/backupcrypt"
 	"github.com/FlexEbat/RemnaForge/internal/backuprestore"
 	"github.com/FlexEbat/RemnaForge/internal/caddynode"
 	"github.com/FlexEbat/RemnaForge/internal/caddypanelfull"
@@ -68,6 +69,7 @@ var mainMenuItems = []menuItem{
 		}
 		return false
 	}},
+	{label: label("MENU_14"), action: func() bool { backupcrypt.Menu(backupcrypt.DefaultMenuEnv()); return false }},
 	{label: label("MENU_8"), newGroup: true, action: func() bool {
 		ipv6.ManageIPv6(ipv6.MenuNav{ReturnToMainMenu: func() {}})
 		return false
