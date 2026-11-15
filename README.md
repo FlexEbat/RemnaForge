@@ -59,6 +59,7 @@ Found a bug? Open an issue on GitHub.
 - Never overwrites a configuration file you changed: it records what it wrote (`/usr/local/remnawave_reverse/manifest.json`), replaces only files that are still as it left them, shows a diff for the others and lets you keep, merge or replace, merges `.env` by key, and backs up every file before a change (`/usr/local/remnawave_reverse/backups/<time>/`). Writes are atomic, and running an install twice leaves the files identical.
 - Treats every install as a transaction: if it fails, the files it changed go back byte for byte, containers and networks it created are removed, and it lists what it cannot revert (installed packages, requested certificates, cron entries). Volumes and databases are never touched.
 - Keeps secrets out of the log (passwords, tokens, API keys and everything it generated or you typed are masked), keeps `.env` and credential files at 0600 in closed directories, writes a `.gitignore` next to them, can encrypt the database backup with a passphrase (gpg, AES256; decrypt from the main menu, entry "Decrypt a backup", or with `gpg --decrypt FILE.gpg > FILE`), and rotates the database password and `WEBHOOK_SECRET_HEADER` from the panel menu, putting the old values back if the panel is not healthy afterwards.
+- Validates what it generated before starting anything: `docker compose config`, then the proxy config in a throwaway container (`nginx -t`, or `caddy validate` on the built image). A broken file stops the install with the tool's own output, before `docker compose up`.
 - Installs dependencies on a fresh server before the first install: `docker`, `docker compose`, `certbot`, `ufw`, `cron`. It changes no host setting on its own: BBR, automatic security updates, a system package upgrade and the firewall are switched on by hand in the "System tuning" menu. The firewall flow shows what is installed and listening, asks which tool to configure (ufw, firewalld, nftables or iptables), opens your SSH port first, shows every command, and changes nothing until you confirm; each answer is written to `/var/log/remnaforge-consent.log`. It can also install fail2ban or CrowdSec.
 - Panel backup and restore — delegates to the third-party [distillium/remnawave-backup-restore](https://github.com/distillium/remnawave-backup-restore) (MIT) rather than implementing it itself.
 - Removes the install entirely (containers, images, volumes) or just RemnaForge's own state.
@@ -150,6 +151,7 @@ internal/
   journal/                notes about changes a failed run cannot revert
   rotate/                 database password and webhook secret rotation with rollback
   backupcrypt/            gpg encryption of backups
+  validate/               checks the compose file and the nginx or Caddy config before anything starts
   domain/                 base-domain extraction, DNS checks, Cloudflare detection
   execx/                  external commands with a timeout per command class
   genutil/                password, username, and secret generation

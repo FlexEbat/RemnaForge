@@ -1,8 +1,10 @@
 # TECH.md
 
-**Version: v1.18.1** (2026-11-12)
+**Version: v1.19.0** (2026-11-12)
 
 Changelog (newest first, one entry per pushed unit of work, only the 5 most recent entries are kept):
+
+- **v1.19.0**: slice 10 is done: pre-deployment validation (point 7). New package `internal/validate`. `validate.CheckStack(dir)` runs before every `docker compose up` of the six install flows (ten call sites, the second `up` of a flow included, because the files change between the two). Step 1: `docker compose config -q` on the generated compose file. Step 2: `docker compose config --format json` gives the resolved services, and for each proxy service the check runs in a throwaway container with the service's own image and bind mounts (read only; a source that does not exist is skipped so Docker does not create it, and device paths are skipped). nginx: `docker run --rm --entrypoint nginx ... -t`, with `--add-host name:127.0.0.1` for every upstream host the mounted `.conf` files name, because nginx refuses a configuration whose upstream does not resolve and the compose network does not exist yet. Caddy: the image carries a module the stock one lacks, so `docker compose build <service>` runs first (`up --build` reuses it) and then `docker run --rm --entrypoint caddy --env-file FILE ... validate --adapter caddyfile`; the service environment (the `{$SELF_STEAL_DOMAIN}` placeholders) goes in through a temporary 0600 file that is removed afterwards, never as arguments. A failure is a `validate.Error` with the step and the tool's own output, printed in red; the flow returns it, so nothing is started and the transaction of slice 8 puts the files back. The tests use recorded output of the tools and found one real bug while being written: the upstream host pattern only matched `proxy_pass` at the start of a line, so a one-line `location / { proxy_pass http://app:3000; }` was missed. A guard test reads the six flows and checks that each `compose up` is directly preceded by `if err := validate.CheckStack(dir); err != nil { return err }` for the same directory, and that a mutation that removes one is caught. `haproxy -c` is not added: HAProxy arrives with slice 13, and the function would have no caller until then. Not tested against a real Docker (none in the development sandbox): the exact argument order and the `docker compose config --format json` shape were written from the documentation and the recorded messages, so the first run on a server is the real test. Coverage 84 percent.
 
 - **v1.18.1**: backup decryption menu. Main menu entry "Decrypt a backup" (`MENU_14`, after backup and restore) runs `backupcrypt.Menu`: it lists the directories `/root/*-backup-*` that hold `.gpg` files, takes a number, a directory path or the path of one `.gpg` file, reads the passphrase without echo, and decrypts every `.gpg` file of the choice next to the encrypted one (mode 0600, the encrypted file stays). It refuses to overwrite a plaintext file that already exists, and when one file fails (a wrong passphrase, a damaged file) it removes the plaintext files this call wrote, so nothing half-decrypted is left; a mutation that skips that cleanup fails the tests. The passphrase goes to gpg on descriptor 3 as before and is registered for log redaction. The menu warns that the decrypted files hold secrets. Tests (real gpg, skipped without it) cover choosing by number, by directory and by file, a wrong passphrase, a failure on the second file, an existing plaintext file, cancelling, and rejected input; coverage 84 percent.
 
@@ -12,7 +14,6 @@ Changelog (newest first, one entry per pushed unit of work, only the 5 most rece
 
 - **v1.16.1**: CI fix. Since v1.16.0 the code under test writes through `cfgfile`, whose manifest and backups live in `/usr/local/remnawave_reverse`; the tests of `api` and `stack` reached that path, which worked as root in the development sandbox and failed as the unprivileged user of the CI runner (`mkdir /usr/local/remnawave_reverse: permission denied`). New package `internal/cfgfile/cfgfiletest` has `Main`, which points `cfgfile` at a temporary directory for a whole test binary; `api`, `stack`, `maintenance`, `managepanel` and `certs` call it from `TestMain`. Checked by running `go test -race ./...` as a non-root user, which fails before the change and passes after it, and by running every package's tests with the real directory removed first: none recreates it. The checklist of the working rules now says to run the tests as an unprivileged user.
 
-- **v1.16.0**: slice 7 is done: safe configuration files (points 4, 14). New package `internal/cfgfile` is the only code that writes `.env`, `docker-compose.yml`, `nginx.conf`, the Caddyfile and credential files. A manifest (`/usr/local/remnawave_reverse/manifest.json`, mode 0600) records for each path an owner (installer, user or third-party), the hash of what was written and the hash of the last offer. `Write` creates a missing file; leaves an identical one alone; merges `.env` by key whatever its history (existing values stay, missing keys are added, nobody is asked); replaces a file the installer wrote and nobody changed; and for any other file (edited, or never written by the installer) shows a line diff and lets the operator keep, merge or replace, where keep is the answer to an empty reply and a kept file is not asked about again for the same offer. Merge by kind: `nginx.conf` and the Caddyfile by top-level block (the block scanner of `managepanel/nginxconf.go` generalized, skips comment lines, names a server block by its sorted `server_name` list, keeps the operator's other blocks and top-level nginx directives), `docker-compose.yml` by service, network and volume (the operator's entries stay and are re-indented to the installer's indentation), and the merged file belongs to the operator afterwards. Every change is preceded by a backup in `/usr/local/remnawave_reverse/backups/<UTC time>/<path>` (mode 0600, a suffix when two changes share a second) and made atomically: a temp file in the same directory, `fsync`, rename, `fsync` of the directory. A test starts a child process that exits between the temp file and the rename and checks that the original is intact. `Replace` is the same without questions, for changes the operator asked for (managepanel access edits, restore, migrate); `WriteSecret` replaces `certs.writeSecretFile` (directory 0700, file 0600); `SetComposeEnv` replaces `api.setComposeEnv` with the same behavior; `Stable` stores the random cookie names, metrics credentials and app secret of the panel flows in the manifest so that running a flow again produces the same files, and `Forget` clears them on teardown and uninstall. The six install flows write once at the end of the compose step (`dockerComposeHead` is a constant, so the head and tail are written together instead of in two steps). `selfsteal`, the IPv6 and BBR sysctl files, the apt settings and the certbot renewal config keep their own writes: they are system files or content the tool does not generate as configuration. Tests: 82 percent of the package, including a flow run three times with identical files, no questions and no backups, and guard tests that scan the source for writes around `cfgfile` and for random values drawn outside `Stable`.
 
 
 
@@ -65,6 +66,7 @@ internal/
   journal/                notes about changes a failed run cannot revert
   rotate/                 secret rotation with rollback
   txn/                    install transaction: rollback of files, containers, networks
+  validate/               compose and proxy config validation before up
   firewall/               firewall detection and opt-in setup, fail2ban, CrowdSec
   execx/                  external commands with a timeout per command class
   genutil/                passwords, logins, secrets
@@ -136,6 +138,7 @@ Touch only deliberately, with an understanding of the consequences:
 | Firewall, fail2ban, CrowdSec | `internal/firewall` |
 | Config files: manifest, backups, merge | `internal/cfgfile` |
 | Install transaction and rollback | `internal/txn`, `internal/journal` |
+| Config validation before start | `internal/validate` |
 | Secrets: redaction, rotation, backup encryption | `internal/ui` (redact), `internal/rotate`, `internal/backupcrypt` |
 | Backup and restore (delegates to the third-party `distillium/remnawave-backup-restore`, MIT) | `internal/backuprestore` |
 | Localization, language selection, file logging | `internal/i18n`, `internal/ui` |
@@ -236,7 +239,7 @@ Rules for this section:
 | 4 | `preflight` install marker, `stack` uses compose project names. Install flows overwrote `docker-compose.yml`, `.env`, `nginx.conf`, `Caddyfile` with `os.WriteFile`. | Done (slice 7, v1.16.0): `internal/cfgfile`. |
 | 5 | `oscheck.CheckOS`, `preflight.CheckDocker`, `domain.CheckDomain`. There were no port, repository or time checks. | Done (slices 3, 4, 5, v1.14.0). |
 | 6, 18 | `genutil` generates secrets, `HardenEnv`, files at 0600 in directories at 0700, log without ANSI codes. There was no log redaction, no rotation, no encrypted backups, no `.gitignore` for `.env`. | Done (slice 9, v1.18.0). |
-| 7 | Generated configs were validated by hand once (v1.4.3). No validation step in the flows. | Add (slice 10). |
+| 7 | Generated configs were validated by hand once (v1.4.3). There was no validation step in the flows. | Done (slice 10, v1.19.0). |
 | 8 | Done in v1.9.0 and v1.9.1 (`stack.Teardown`, `PromptBackup`). | Keep, cover with tests only if a slice touches it. |
 | 9 | `ui.EnableFileLogging` (log file), `maintenance.Doctor`. No final summary report. | Extend (slice 11). |
 | 10 | `enableBBR()` ran inside `InstallPackages` without asking. `internal/ipv6` is manual. | BBR: done (slice 2, v1.11.0). IPv6: keep. |
@@ -361,6 +364,8 @@ Depends on slice 7.
 - Decided: `gpg --symmetric`, passphrase read from the terminal, never passed as an argument.
 
 ### Slice 10. Pre-deployment validation (point 7)
+
+Status: done in v1.19.0.
 
 Depends on slice 7.
 
