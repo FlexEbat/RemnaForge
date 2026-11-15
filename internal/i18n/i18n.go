@@ -7,6 +7,13 @@ package i18n
 var Lang map[string]string
 
 var english = map[string]string{
+	"BACKUP_DECRYPT_DONE":                 "Decrypted: %s",
+	"BACKUP_DECRYPT_FAILED":               "Could not decrypt: %v",
+	"BACKUP_DECRYPT_NONE":                 "No encrypted backups found in /root. You can enter the path of a backup directory or of a .gpg file.",
+	"BACKUP_DECRYPT_PASSPHRASE":           "Passphrase of the backup (empty to cancel):",
+	"BACKUP_DECRYPT_PROMPT":               "Number of a backup, or the path of a directory or a .gpg file:",
+	"BACKUP_DECRYPT_TITLE":                "Decrypt a backup",
+	"BACKUP_DECRYPT_WARNING":              "The decrypted files contain secrets (mode 0600). Delete them when you no longer need them.",
 	"BACKUP_ENCRYPT":                      "Encrypt the backup with a passphrase (gpg, AES256)? (y/N):",
 	"BACKUP_ENCRYPTED":                    "The backup is encrypted. Decrypt a file with: gpg --decrypt FILE.gpg > FILE",
 	"BACKUP_ENCRYPT_FAILED":               "The backup could not be encrypted",
@@ -106,6 +113,7 @@ var english = map[string]string{
 	"CONFIRM_ABORTED":                     "Confirmation did not match, nothing was removed.",
 	"DB_VOLUME_EXISTS":                    "Docker volume %s already exists and holds a database initialised with a different password. Use Reinstall or remove the volume first.",
 	"MENU_13":                             "System tuning",
+	"MENU_14":                             "Decrypt a backup",
 	"PREFLIGHT_CLOCK":                     "System clock",
 	"PREFLIGHT_CLOCK_REMEDY":              "Run: timedatectl set-ntp true (or install chrony). With a skewed clock certificate checks fail.",
 	"PREFLIGHT_CLOCK_SKEW":                "not synchronized with NTP",
@@ -503,6 +511,13 @@ var english = map[string]string{
 	"WILDCARD_CERT_FOUND":                     "Wildcard certificate found in /etc/letsencrypt/live/",
 }
 var russian = map[string]string{
+	"BACKUP_DECRYPT_DONE":                     "Расшифровано: %s",
+	"BACKUP_DECRYPT_FAILED":                   "Не удалось расшифровать: %v",
+	"BACKUP_DECRYPT_NONE":                     "Зашифрованных резервных копий в /root не найдено. Можно указать путь к каталогу копии или к файлу .gpg.",
+	"BACKUP_DECRYPT_PASSPHRASE":               "Парольная фраза копии (пусто — отмена):",
+	"BACKUP_DECRYPT_PROMPT":                   "Номер копии либо путь к каталогу или файлу .gpg:",
+	"BACKUP_DECRYPT_TITLE":                    "Расшифровать резервную копию",
+	"BACKUP_DECRYPT_WARNING":                  "Расшифрованные файлы содержат секреты (права 0600). Удалите их, когда они станут не нужны.",
 	"BACKUP_ENCRYPT":                          "Зашифровать резервную копию парольной фразой (gpg, AES256)? (y/N):",
 	"BACKUP_ENCRYPTED":                        "Резервная копия зашифрована. Расшифровать файл: gpg --decrypt FILE.gpg > FILE",
 	"BACKUP_ENCRYPT_FAILED":                   "Не удалось зашифровать резервную копию",
@@ -602,6 +617,7 @@ var russian = map[string]string{
 	"CONFIRM_ABORTED":                         "Подтверждение не совпало, ничего не удалено.",
 	"DB_VOLUME_EXISTS":                        "Docker-том %s уже существует и содержит базу, инициализированную с другим паролем. Используйте переустановку или сначала удалите том.",
 	"MENU_13":                                 "Настройка системы",
+	"MENU_14":                                 "Расшифровать резервную копию",
 	"PREFLIGHT_CLOCK":                         "Системные часы",
 	"PREFLIGHT_CLOCK_REMEDY":                  "Выполните: timedatectl set-ntp true (или установите chrony). При сбитых часах проверки сертификатов не проходят.",
 	"PREFLIGHT_CLOCK_SKEW":                    "не синхронизированы по NTP",

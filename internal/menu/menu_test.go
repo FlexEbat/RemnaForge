@@ -33,3 +33,19 @@ func TestMainMenuHasSystemTuning(t *testing.T) {
 	}
 	t.Error("main menu has no System tuning entry")
 }
+
+func TestMainMenuHasBackupDecryption(t *testing.T) {
+	for _, lang := range []string{"en", "ru"} {
+		i18n.SetLanguage(lang)
+		found := false
+		for _, item := range mainMenuItems {
+			if item.label() == i18n.T("MENU_14") && item.label() != "MENU_14" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s: the main menu has no backup decryption entry", lang)
+		}
+	}
+	i18n.SetLanguage("en")
+}
