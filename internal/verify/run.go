@@ -15,9 +15,10 @@ const ReportDir = "/usr/local/remnawave_reverse/reports"
 
 // Plan says what is installed and so which checks apply.
 type Plan struct {
-	PanelDir string   // set when a panel is installed
-	NodeDir  string   // set when a node is installed
-	Domains  []string // names served by the reverse proxy, checked for routing and TLS
+	PanelDir  string   // set when a panel is installed
+	NodeDir   string   // set when a node is installed
+	Domains   []string // names served by the reverse proxy, checked for routing and TLS
+	Selfsteal []string // selfsteal names of a node, checked for the HTML page and TLS
 }
 
 // Run executes every check that applies to plan, in a fixed order: the
@@ -36,6 +37,9 @@ func Run(env Env, p Plan) []Result {
 	}
 	for _, d := range p.Domains {
 		res = append(res, ProxyRoutes(env, d), TLSValid(env, d))
+	}
+	for _, d := range p.Selfsteal {
+		res = append(res, SelfstealServed(env, d), TLSValid(env, d))
 	}
 	if p.PanelDir != "" {
 		res = append(res, Telegram(env, filepath.Join(p.PanelDir, ".env")))

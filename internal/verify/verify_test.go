@@ -146,6 +146,10 @@ func TestAppAnswers(t *testing.T) {
 	if r := AppAnswers(e); r.OK || r.Remedy == "" {
 		t.Errorf("502 must fail: %+v", r)
 	}
+	status = http.StatusForbidden
+	if r := AppAnswers(e); r.OK {
+		t.Errorf("403 must fail: the installer waited for a status below 400: %+v", r)
+	}
 	srv.Close()
 	if r := AppAnswers(e); r.OK {
 		t.Errorf("closed port must fail: %+v", r)
@@ -311,5 +315,28 @@ func TestLineMatchesBetweenTerminalAndReport(t *testing.T) {
 	stripped := strings.NewReplacer(ui.ColorRed, "", ui.ColorReset, "", ui.ColorGray, "", ui.ColorGreen, "").Replace(colored)
 	if plain != stripped {
 		t.Errorf("terminal and report differ:\n%q\n%q", plain, stripped)
+	}
+}
+
+func TestSelfstealServed(t *testing.T) {
+	status, body := http.StatusOK, "<!DOCTYPE HTML><html></html>"
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	e := DefaultEnv()
+	e.HTTP = srv.Client()
+	host := strings.TrimPrefix(srv.URL, "https://")
+	if r := SelfstealServed(e, host); !r.OK {
+		t.Errorf("pass expected: %+v", r)
+	}
+	body = "plain text"
+	if r := SelfstealServed(e, host); r.OK || !strings.Contains(r.Detail, "not an HTML") {
+		t.Errorf("non-HTML must fail: %+v", r)
+	}
+	body, status = "<html>", http.StatusNotFound
+	if r := SelfstealServed(e, host); r.OK {
+		t.Errorf("404 must fail: %+v", r)
 	}
 }

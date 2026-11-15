@@ -172,8 +172,8 @@ func firstLine(out string, err error) string {
 }
 
 // AppAnswers asks the panel backend on the loopback for its auth status with
-// the proxy headers it insists on. A status below 500 means the application
-// is up.
+// the proxy headers it insists on. A status below 400 means the application
+// is up and accepts the proxy headers.
 func AppAnswers(env Env) Result {
 	name := "application answers HTTP " + hostOf(env.AppURL)
 	req, err := http.NewRequest("GET", env.AppURL, nil)
@@ -187,7 +187,7 @@ func AppAnswers(env Env) Result {
 		return fail(name, unwrap(err), "the backend does not listen: cd /opt/remnawave && docker compose logs --tail 100 remnawave")
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 500 {
+	if resp.StatusCode >= 400 {
 		return fail(name, resp.Status, "the backend answers with an error: cd /opt/remnawave && docker compose logs --tail 100 remnawave")
 	}
 	return pass(name, resp.Status)
@@ -279,4 +279,23 @@ func hostOf(raw string) string {
 		return u.Host
 	}
 	return raw
+}
+
+// SelfstealServed fetches https://domain and expects an HTML page below
+// status 400: the selfsteal site a node serves to anyone but its clients.
+func SelfstealServed(env Env, domain string) Result {
+	name := "selfsteal site serves HTML " + domain
+	resp, err := env.HTTP.Get("https://" + domain)
+	if err != nil {
+		return fail(name, unwrap(err), "check that "+domain+" points at this server, port 443 is open and the node containers run")
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	switch {
+	case resp.StatusCode >= 400:
+		return fail(name, resp.Status, "the proxy answers with an error: check its logs")
+	case !strings.Contains(strings.ToLower(string(body)), "html"):
+		return fail(name, "the answer is not an HTML page", "install a selfsteal template from the selfsteal menu")
+	}
+	return pass(name, resp.Status)
 }
