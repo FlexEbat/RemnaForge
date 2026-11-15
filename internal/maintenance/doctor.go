@@ -2,19 +2,20 @@ package maintenance
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/certs"
 	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
-	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
+	"github.com/FlexEbat/RemnaForge/internal/verify"
 )
 
 type check struct {
@@ -23,56 +24,60 @@ type check struct {
 	detail string
 }
 
-func (c check) print() {
-	mark, color := "[ ok ]", ui.ColorGreen
-	if !c.ok {
-		mark, color = "[fail]", ui.ColorRed
-	}
-	fmt.Printf("%s%s%s %s", color, mark, ui.ColorReset, c.name)
-	if c.detail != "" {
-		fmt.Printf(" %s- %s%s", ui.ColorGray, c.detail, ui.ColorReset)
-	}
-	fmt.Println()
+func (c check) result() verify.Result {
+	return verify.Result{Name: c.name, OK: c.ok, Detail: c.detail}
 }
 
-// Doctor runs a set of read-only health checks against the local
-// installation and prints one line per check.
+// Doctor runs the read-only health checks against the local installation,
+// prints one line per check, and saves the same lines as a report. The
+// container, database, application, proxy, TLS and Telegram checks come
+// from internal/verify, the same ones an install flow ends with.
 func Doctor() {
 	fmt.Println()
-	var failed int
-	for _, c := range runChecks() {
-		c.print()
-		if !c.ok {
-			failed++
-		}
+	results := runChecks()
+	for _, r := range results {
+		r.Print()
 	}
+	failed := verify.Failed(results)
 	fmt.Println()
 	if failed == 0 {
 		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("MAINT_DOCTOR_OK"), ui.ColorReset)
 	} else {
 		fmt.Printf("%s%s: %d%s\n", ui.ColorYellow, i18n.T("MAINT_DOCTOR_PROBLEMS"), failed, ui.ColorReset)
 	}
+	if path, err := verify.Save(verify.ReportDir, results, time.Now()); err == nil {
+		fmt.Printf("%s%s %s%s\n", ui.ColorGray, i18n.T("REPORT_SAVED"), path, ui.ColorReset)
+	} else {
+		fmt.Printf("%s%s: %v%s\n", ui.ColorYellow, i18n.T("REPORT_NOT_SAVED"), err, ui.ColorReset)
+	}
 }
 
-func runChecks() []check {
-	var checks []check
-
-	checks = append(checks, dockerChecks(dockercheck.Inspect(dockercheck.DefaultEnv()))...)
-
-	for _, dir := range []string{panelDir, nodeDir} {
-		if exists(filepath.Join(dir, "docker-compose.yml")) {
-			checks = append(checks, stackCheck(dir))
+func runChecks() []verify.Result {
+	var results []verify.Result
+	add := func(cs ...check) {
+		for _, c := range cs {
+			results = append(results, c.result())
 		}
 	}
 
-	if exists(panelDir) {
-		checks = append(checks, panelAPICheck())
-		checks = append(checks, envCheck())
-	}
+	add(dockerChecks(dockercheck.Inspect(dockercheck.DefaultEnv()))...)
 
-	checks = append(checks, certChecks()...)
-	checks = append(checks, diskCheck())
-	return checks
+	var plan verify.Plan
+	if exists(filepath.Join(panelDir, "docker-compose.yml")) {
+		plan.PanelDir = panelDir
+	}
+	if exists(filepath.Join(nodeDir, "docker-compose.yml")) {
+		plan.NodeDir = nodeDir
+	}
+	plan.Domains = discoverDomains(panelDir, nodeDir)
+	results = append(results, verify.Run(verify.DefaultEnv(), plan)...)
+
+	if exists(panelDir) {
+		add(envCheck())
+	}
+	add(certChecks()...)
+	add(diskCheck())
+	return results
 }
 
 // dockerChecks turns the Docker state into doctor checks: engine, Compose
@@ -105,68 +110,6 @@ func dockerChecks(st dockercheck.Status) []check {
 		}
 	}
 	return checks
-}
-
-// stackCheck verifies every compose service of dir is running.
-func stackCheck(dir string) check {
-	all := composeServices(dir, false)
-	running := composeServices(dir, true)
-	var missing []string
-	for _, s := range all {
-		found := false
-		for _, r := range running {
-			if r == s {
-				found = true
-			}
-		}
-		if !found {
-			missing = append(missing, s)
-		}
-	}
-	name := "containers " + dir
-	if len(all) == 0 {
-		return check{name, false, "no services found"}
-	}
-	if len(missing) > 0 {
-		return check{name, false, "not running: " + strings.Join(missing, ", ")}
-	}
-	return check{name, true, fmt.Sprintf("%d services running", len(all))}
-}
-
-func composeServices(dir string, runningOnly bool) []string {
-	args := []string{"compose", "ps", "--services"}
-	if runningOnly {
-		args = append(args, "--status", "running")
-	} else {
-		args = append(args, "-a")
-	}
-	cmd := execx.Command("docker", args...)
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		return nil
-	}
-	var res []string
-	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if l = strings.TrimSpace(l); l != "" {
-			res = append(res, l)
-		}
-	}
-	return res
-}
-
-// panelAPICheck asks the panel for its auth status the same way the
-// installer does, with the proxy headers the panel insists on.
-func panelAPICheck() check {
-	req, _ := http.NewRequest("GET", "http://127.0.0.1:3000/api/auth/status", nil)
-	req.Header.Set("X-Forwarded-For", "127.0.0.1")
-	req.Header.Set("X-Forwarded-Proto", "https")
-	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
-	if err != nil {
-		return check{"panel API 127.0.0.1:3000", false, err.Error()}
-	}
-	resp.Body.Close()
-	return check{"panel API 127.0.0.1:3000", resp.StatusCode < 500, resp.Status}
 }
 
 // envCheck flags a panel .env that still uses the pre-3.0 variable names.
@@ -207,4 +150,52 @@ func diskCheck() check {
 	}
 	freeGB := float64(st.Bavail) * float64(st.Bsize) / (1 << 30)
 	return check{"disk space /", freeGB >= 1, fmt.Sprintf("%.1f GB free", freeGB)}
+}
+
+var (
+	serverNameRE = regexp.MustCompile(`(?m)^\s*server_name\s+([^\s;]+)\s*;`)
+	caddySiteRE  = regexp.MustCompile(`(?m)^(?:https?://)?([A-Za-z0-9{}$_.\-]+\.[A-Za-z0-9{}$_.\-]+|\{\$[A-Z_]+\})\s*\{`)
+	envRefRE     = regexp.MustCompile(`\{\$([A-Z0-9_]+)\}`)
+)
+
+// discoverDomains returns the host names the installed reverse proxies
+// serve: server_name lines of nginx.conf and the site addresses of a
+// Caddyfile, where a {$NAME} placeholder is resolved from the .env of the
+// same directory. Names it cannot resolve are left out.
+func discoverDomains(dirs ...string) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(name string) {
+		if name == "" || name == "_" || strings.ContainsAny(name, "{}$*") || seen[name] {
+			return
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	for _, dir := range dirs {
+		if data, err := os.ReadFile(filepath.Join(dir, "nginx.conf")); err == nil {
+			for _, m := range serverNameRE.FindAllStringSubmatch(string(data), -1) {
+				add(m[1])
+			}
+		}
+		data, err := os.ReadFile(filepath.Join(dir, "Caddyfile"))
+		if err != nil {
+			continue
+		}
+		env := map[string]string{}
+		if e, err := os.ReadFile(filepath.Join(dir, ".env")); err == nil {
+			for _, l := range strings.Split(string(e), "\n") {
+				if k, v, ok := strings.Cut(strings.TrimSpace(l), "="); ok {
+					env[k] = strings.Trim(v, `"'`)
+				}
+			}
+		}
+		for _, m := range caddySiteRE.FindAllStringSubmatch(string(data), -1) {
+			add(envRefRE.ReplaceAllStringFunc(m[1], func(ref string) string {
+				return env[envRefRE.FindStringSubmatch(ref)[1]]
+			}))
+		}
+	}
+	sort.Strings(out)
+	return out
 }
