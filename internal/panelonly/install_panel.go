@@ -7,7 +7,6 @@ package panelonly
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -24,6 +23,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 	"github.com/FlexEbat/RemnaForge/internal/validate"
+	"github.com/FlexEbat/RemnaForge/internal/verify"
 )
 
 const panelDir = "/opt/remnawave"
@@ -526,28 +526,8 @@ volumes:
 
 	// Wait for the panel API to answer.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CHECK_CONTAINERS"), ui.ColorReset)
-	const maxAttempts = 40
-	client := &http.Client{Timeout: 30 * time.Second}
-	for attempt := 1; ; {
-		req, _ := http.NewRequest("GET", "http://"+domainURL+"/api/auth/status", nil)
-		req.Header.Set("X-Forwarded-For", "127.0.0.1")
-		req.Header.Set("X-Forwarded-Proto", "https")
-		resp, reqErr := client.Do(req)
-		if reqErr == nil && resp.StatusCode < 400 {
-			if resp.Body != nil {
-				resp.Body.Close()
-			}
-			break
-		}
-		if resp != nil && resp.Body != nil {
-			resp.Body.Close()
-		}
-		if attempt >= maxAttempts {
-			return fmt.Errorf(i18n.T("CONTAINERS_TIMEOUT"), maxAttempts)
-		}
-		fmt.Printf(ui.ColorRed+i18n.T("CONTAINERS_NOT_READY_ATTEMPT")+ui.ColorReset+"\n", attempt, maxAttempts)
-		time.Sleep(8 * time.Second)
-		attempt++
+	if err := verify.WaitForApp(verify.DefaultEnv()); err != nil {
+		return err
 	}
 
 	// Register the superadmin account.
@@ -629,6 +609,8 @@ volumes:
 	}
 
 	// Final summary screen.
+	verify.Finish(verify.DefaultEnv(), verify.Plan{PanelDir: panelDir, Domains: []string{state.panelDomain, state.subDomain}})
+
 	fmt.Printf("%s=================================================%s\n", ui.ColorYellow, ui.ColorReset)
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("INSTALL_COMPLETE"), ui.ColorReset)
 	fmt.Printf("%s=================================================%s\n", ui.ColorYellow, ui.ColorReset)

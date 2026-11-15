@@ -6,7 +6,6 @@ package nginxnode
 import (
 	"bufio"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,6 +22,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 	"github.com/FlexEbat/RemnaForge/internal/validate"
+	"github.com/FlexEbat/RemnaForge/internal/verify"
 )
 
 const nodeDir = "/opt/remnanode"
@@ -325,36 +325,13 @@ server {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 	}
 
-	// Poll the node over HTTPS until it responds.
+	// Wait for the selfsteal site, then run the post-install checks.
 	fmt.Printf(ui.ColorYellow+i18n.T("NODE_CHECK")+ui.ColorReset+"\n", state.selfstealDomain)
-	const maxAttempts = 5
-	const delay = 15 * time.Second
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		fmt.Printf(ui.ColorYellow+i18n.T("NODE_ATTEMPT")+ui.ColorReset+"\n", attempt, maxAttempts)
-
-		ok := false
-		if resp, err := client.Get("https://" + state.selfstealDomain); err == nil {
-			body := make([]byte, 4096)
-			n, _ := resp.Body.Read(body)
-			resp.Body.Close()
-			ok = resp.StatusCode < 400 && strings.Contains(strings.ToLower(string(body[:n])), "html")
-		}
-
-		if ok {
-			fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("NODE_LAUNCHED"), ui.ColorReset)
-			break
-		}
-
-		fmt.Printf(ui.ColorRed+i18n.T("NODE_UNAVAILABLE")+ui.ColorReset+"\n", attempt)
-		if attempt == maxAttempts {
-			fmt.Printf(ui.ColorRed+i18n.T("NODE_NOT_CONNECTED")+ui.ColorReset+"\n", maxAttempts)
-			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CHECK_CONFIG"), ui.ColorReset)
-			return fmt.Errorf("node not reachable after %d attempts", maxAttempts)
-		}
-		time.Sleep(delay)
+	env := verify.DefaultEnv()
+	if err := verify.WaitForNode(env, state.selfstealDomain); err != nil {
+		return err
 	}
+	verify.Finish(env, verify.Plan{NodeDir: nodeDir, Selfsteal: []string{state.selfstealDomain}})
 
 	return nil
 }

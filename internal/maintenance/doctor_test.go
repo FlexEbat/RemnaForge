@@ -1,6 +1,8 @@
 package maintenance
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -64,5 +66,25 @@ func TestDockerChecksProjectNameConflict(t *testing.T) {
 	}
 	if find(checks, "compose project remnanode") != nil {
 		t.Error("a project in its own directory was reported")
+	}
+}
+
+func TestDiscoverDomains(t *testing.T) {
+	panel, node := t.TempDir(), t.TempDir()
+	nginx := "server {\n    server_name stats.example.com;\n}\nserver {\n    server_name _;\n}\nserver {\n    server_name feed.example.com ;\n}\n"
+	caddy := "{$SELF_STEAL_DOMAIN} {\n}\nhttps://cdn.example.net {\n}\n{$UNSET_DOMAIN} {\n}\n"
+	for path, body := range map[string]string{
+		filepath.Join(panel, "nginx.conf"): nginx,
+		filepath.Join(node, "Caddyfile"):   caddy,
+		filepath.Join(node, ".env"):        "SELF_STEAL_DOMAIN=\"metrics.example.com\"\n",
+	} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := strings.Join(discoverDomains(panel, node, filepath.Join(panel, "absent")), " ")
+	want := "cdn.example.net feed.example.com metrics.example.com stats.example.com"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
