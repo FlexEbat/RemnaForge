@@ -59,7 +59,7 @@ VLESS 协议及其相关机制（XTLS、REALITY、VLESS Encryption）发展很�
 - 绝不覆盖你修改过的配置文件：它记录自己写入的内容（`/usr/local/remnawave_reverse/manifest.json`），只替换仍保持原样的文件，对其他文件显示差异并让你选择保留、合并或替换，`.env` 按键合并，每次修改前备份（`/usr/local/remnawave_reverse/backups/<时间>/`）。写入是原子的，重复运行安装不会改变文件。
 - 每次安装都作为事务执行：失败时文件逐字节还原，本次创建的容器和网络被删除，无法回滚的内容（已安装的软件包、已申请的证书、cron 条目）会列出。数据卷和数据库绝不会被触碰。
 - 日志不含机密（密码、令牌、API 密钥以及生成或输入的内容都会被遮盖），`.env` 与凭据文件保持 0600 并位于受限目录，旁边写入 `.gitignore`，可用口令加密数据库备份（gpg，AES256；解密：主菜单中的“解密备份”，或 `gpg --decrypt FILE.gpg > FILE`），并可在面板菜单中轮换数据库密码和 `WEBHOOK_SECRET_HEADER`，若之后面板不正常则恢复旧值。
-- 启动任何东西之前先验证生成的配置：先 `docker compose config`，再在临时容器中检查代理配置（`nginx -t`，或在构建好的镜像上运行 `caddy validate`）。文件有误时安装会连同工具自己的输出一起停止，在 `docker compose up` 之前。
+- 启动任何东西之前先验证生成的配置：先 `docker compose config`，再在临时容器中检查代理配置（`nginx -t`、`haproxy -c -f`，或在构建好的镜像上运行 `caddy validate`，并先检查该镜像包含 `proxy_protocol` 模块）。文件有误时安装会连同工具自己的输出一起停止，在 `docker compose up` 之前。
 - 在全新服务器上、首次安装前预装依赖：`docker`、`docker compose`、`certbot`、`ufw`、`cron`。它本身不会修改主机设置：BBR、自动安全更新、系统软件包升级和防火墙需要在“系统调优”菜单中手动开启。防火墙流程会显示已安装的工具和正在监听的端口，询问要配置哪个工具（ufw、firewalld、nftables 或 iptables），先放行你的 SSH 端口，展示每条命令，并在你确认之前不做任何修改；每次回答都会记录到 `/var/log/remnaforge-consent.log`。也可以安装 fail2ban 或 CrowdSec。
 - 面板备份与恢复 —— 委托给第三方工具 [distillium/remnawave-backup-restore](https://github.com/distillium/remnawave-backup-restore)（MIT 许可），自身不做具体实现。
 - 完整卸载（容器、镜像、数据卷）或仅移除 RemnaForge 自身的状态。
