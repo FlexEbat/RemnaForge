@@ -10,6 +10,7 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/api"
 	"github.com/FlexEbat/RemnaForge/internal/certs"
+	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -201,7 +202,7 @@ func ManageNodeProfile() {
 
 	domainName := existingDomain(byTag, realityTag)
 	if domainName == "" {
-		domainName = ui.Reading(i18n.T("ENTER_NODE_DOMAIN"))
+		domainName = domain.Read("ENTER_NODE_DOMAIN")
 	}
 
 	privateKey := existingPrivateKey(byTag, realityTag)

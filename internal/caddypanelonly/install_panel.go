@@ -345,13 +345,13 @@ func installPanelCaddy() (*panelState, error) {
 		return nil, err
 	}
 
-	panelDomain := ui.Reading(i18n.T("ENTER_PANEL_DOMAIN"))
+	panelDomain := domain.Read("ENTER_PANEL_DOMAIN")
 	if domain.CheckDomain(panelDomain, true, true) == domain.CheckAbort {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ABORT_MESSAGE"), ui.ColorReset)
 		return nil, fmt.Errorf("aborted")
 	}
 
-	subDomain := ui.Reading(i18n.T("ENTER_SUB_DOMAIN"))
+	subDomain := domain.Read("ENTER_SUB_DOMAIN")
 	if domain.CheckDomain(subDomain, true, true) == domain.CheckAbort {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ABORT_MESSAGE"), ui.ColorReset)
 		return nil, fmt.Errorf("aborted")
@@ -359,7 +359,7 @@ func installPanelCaddy() (*panelState, error) {
 
 	// Unlike internal/panelonly (nginx), this validates the node/selfsteal
 	// domain with domain.CheckDomain, not just a bare read.
-	selfstealDomain := ui.Reading(i18n.T("ENTER_NODE_DOMAIN"))
+	selfstealDomain := domain.Read("ENTER_NODE_DOMAIN")
 	if domain.CheckDomain(selfstealDomain, true, false) == domain.CheckAbort {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ABORT_MESSAGE"), ui.ColorReset)
 		return nil, fmt.Errorf("aborted")

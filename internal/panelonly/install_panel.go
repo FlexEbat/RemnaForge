@@ -208,19 +208,19 @@ func installPanelNginx() (*panelState, error) {
 		return nil, err
 	}
 
-	panelDomain := ui.Reading(i18n.T("ENTER_PANEL_DOMAIN"))
+	panelDomain := domain.Read("ENTER_PANEL_DOMAIN")
 	if domain.CheckDomain(panelDomain, true, true) == domain.CheckAbort {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ABORT_MESSAGE"), ui.ColorReset)
 		return nil, fmt.Errorf("aborted")
 	}
 
-	subDomain := ui.Reading(i18n.T("ENTER_SUB_DOMAIN"))
+	subDomain := domain.Read("ENTER_SUB_DOMAIN")
 	if domain.CheckDomain(subDomain, true, true) == domain.CheckAbort {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ABORT_MESSAGE"), ui.ColorReset)
 		return nil, fmt.Errorf("aborted")
 	}
 
-	selfstealDomain := ui.Reading(i18n.T("ENTER_NODE_DOMAIN"))
+	selfstealDomain := domain.Read("ENTER_NODE_DOMAIN")
 
 	if panelDomain == subDomain || panelDomain == selfstealDomain || subDomain == selfstealDomain {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("DOMAINS_MUST_BE_UNIQUE"), ui.ColorReset)
