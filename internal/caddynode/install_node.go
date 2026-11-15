@@ -160,7 +160,7 @@ func installNodeCaddy() (*nodeState, error) {
 		return nil, err
 	}
 
-	selfstealDomain := ui.Reading(i18n.T("SELFSTEAL"))
+	selfstealDomain := domain.Read("SELFSTEAL")
 
 	if domain.CheckDomain(selfstealDomain, true, false) == domain.CheckAbort {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ABORT_MESSAGE"), ui.ColorReset)
