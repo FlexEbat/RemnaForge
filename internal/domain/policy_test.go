@@ -128,7 +128,7 @@ func TestReadPassesInvalidNamesThrough(t *testing.T) {
 // Every prompt for a new panel, subscription or node domain must go through
 // Read. A direct ui.Reading would skip the policy.
 func TestNoDomainPromptSkipsPolicy(t *testing.T) {
-	re := regexp.MustCompile(`ui\.Reading\(i18n\.T\("ENTER_(NODE|PANEL|SUB)_DOMAIN"\)\)`)
+	re := regexp.MustCompile(`ui\.Reading\(i18n\.T\("(ENTER_(NODE|PANEL|SUB)_DOMAIN|SELFSTEAL)"\)\)`)
 	root := filepath.Join("..", "..", "internal")
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
