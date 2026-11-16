@@ -20,6 +20,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
@@ -260,160 +261,6 @@ func installPanelNginx() (*panelState, error) {
 	return state, nil
 }
 
-// nginxConfTemplate is the panel's nginx.conf.
-const nginxConfTemplate = `server_names_hash_bucket_size 64;
-
-# Gzip Compression
-gzip on;
-gzip_vary on;
-gzip_proxied any;
-gzip_comp_level 6;
-gzip_min_length 1024;
-gzip_types
-    application/javascript
-    application/json
-    application/manifest+json
-    application/xml
-    application/wasm
-    font/opentype
-    font/eot
-    font/otf
-    font/ttf
-    image/svg+xml
-    text/css
-    text/javascript
-    text/plain
-    text/xml;
-
-upstream remnawave {
-    server 127.0.0.1:3000;
-}
-
-upstream json {
-    server 127.0.0.1:3010;
-}
-
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    ""      close;
-}
-
-map $http_cookie $auth_cookie {
-    default 0;
-    "~%[1]s=%[2]s" 1;
-}
-
-map $arg_%[1]s $auth_query {
-    default 0;
-    "%[2]s" 1;
-}
-
-map "$auth_cookie$auth_query" $authorized {
-    "~1" 1;
-    default 0;
-}
-
-map $arg_%[1]s $set_cookie_header {
-    "%[2]s" "%[1]s=%[2]s; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000";
-    default "";
-}
-
-ssl_protocols TLSv1.2 TLSv1.3;
-ssl_ecdh_curve X25519:prime256v1:secp384r1;
-ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
-ssl_prefer_server_ciphers on;
-ssl_session_timeout 1d;
-ssl_session_cache shared:MozSSL:10m;
-
-server {
-    server_name %[3]s;
-    listen 443 ssl;
-    http2 on;
-
-    ssl_certificate "/etc/nginx/ssl/%[4]s/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/%[4]s/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/%[4]s/fullchain.pem";
-
-    add_header Set-Cookie $set_cookie_header;
-
-    location / {
-        if ($authorized = 0) {
-            return 444;
-        }
-        proxy_http_version 1.1;
-        proxy_pass http://remnawave;
-        proxy_set_header Host $host;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Port $server_port;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-
-    # OAuth2 Telegram login
-    location ^~ /oauth2/ {
-
-        if ($http_referer !~ "^https://oauth\.telegram\.org/") {
-            return 444;
-        }
-
-        proxy_http_version 1.1;
-        proxy_pass http://remnawave;
-        proxy_set_header Host $host;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Port $server_port;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-}
-
-server {
-    server_name %[5]s;
-    listen 443 ssl;
-    http2 on;
-
-    ssl_certificate "/etc/nginx/ssl/%[6]s/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/%[6]s/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/%[6]s/fullchain.pem";
-
-    location / {
-        proxy_http_version 1.1;
-        proxy_pass http://json;
-        proxy_set_header Host $host;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Port $server_port;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-        proxy_intercept_errors on;
-        error_page 400 404 500 502 @redirect;
-    }
-
-    location @redirect {
-        return 444;
-    }
-}
-
-server {
-    listen 443 ssl default_server;
-    server_name _;
-    ssl_reject_handshake on;
-}
-`
-
 func InstallationPanelOnly() error {
 	return txn.Run("panelonly", installationPanelOnly)
 }
@@ -496,11 +343,16 @@ volumes:
 	_ = cfgfile.EnsureGitignore(filepath.Dir(composePath))
 
 	// Nginx.conf.
-	nginxConf := fmt.Sprintf(nginxConfTemplate,
-		state.cookiesRandom1, state.cookiesRandom2,
-		state.panelDomain, panelCertDomain,
-		state.subDomain, subCertDomain,
-	)
+	nginxConf, err := proxy.Must(proxy.Nginx).Panel(proxy.Params{
+		Layout:      proxy.Direct,
+		CookieName:  state.cookiesRandom1,
+		CookieValue: state.cookiesRandom2,
+		PanelDomain: state.panelDomain, PanelCert: panelCertDomain,
+		SubDomain: state.subDomain, SubCert: subCertDomain,
+	})
+	if err != nil {
+		return err
+	}
 	if _, err := cfgfile.Write(filepath.Join(panelDir, "nginx.conf"), nginxConf, cfgfile.Opts{Kind: cfgfile.KindNginx}); err != nil {
 		return err
 	}

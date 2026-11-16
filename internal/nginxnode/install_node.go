@@ -19,6 +19,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
@@ -218,86 +219,12 @@ func installationNode() error {
 	_ = cfgfile.EnsureGitignore(filepath.Dir(composePath))
 
 	// Nginx.conf.
-	nginxConf := fmt.Sprintf(`server_names_hash_bucket_size 64;
-
-# Gzip Compression
-gzip on;
-gzip_vary on;
-gzip_proxied any;
-gzip_comp_level 6;
-gzip_min_length 1024;
-gzip_types
-    application/javascript
-    application/json
-    application/manifest+json
-    application/xml
-    application/wasm
-    font/opentype
-    font/eot
-    font/otf
-    font/ttf
-    image/svg+xml
-    text/css
-    text/javascript
-    text/plain
-    text/xml;
-
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    ""      close;
-}
-
-ssl_protocols TLSv1.2 TLSv1.3;
-ssl_ecdh_curve X25519:prime256v1:secp384r1;
-ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
-ssl_prefer_server_ciphers on;
-ssl_session_timeout 1d;
-ssl_session_cache shared:MozSSL:10m;
-ssl_session_tickets off;
-
-server {
-    server_name %s;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
-    http2 on;
-
-    ssl_certificate "/etc/nginx/ssl/%s/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/%s/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/%s/fullchain.pem";
-
-    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
-
-    location /api/v2/stream-events {
-        proxy_http_version 1.1;
-        proxy_pass http://unix:/dev/shm/xhttp.sock;
-        proxy_set_header Host $host;
-        proxy_set_header Connection "";
-        proxy_set_header X-Real-IP $proxy_protocol_addr;
-        proxy_set_header X-Forwarded-For $proxy_protocol_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_buffering off;
-        proxy_request_buffering off;
-        proxy_cache off;
-        chunked_transfer_encoding on;
-
-        proxy_read_timeout 300s;
-        proxy_send_timeout 300s;
-    }
-
-    location / {
-        root /var/www/html;
-        index index.html;
-    }
-}
-
-server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
-    server_name _;
-    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
-    ssl_reject_handshake on;
-    return 444;
-}
-`, state.selfstealDomain, nodeCertDomain, nodeCertDomain, nodeCertDomain)
+	nginxConf, err := proxy.Must(proxy.Nginx).Node(proxy.Params{
+		SelfstealDomain: state.selfstealDomain, SelfstealCert: nodeCertDomain,
+	})
+	if err != nil {
+		return err
+	}
 
 	if _, err := cfgfile.Write(filepath.Join(nodeDir, "nginx.conf"), nginxConf, cfgfile.Opts{Kind: cfgfile.KindNginx}); err != nil {
 		return err

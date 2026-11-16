@@ -23,6 +23,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
@@ -105,50 +106,6 @@ volumes:
     external: false
 `
 
-// caddyfileTemplate is the node's Caddyfile.
-// {$SELF_STEAL_DOMAIN} and {$CADDY_SOCKET_PATH} are Caddy's own
-// environment-variable placeholders, resolved by Caddy itself at runtime
-// from the container's environment (set in dockerComposeTemplate above),
-// not by this Go code - the Caddyfile content is static, no domain
-// substitution happens here.
-const caddyfileTemplate = `{
-    admin off
-    servers {
-        listener_wrappers {
-            proxy_protocol
-            tls
-        }
-    }
-    auto_https disable_redirects
-}
-
-http://{$SELF_STEAL_DOMAIN} {
-    bind 0.0.0.0
-    redir https://{$SELF_STEAL_DOMAIN}{uri} permanent
-}
-
-https://{$SELF_STEAL_DOMAIN} {
-    bind unix/{$CADDY_SOCKET_PATH}
-
-    handle /api/v2/stream-events {
-        reverse_proxy unix//dev/shm/xhttp.sock {
-            header_up Connection ""
-        }
-    }
-
-    handle {
-        root * /var/www/html
-        try_files {path} /index.html
-        file_server
-    }
-}
-
-:80 {
-    bind 0.0.0.0
-    respond 204
-}
-`
-
 // nodeState carries the values gathered while prompting the user
 // through to where the docker-compose.yml/Caddyfile are written.
 type nodeState struct {
@@ -193,7 +150,11 @@ func installNodeCaddy() (*nodeState, error) {
 		return nil, err
 	}
 	_ = cfgfile.EnsureGitignore(nodeDir)
-	if _, err := cfgfile.Write(filepath.Join(nodeDir, "Caddyfile"), caddyfileTemplate, cfgfile.Opts{Kind: cfgfile.KindCaddy}); err != nil {
+	caddyfile, err := proxy.Must(proxy.Caddy).Node(proxy.Params{})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := cfgfile.Write(filepath.Join(nodeDir, "Caddyfile"), caddyfile, cfgfile.Opts{Kind: cfgfile.KindCaddy}); err != nil {
 		return nil, err
 	}
 
