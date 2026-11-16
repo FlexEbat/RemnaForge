@@ -1,0 +1,36 @@
+{
+    admin off
+    servers {
+        listener_wrappers {
+            proxy_protocol
+            tls
+        }
+    }
+    auto_https disable_redirects
+}
+
+http://{$SELF_STEAL_DOMAIN} {
+    bind 0.0.0.0
+    redir https://{$SELF_STEAL_DOMAIN}{uri} permanent
+}
+
+https://{$SELF_STEAL_DOMAIN} {
+    bind unix/{$CADDY_SOCKET_PATH}
+
+    handle /api/v2/stream-events {
+        reverse_proxy unix//dev/shm/xhttp.sock {
+            header_up Connection ""
+        }
+    }
+
+    handle {
+        root * /var/www/html
+        try_files {path} /index.html
+        file_server
+    }
+}
+
+:80 {
+    bind 0.0.0.0
+    respond 204
+}

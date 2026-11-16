@@ -22,6 +22,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
@@ -261,86 +262,6 @@ volumes:
     external: false
 `
 
-// caddyfileTemplate is the panel's Caddyfile. {$PANEL_DOMAIN},
-// {$SUB_DOMAIN}, {$BACKEND_URL}, {$SUB_BACKEND_URL} are Caddy's own
-// environment-variable placeholders (resolved by Caddy at runtime from
-// the container environment set in dockerComposeTemplate above), so
-// they stay as literal text here, same as caddynode's Caddyfile.
-// cookiesRandom1/cookiesRandom2, by contrast, are substituted with Go's
-// %s placeholders at file-creation time, since they need to be baked
-// into the actual cookie name/value rather than resolved later.
-const caddyfileTemplate = `{
-    admin off
-}
-
-http://{$PANEL_DOMAIN} {
-    bind 0.0.0.0
-    redir https://{$PANEL_DOMAIN}{uri} permanent
-}
-
-https://{$PANEL_DOMAIN} {
-    encode zstd gzip
-
-    @has_token_param {
-        query %[1]s=%[2]s
-    }
-
-    handle @has_token_param {
-        header +Set-Cookie "%[1]s=%[2]s; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000"
-    }
-
-    @unauthorized {
-        not path /oauth2/*
-        not header Cookie *%[1]s=%[2]s*
-        not query %[1]s=%[2]s
-    }
-
-    handle @unauthorized {
-        abort
-    }
-
-    @oauth2_bad {
-        path /oauth2/*
-        not header Referer https://oauth.telegram.org/*
-    }
-
-    handle @oauth2_bad {
-        abort
-    }
-
-    @oauth2 {
-        path /oauth2/*
-        header Referer https://oauth.telegram.org/*
-    }
-
-    handle @oauth2 {
-        reverse_proxy {$BACKEND_URL} {
-            header_up Host {host}
-        }
-    }
-
-    reverse_proxy {$BACKEND_URL} {
-        header_up X-Real-IP {remote}
-        header_up Host {host}
-    }
-}
-
-https://{$SUB_DOMAIN} {
-    encode zstd gzip
-    handle {
-        reverse_proxy {$SUB_BACKEND_URL} {
-            header_up X-Real-IP {remote}
-            header_up Host {host}
-        }
-    }
-}
-
-:80 {
-    bind 0.0.0.0
-    respond 204
-}
-`
-
 func installPanelCaddy() (*panelState, error) {
 	if err := fsx.MkdirAll(panelDir, 0755); err != nil {
 		return nil, err
@@ -408,7 +329,10 @@ func installPanelCaddy() (*panelState, error) {
 	}
 	_ = cfgfile.EnsureGitignore(panelDir)
 
-	caddyfile := fmt.Sprintf(caddyfileTemplate, state.cookiesRandom1, state.cookiesRandom2)
+	caddyfile, err := proxy.Must(proxy.Caddy).Panel(proxy.Params{Layout: proxy.Direct, CookieName: state.cookiesRandom1, CookieValue: state.cookiesRandom2})
+	if err != nil {
+		return nil, err
+	}
 	if _, err := cfgfile.Write(filepath.Join(panelDir, "Caddyfile"), caddyfile, cfgfile.Opts{Kind: cfgfile.KindCaddy}); err != nil {
 		return nil, err
 	}

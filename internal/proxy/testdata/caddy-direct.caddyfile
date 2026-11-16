@@ -1,0 +1,70 @@
+{
+    admin off
+}
+
+http://{$PANEL_DOMAIN} {
+    bind 0.0.0.0
+    redir https://{$PANEL_DOMAIN}{uri} permanent
+}
+
+https://{$PANEL_DOMAIN} {
+    encode zstd gzip
+
+    @has_token_param {
+        query ck=cv
+    }
+
+    handle @has_token_param {
+        header +Set-Cookie "ck=cv; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000"
+    }
+
+    @unauthorized {
+        not path /oauth2/*
+        not header Cookie *ck=cv*
+        not query ck=cv
+    }
+
+    handle @unauthorized {
+        abort
+    }
+
+    @oauth2_bad {
+        path /oauth2/*
+        not header Referer https://oauth.telegram.org/*
+    }
+
+    handle @oauth2_bad {
+        abort
+    }
+
+    @oauth2 {
+        path /oauth2/*
+        header Referer https://oauth.telegram.org/*
+    }
+
+    handle @oauth2 {
+        reverse_proxy {$BACKEND_URL} {
+            header_up Host {host}
+        }
+    }
+
+    reverse_proxy {$BACKEND_URL} {
+        header_up X-Real-IP {remote}
+        header_up Host {host}
+    }
+}
+
+https://{$SUB_DOMAIN} {
+    encode zstd gzip
+    handle {
+        reverse_proxy {$SUB_BACKEND_URL} {
+            header_up X-Real-IP {remote}
+            header_up Host {host}
+        }
+    }
+}
+
+:80 {
+    bind 0.0.0.0
+    respond 204
+}

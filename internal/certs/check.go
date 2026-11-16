@@ -245,7 +245,7 @@ func FixLetsencryptStructure(domainName string) error {
 	conf = setRenewalConfLine(conf, "fullchain", fullchainPath)
 	conf = setRenewalConfLine(conf, "privkey", privkeyPath)
 
-	expectedHook := renewHookCommand
+	expectedHook := renewHookFor(domainName)
 	conf = removeLinesWithPrefix(conf, "renew_hook")
 	conf = strings.TrimRight(conf, "\n") + "\n" + expectedHook + "\n"
 

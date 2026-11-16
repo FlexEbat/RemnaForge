@@ -25,6 +25,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/journal"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -34,9 +35,26 @@ import (
 // caller re-derive it.
 type Result struct {
 	Method string // "1" Cloudflare, "2" ACME HTTP-01, "3" Gcore
+	// ComposeMounts holds the volume lines that mount the certificates into
+	// the nginx container, one pair per certificate name. The caller puts
+	// them into the compose file right after the open volumes list of the
+	// nginx service, so the file is written once and whole. It is empty for
+	// HAProxy, whose container mounts the bundle directory.
+	ComposeMounts string
 }
 
+// HandleCertificates obtains the certificates for an nginx stack. It is
+// HandleCertificatesFor with nginx.
 func HandleCertificates(domainsToCheck []string, certMethod, letsencryptEmail, targetDir string) (Result, error) {
+	return HandleCertificatesFor(proxy.Nginx, domainsToCheck, certMethod, letsencryptEmail, targetDir)
+}
+
+// HandleCertificatesFor obtains the certificates and wires them to the
+// proxy kind. Nginx gets read-only mounts of certbot's files appended to
+// its compose file. HAProxy gets one PEM bundle per name, the renew script
+// that rebuilds the bundles and reloads it, and no compose edit, because
+// its container mounts the bundle directory.
+func HandleCertificatesFor(kind proxy.Kind, domainsToCheck []string, certMethod, letsencryptEmail, targetDir string) (Result, error) {
 	needCertificates := false
 	minDaysLeft := 9999
 
@@ -84,27 +102,23 @@ func HandleCertificates(domainsToCheck []string, certMethod, letsencryptEmail, t
 		certMethod = "1"
 	}
 
-	composePath := filepath.Join(targetDir, "docker-compose.yml")
 	certDomainsAdded := map[string]bool{}
+	var certNames []string
+	var mounts strings.Builder
 
+	// addComposeCertLines records the nginx mounts of one certificate name,
+	// once. Nothing is written to disk here: the caller owns the compose
+	// file.
 	addComposeCertLines := func(d string) error {
 		if certDomainsAdded[d] {
 			return nil
 		}
-		line := fmt.Sprintf("      - /etc/letsencrypt/live/%s/fullchain.pem:/etc/nginx/ssl/%s/fullchain.pem:ro\n      - /etc/letsencrypt/live/%s/privkey.pem:/etc/nginx/ssl/%s/privkey.pem:ro\n", d, d, d, d)
-		if runctx.DryRun() {
-			runctx.Say("add the certificate mounts of %s to %s", d, composePath)
+		certDomainsAdded[d] = true
+		if kind == proxy.HAProxy {
+			certNames = append(certNames, d)
 			return nil
 		}
-		f, err := os.OpenFile(composePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		if _, err := f.WriteString(line); err != nil {
-			return err
-		}
-		certDomainsAdded[d] = true
+		mounts.WriteString(fmt.Sprintf("      - /etc/letsencrypt/live/%s/fullchain.pem:/etc/nginx/ssl/%s/fullchain.pem:ro\n      - /etc/letsencrypt/live/%s/privkey.pem:/etc/nginx/ssl/%s/privkey.pem:ro\n", d, d, d, d))
 		return nil
 	}
 
@@ -163,13 +177,39 @@ func HandleCertificates(domainsToCheck []string, certMethod, letsencryptEmail, t
 	if certMethod == "2" {
 		cronCommand = "ufw allow 80 && /usr/bin/certbot renew --quiet && ufw delete allow 80 && ufw reload && cd /opt/remnawave && docker compose down && docker compose up"
 	}
+	if kind == proxy.HAProxy {
+		// The renew hook reloads HAProxy, so the cron line only renews and
+		// opens port 80 for the HTTP-01 method.
+		cronCommand = "/usr/bin/certbot renew --quiet"
+		if certMethod == "2" {
+			cronCommand = "ufw allow 80 && /usr/bin/certbot renew --quiet && ufw delete allow 80 && ufw reload"
+		}
+		if err := InstallHAProxyHook(); err != nil {
+			return Result{}, err
+		}
+		for _, name := range certNames {
+			if err := validateBundleName(name); err != nil {
+				return Result{}, err
+			}
+			if err := WriteHAProxyBundle(letsencryptLive, name); err != nil && !runctx.DryRun() {
+				return Result{}, fmt.Errorf("certificate bundle for %s: %w", name, err)
+			}
+		}
+	}
 	syncCertRenewalCron(cronCommand, minDaysLeft)
 
+	if kind == proxy.HAProxy {
+		for _, name := range certNames {
+			fixRenewHook(name)
+		}
+	}
 	for d := range uniqueDomains {
-		fixRenewHook(d)
+		if kind != proxy.HAProxy {
+			fixRenewHook(d)
+		}
 	}
 
-	return Result{Method: certMethod}, nil
+	return Result{Method: certMethod, ComposeMounts: mounts.String()}, nil
 }
 
 // syncCertRenewalCron ensures a weekly root crontab entry exists for
@@ -233,7 +273,7 @@ func fixRenewHook(domainName string) {
 		return
 	}
 	conf := string(data)
-	desiredHook := renewHookCommand
+	desiredHook := renewHookFor(domainName)
 
 	if !strings.Contains(conf, "renew_hook") {
 		conf = strings.TrimRight(conf, "\n") + "\n" + desiredHook + "\n"

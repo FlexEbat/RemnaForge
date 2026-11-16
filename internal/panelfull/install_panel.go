@@ -19,6 +19,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
@@ -51,7 +52,9 @@ type state struct {
 // up to and including remnawave-nginx's still-open volumes: list.
 // Identical to panelonly's, since both share this same preamble
 // verbatim.
-const dockerComposeHead = `x-common: &common
+// composeBase is the compose file up to the proxy service: the database,
+// the panel and the cache.
+const composeBase = `x-common: &common
   ulimits:
     nofile:
       soft: 1048576
@@ -137,7 +140,10 @@ services:
       timeout: 10s
       retries: 3
 
-  remnawave-nginx:
+`
+
+// nginxService is the nginx service with its volumes list still open.
+const nginxService = `  remnawave-nginx:
     image: nginx:1.28
     container_name: remnawave-nginx
     hostname: remnawave-nginx
@@ -146,6 +152,10 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 `
+
+// dockerComposeHead is the compose file up to and including the nginx
+// service's still-open volumes list.
+const dockerComposeHead = composeBase + nginxService
 
 // dotEnvTemplate is the panel's .env file, identical in content to
 // panelonly's.
@@ -267,261 +277,24 @@ func installPanelNodeNginx() (*state, error) {
 	return st, nil
 }
 
-// nginxConfTemplate is the panel's nginx.conf, the unix-socket and
-// proxy_protocol variant. This server also terminates TLS for the
-// co-located node, unlike panelonly's plain `listen 443 ssl`.
-const nginxConfTemplate = `server_names_hash_bucket_size 64;
-
-# Gzip Compression
-gzip on;
-gzip_vary on;
-gzip_proxied any;
-gzip_comp_level 6;
-gzip_min_length 1024;
-gzip_types
-    application/javascript
-    application/json
-    application/manifest+json
-    application/xml
-    application/wasm
-    font/opentype
-    font/eot
-    font/otf
-    font/ttf
-    image/svg+xml
-    text/css
-    text/javascript
-    text/plain
-    text/xml;
-
-upstream remnawave {
-    server 127.0.0.1:3000;
-}
-
-upstream json {
-    server 127.0.0.1:3010;
-}
-
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    ""      close;
-}
-
-map $http_cookie $auth_cookie {
-    default 0;
-    "~%[1]s=%[2]s" 1;
-}
-
-map $arg_%[1]s $auth_query {
-    default 0;
-    "%[2]s" 1;
-}
-
-map "$auth_cookie$auth_query" $authorized {
-    "~1" 1;
-    default 0;
-}
-
-map $arg_%[1]s $set_cookie_header {
-    "%[2]s" "%[1]s=%[2]s; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000";
-    default "";
-}
-
-ssl_protocols TLSv1.2 TLSv1.3;
-ssl_ecdh_curve X25519:prime256v1:secp384r1;
-ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
-ssl_prefer_server_ciphers on;
-ssl_session_timeout 1d;
-ssl_session_cache shared:MozSSL:10m;
-ssl_session_tickets off;
-
-server {
-    server_name %[3]s;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
-    http2 on;
-
-    ssl_certificate "/etc/nginx/ssl/%[4]s/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/%[4]s/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/%[4]s/fullchain.pem";
-
-    add_header Set-Cookie $set_cookie_header;
-
-    location / {
-
-        if ($authorized = 0) {
-            return 418;
-        }
-
-        error_page 418 = @unauthorized;
-        recursive_error_pages on;
-
-        proxy_http_version 1.1;
-        proxy_pass http://remnawave;
-        proxy_set_header Host $host;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header X-Real-IP $proxy_protocol_addr;
-        proxy_set_header X-Forwarded-For $proxy_protocol_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Port $server_port;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-
-    location @unauthorized {
-        root /var/www/html;
-        index index.html;
-    }
-
-    # OAuth2 Telegram login
-    location ^~ /oauth2/ {
-
-        if ($http_referer !~ "^https://oauth\.telegram\.org/") {
-            return 444;
-        }
-
-        proxy_http_version 1.1;
-        proxy_pass http://remnawave;
-        proxy_set_header Host $host;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header X-Real-IP $proxy_protocol_addr;
-        proxy_set_header X-Forwarded-For $proxy_protocol_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Port $server_port;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-}
-
-server {
-    server_name %[5]s;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
-    http2 on;
-
-    ssl_certificate "/etc/nginx/ssl/%[6]s/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/%[6]s/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/%[6]s/fullchain.pem";
-
-    location / {
-        proxy_http_version 1.1;
-        proxy_pass http://json;
-        proxy_set_header Host $host;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header X-Real-IP $proxy_protocol_addr;
-        proxy_set_header X-Forwarded-For $proxy_protocol_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Port $server_port;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-        proxy_intercept_errors on;
-        error_page 400 404 500 502 @redirect;
-    }
-
-    location @redirect {
-        return 444;
-    }
-}
-
-server {
-    server_name %[7]s;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
-    http2 on;
-
-    ssl_certificate "/etc/nginx/ssl/%[8]s/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/%[8]s/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/%[8]s/fullchain.pem";
-
-    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
-
-    location /api/v2/stream-events {
-        proxy_http_version 1.1;
-        proxy_pass http://unix:/dev/shm/xhttp.sock;
-        proxy_set_header Host $host;
-        proxy_set_header Connection "";
-        proxy_set_header X-Real-IP $proxy_protocol_addr;
-        proxy_set_header X-Forwarded-For $proxy_protocol_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_buffering off;
-        proxy_request_buffering off;
-        proxy_cache off;
-        chunked_transfer_encoding on;
-
-        proxy_read_timeout 300s;
-        proxy_send_timeout 300s;
-    }
-
-    location / {
-        root /var/www/html;
-        index index.html;
-    }
-}
-
-server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
-    server_name _;
-    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
-    ssl_reject_handshake on;
-    return 444;
-}
-`
-
-func InstallationPanelNode() error {
-	return txn.Run("panelfull", installationPanelNode)
-}
-
-func installationPanelNode() error {
-	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
-	// if missing, so this doesn't just fail deep inside a later step with
-	// a confusing error.
-	if err := preflight.EnsureInstalled(); err != nil {
-		return err
-	}
-
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("INSTALLING"), ui.ColorReset)
-	time.Sleep(1 * time.Second)
-
-	st, err := installPanelNodeNginx()
-	if err != nil {
-		return err
-	}
-
-	// certs.HandleCertificates returns the actual method it used
-	// (wildcard vs per-domain), which is what determines whether the
-	// cert-domain fields below should be the base domain or the full
-	// domain - using that returned value directly instead of
-	// re-deriving it from scratch avoids the two ever disagreeing.
-	certResult, certErr := certs.HandleCertificates(
-		[]string{st.panelDomain, st.subDomain, st.selfstealDomain}, "", "", panelDir)
-	if certErr != nil {
-		return certErr
-	}
-	certMethod := certResult.Method
-
-	var panelCertDomain, subCertDomain, nodeCertDomain string
-	if certMethod == "1" {
-		panelCertDomain = st.panelBaseDomain
-		subCertDomain = st.subBaseDomain
-		nodeCertDomain = st.selfstealBaseDomain
-	} else {
-		panelCertDomain = st.panelDomain
-		subCertDomain = st.subDomain
-		nodeCertDomain = st.selfstealDomain
-	}
-
-	certFullchain, certPrivkey := certs.NginxCertPaths(nodeCertDomain)
-
-	// Append remnawave-nginx's remaining volumes/command,
-	// the subscription-page service, remnanode, networks, volumes.
-	composeTail := fmt.Sprintf(`      - /dev/shm:/dev/shm:rw
+// nginxTail finishes the nginx service: the shared directories and the command.
+const nginxTail = `      - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
     command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
+`
 
+// buildCompose assembles docker-compose.yml: the common services, the proxy
+// (nginx continues the open volumes list of its service, HAProxy replaces
+// it and adds the selfsteal site), the subscription page and the node, which
+// mounts the certificate files for its Hysteria2 inbound. certMounts are the
+// nginx volume lines the certificate step returned; they belong right after
+// the nginx service's open volumes list.
+func buildCompose(kind proxy.Kind, certMounts, certFullchain, certPrivkey string) string {
+	head, proxyPart := dockerComposeHead, nginxTail
+	if kind == proxy.HAProxy {
+		head, proxyPart = composeBase, proxy.HAProxyServices(certs.HAProxyBundleDir, proxy.Socket)
+	}
+	return head + certMounts + proxyPart + fmt.Sprintf(`
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
     container_name: remnawave-subscription-page
@@ -576,21 +349,93 @@ volumes:
     driver: local
     external: false
 `, certFullchain, certFullchain, certPrivkey, certPrivkey)
+}
+
+// InstallationPanelNode installs the panel and a node on one host behind
+// nginx.
+func InstallationPanelNode() error {
+	return txn.Run("panelfull", func() error { return installationPanelNode(proxy.Nginx) })
+}
+
+// InstallationPanelNodeHAProxy is the same install behind HAProxy: every
+// name is routed by SNI and served over TLS that HAProxy terminates.
+func InstallationPanelNodeHAProxy() error {
+	return txn.Run("panelfull-haproxy", func() error { return installationPanelNode(proxy.HAProxy) })
+}
+
+func installationPanelNode(kind proxy.Kind) error {
+	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
+	// if missing, so this doesn't just fail deep inside a later step with
+	// a confusing error.
+	if err := preflight.EnsureInstalled(); err != nil {
+		return err
+	}
+
+	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("INSTALLING"), ui.ColorReset)
+	time.Sleep(1 * time.Second)
+
+	st, err := installPanelNodeNginx()
+	if err != nil {
+		return err
+	}
+
+	// certs.HandleCertificates returns the actual method it used
+	// (wildcard vs per-domain), which is what determines whether the
+	// cert-domain fields below should be the base domain or the full
+	// domain - using that returned value directly instead of
+	// re-deriving it from scratch avoids the two ever disagreeing.
+	certResult, certErr := certs.HandleCertificatesFor(kind,
+		[]string{st.panelDomain, st.subDomain, st.selfstealDomain}, "", "", panelDir)
+	if certErr != nil {
+		return certErr
+	}
+	certMethod := certResult.Method
+
+	var panelCertDomain, subCertDomain, nodeCertDomain string
+	if certMethod == "1" {
+		panelCertDomain = st.panelBaseDomain
+		subCertDomain = st.subBaseDomain
+		nodeCertDomain = st.selfstealBaseDomain
+	} else {
+		panelCertDomain = st.panelDomain
+		subCertDomain = st.subDomain
+		nodeCertDomain = st.selfstealDomain
+	}
+
+	certFullchain, certPrivkey := certs.NginxCertPaths(nodeCertDomain)
+
+	composeText := buildCompose(kind, certResult.ComposeMounts, certFullchain, certPrivkey)
 	composePath := filepath.Join(panelDir, "docker-compose.yml")
-	if _, err := cfgfile.Write(composePath, dockerComposeHead+composeTail, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
+	if _, err := cfgfile.Write(composePath, composeText, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return err
 	}
 	_ = cfgfile.EnsureGitignore(filepath.Dir(composePath))
 
-	// Nginx.conf.
-	nginxConf := fmt.Sprintf(nginxConfTemplate,
-		st.cookiesRandom1, st.cookiesRandom2,
-		st.panelDomain, panelCertDomain,
-		st.subDomain, subCertDomain,
-		st.selfstealDomain, nodeCertDomain,
-	)
-	if _, err := cfgfile.Write(filepath.Join(panelDir, "nginx.conf"), nginxConf, cfgfile.Opts{Kind: cfgfile.KindNginx}); err != nil {
+	// The proxy's configuration and any extra file of its stack.
+	be := proxy.Must(kind)
+	params := proxy.Params{
+		Layout:      proxy.Socket,
+		CookieName:  st.cookiesRandom1,
+		CookieValue: st.cookiesRandom2,
+		PanelDomain: st.panelDomain, PanelCert: panelCertDomain,
+		SubDomain: st.subDomain, SubCert: subCertDomain,
+		SelfstealDomain: st.selfstealDomain, SelfstealCert: nodeCertDomain,
+	}
+	proxyConf, err := be.Panel(params)
+	if err != nil {
 		return err
+	}
+	confKind := cfgfile.KindNginx
+	if kind == proxy.HAProxy {
+		confKind = cfgfile.KindRaw
+	}
+	if _, err := cfgfile.Write(filepath.Join(panelDir, be.ConfigFile()), proxyConf, cfgfile.Opts{Kind: confKind}); err != nil {
+		return err
+	}
+	for name, content := range be.Extra(params) {
+		if _, err := cfgfile.Write(filepath.Join(panelDir, name), content, cfgfile.Opts{Kind: cfgfile.KindRaw}); err != nil {
+			return err
+		}
 	}
 
 	// Bring the stack up.
@@ -657,9 +502,15 @@ volumes:
 	// Delete the default config profile.
 	_ = api.DeleteConfigProfile(domainURL, token, "")
 
-	// Create our config profile.
+	// Create our config profile. Behind HAProxy there is no Reality: the
+	// profile carries the TLS inbounds, XHTTP through the SNI routing and
+	// Hysteria2 on UDP 443.
+	profileTag, profileInbounds := "", api.ConfigProfileInbounds{Raw: true}
+	if kind == proxy.HAProxy {
+		profileTag, profileInbounds = "XHTTP-TLS", api.ConfigProfileInbounds{XHTTP: true, Hysteria2: true}
+	}
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, "", certFullchain, certPrivkey, api.ConfigProfileInbounds{Raw: true})
+	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, profileTag, certFullchain, certPrivkey, profileInbounds)
 	if configProfileUUID == "" || inboundUUID == "" {
 		return fmt.Errorf("%s", i18n.T("ERROR_CREATE_CONFIG_PROFILE"))
 	}

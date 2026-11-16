@@ -26,6 +26,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
@@ -298,120 +299,6 @@ volumes:
     external: false
 `
 
-// caddyfileTemplate is the panel+node Caddyfile. As in internal/caddynode
-// and internal/caddypanelonly, the {$VAR} domain references stay literal
-// (resolved by Caddy from the container environment at runtime), while
-// %[1]s/%[2]s substitute the actual generated cookie name/value at
-// file-creation time.
-const caddyfileTemplate = `{
-    admin off
-    servers {
-        listener_wrappers {
-            proxy_protocol
-            tls
-        }
-    }
-    auto_https disable_redirects
-}
-
-http://{$SELF_STEAL_DOMAIN} {
-    bind 0.0.0.0
-    redir https://{$SELF_STEAL_DOMAIN}{uri} permanent
-}
-
-https://{$SELF_STEAL_DOMAIN} {
-    bind unix/{$CADDY_SOCKET_PATH}
-
-    handle /api/v2/stream-events {
-        reverse_proxy unix//dev/shm/xhttp.sock {
-            header_up Connection ""
-        }
-    }
-
-    handle {
-        root * /var/www/html
-        try_files {path} /index.html
-        file_server
-    }
-}
-
-http://{$PANEL_DOMAIN} {
-    bind 0.0.0.0
-    redir https://{$PANEL_DOMAIN}{uri} permanent
-}
-
-https://{$PANEL_DOMAIN} {
-    bind unix/{$CADDY_SOCKET_PATH}
-    encode zstd gzip
-
-    @has_token_param {
-        query %[1]s=%[2]s
-    }
-
-    handle @has_token_param {
-        header +Set-Cookie "%[1]s=%[2]s; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000"
-    }
-
-    @unauthorized {
-        not path /oauth2/*
-        not header Cookie *%[1]s=%[2]s*
-        not query %[1]s=%[2]s
-    }
-
-    handle @unauthorized {
-        root * /var/www/html
-        try_files {path} /index.html
-        file_server
-    }
-
-    @oauth2_bad {
-        path /oauth2/*
-        not header Referer https://oauth.telegram.org/*
-    }
-
-    handle @oauth2_bad {
-        abort
-    }
-
-    @oauth2 {
-        path /oauth2/*
-        header Referer https://oauth.telegram.org/*
-    }
-
-    handle @oauth2 {
-        reverse_proxy {$BACKEND_URL} {
-            header_up Host {host}
-        }
-    }
-
-    reverse_proxy {$BACKEND_URL} {
-        header_up X-Real-IP {remote}
-        header_up Host {host}
-    }
-}
-
-http://{$SUB_DOMAIN} {
-    bind 0.0.0.0
-    redir https://{$SUB_DOMAIN}{uri} permanent
-}
-
-https://{$SUB_DOMAIN} {
-    bind unix/{$CADDY_SOCKET_PATH}
-    encode zstd gzip
-    handle {
-        reverse_proxy {$SUB_BACKEND_URL} {
-            header_up X-Real-IP {remote}
-            header_up Host {host}
-        }
-    }
-}
-
-:80 {
-    bind 0.0.0.0
-    respond 204
-}
-`
-
 func installPanelNodeCaddy() (*state, error) {
 	if err := fsx.MkdirAll(panelDir, 0755); err != nil {
 		return nil, err
@@ -477,7 +364,10 @@ func installPanelNodeCaddy() (*state, error) {
 	}
 	_ = cfgfile.EnsureGitignore(panelDir)
 
-	caddyfile := fmt.Sprintf(caddyfileTemplate, st.cookiesRandom1, st.cookiesRandom2)
+	caddyfile, err := proxy.Must(proxy.Caddy).Panel(proxy.Params{Layout: proxy.Socket, CookieName: st.cookiesRandom1, CookieValue: st.cookiesRandom2})
+	if err != nil {
+		return nil, err
+	}
 	if _, err := cfgfile.Write(filepath.Join(panelDir, "Caddyfile"), caddyfile, cfgfile.Opts{Kind: cfgfile.KindCaddy}); err != nil {
 		return nil, err
 	}
