@@ -26,3 +26,5 @@ func (nginx) Panel(p Params) (string, error) {
 func (nginx) Node(p Params) (string, error) {
 	return fmt.Sprintf(nginxNodeTemplate, p.SelfstealDomain, p.SelfstealCert, p.SelfstealCert, p.SelfstealCert), nil
 }
+
+func (nginx) Extra(Params) map[string]string { return nil }

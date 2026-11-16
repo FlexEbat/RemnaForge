@@ -48,6 +48,9 @@ type Backend interface {
 	Panel(p Params) (string, error)
 	// Node renders the configuration of a node on its own host.
 	Node(p Params) (string, error)
+	// Extra returns the files besides ConfigFile that the stack needs, by
+	// name: HAProxy's static selfsteal site. It is nil for the others.
+	Extra(p Params) map[string]string
 }
 
 // For returns the backend of kind k.

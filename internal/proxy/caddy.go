@@ -18,3 +18,5 @@ func (caddy) Panel(p Params) (string, error) {
 }
 
 func (caddy) Node(Params) (string, error) { return caddyNodeTemplate, nil }
+
+func (caddy) Extra(Params) map[string]string { return nil }

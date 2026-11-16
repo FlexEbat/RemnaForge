@@ -99,6 +99,23 @@ func TestHAProxyLayouts(t *testing.T) {
 			t.Errorf("%s: selfsteal must point at the static site container", name)
 		}
 	}
+	for name, cfg := range map[string]string{"socket": socket, "node": node} {
+		for _, want := range []string{
+			"frontend tcp_in", "mode tcp", "bind :443",
+			"server tls unix@" + HAProxySocket + " send-proxy-v2", "default_backend refuse",
+		} {
+			if !strings.Contains(cfg, want) {
+				t.Errorf("%s: the SNI front on 443 lacks %q", name, want)
+			}
+		}
+	}
+	if !strings.Contains(socket, "req.ssl_sni -i panel.example.org sub.example.org node.example.org") ||
+		!strings.Contains(node, "req.ssl_sni -i node.example.org }") {
+		t.Error("the TCP front must route exactly the names this proxy serves")
+	}
+	if strings.Contains(direct, "tcp_in") {
+		t.Error("with HAProxy on 443 itself there is no TCP front")
+	}
 	if !strings.Contains(socket, "use_backend selfsteal if host_panel") {
 		t.Error("the panel name without the cookie must show the selfsteal page")
 	}

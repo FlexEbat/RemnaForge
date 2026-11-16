@@ -104,6 +104,21 @@ func showMenu() {
 }
 
 // Returns the chosen option string, same as reading WEBSERVER_OPTION.
+// showWebserverSelectHAProxy is the web server menu of the installs that
+// support HAProxy as a third choice.
+func showWebserverSelectHAProxy() string {
+	fmt.Println()
+	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("SELECT_WEBSERVER_TITLE"), ui.ColorReset)
+	fmt.Println()
+	fmt.Printf("%s1. Nginx%s\n", ui.ColorYellow, ui.ColorReset)
+	fmt.Printf("%s2. Caddy%s\n", ui.ColorYellow, ui.ColorReset)
+	fmt.Printf("%s3. HAProxy%s\n", ui.ColorYellow, ui.ColorReset)
+	fmt.Println()
+	fmt.Printf("%s0. %s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
+	fmt.Println()
+	return ui.Reading(i18n.T("SELECT_WEBSERVER_PROMPT3"))
+}
+
 func showWebserverSelect() string {
 	fmt.Println()
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("SELECT_WEBSERVER_TITLE"), ui.ColorReset)
@@ -160,9 +175,13 @@ func manageInstall() {
 				_ = ui.LogClear()
 				continue
 			}
-			switch showWebserverSelect() {
+			switch showWebserverSelectHAProxy() {
 			case "1":
 				if err := panelfull.InstallationPanelNode(); err != nil {
+					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
+				}
+			case "3":
+				if err := panelfull.InstallationPanelNodeHAProxy(); err != nil {
 					fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 				}
 			case "2":

@@ -43,6 +43,26 @@ defaults
     timeout tunnel 1h
     timeout http-request 10s
 
+{{if .Socket}}# Port 443 is read as TCP and routed by SNI. A name that belongs to this
+# proxy goes to the TLS frontend below over a unix socket with PROXY
+# protocol, so the client address survives. Any other name is refused here,
+# which is also where a later inbound can take over the default.
+frontend tcp_in
+    mode tcp
+    bind :443
+    tcp-request inspect-delay 5s
+    tcp-request content accept if { req.ssl_hello_type 1 }
+    use_backend https_socket if { req.ssl_sni -i{{range .Names}} {{.}}{{end}} }
+    default_backend refuse
+
+backend https_socket
+    mode tcp
+    server tls unix@{{.SocketPath}} send-proxy-v2
+
+backend refuse
+    mode tcp
+
+{{end -}}
 frontend https_in
 {{- if .Socket}}
     bind unix@{{.SocketPath}} mode 666 accept-proxy ssl crt {{.CertDir}}/ strict-sni alpn h2,http/1.1
@@ -110,6 +130,7 @@ backend xhttp
 
 type haproxyData struct {
 	Params
+	Names                    []string // the SNI names this proxy answers for
 	Socket, Panel, Selfsteal bool
 	SocketPath, CertDir      string
 	SelfstealPort            int
@@ -138,6 +159,12 @@ func (haproxy) render(p Params, panel bool) (string, error) {
 	}
 	if !panel && !d.Selfsteal {
 		return "", fmt.Errorf("a node configuration needs the selfsteal name")
+	}
+	if panel {
+		d.Names = append(d.Names, p.PanelDomain, p.SubDomain)
+	}
+	if d.Selfsteal {
+		d.Names = append(d.Names, p.SelfstealDomain)
 	}
 	var b bytes.Buffer
 	if err := haproxyTemplate.Execute(&b, d); err != nil {
