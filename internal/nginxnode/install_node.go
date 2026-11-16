@@ -16,8 +16,10 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
@@ -65,7 +67,7 @@ type nodeState struct {
 }
 
 func installNodeNginx() (*nodeState, error) {
-	if err := os.MkdirAll(nodeDir, 0755); err != nil {
+	if err := fsx.MkdirAll(nodeDir, 0755); err != nil {
 		return nil, err
 	}
 
@@ -310,6 +312,10 @@ server {
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_NODE"), ui.ColorReset)
 	time.Sleep(3 * time.Second)
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
+	if runctx.DryRun() {
+		runctx.Say("stop here: the stack is not started in a dry run, so the steps that need the running services (account, keys, profile, node, host, subscription token, checks) are skipped")
+		return nil
+	}
 	if err := validate.CheckStack(nodeDir); err != nil {
 		return err
 	}

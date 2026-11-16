@@ -77,7 +77,7 @@ func Finish(env Env, p Plan) []Result {
 	for _, r := range results {
 		r.Print()
 	}
-	if path, err := Save(ReportDir, results, env.Now()); err == nil {
+	if path, err := Save(ReportDir, results, env.Now()); err == nil && path != "" {
 		fmt.Printf("%s%s %s%s\n", ui.ColorGray, i18n.T("REPORT_SAVED"), path, ui.ColorReset)
 	} else {
 		fmt.Printf("%s%s: %v%s\n", ui.ColorYellow, i18n.T("REPORT_NOT_SAVED"), err, ui.ColorReset)

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -68,13 +69,13 @@ func Encrypt(path, passphrase string) (string, error) {
 	out := path + Suffix
 	args := append(baseArgs(), "--symmetric", "--cipher-algo", "AES256", "--output", out, path)
 	if err := run(args, passphrase); err != nil {
-		_ = os.Remove(out)
+		_ = fsx.Remove(out)
 		return "", err
 	}
-	if err := os.Chmod(out, 0600); err != nil {
+	if err := fsx.Chmod(out, 0600); err != nil {
 		return "", err
 	}
-	if err := os.Remove(path); err != nil {
+	if err := fsx.Remove(path); err != nil {
 		return "", err
 	}
 	return out, nil
@@ -89,10 +90,10 @@ func Decrypt(path, passphrase string) (string, error) {
 	out := strings.TrimSuffix(path, Suffix)
 	args := append(baseArgs(), "--decrypt", "--output", out, path)
 	if err := run(args, passphrase); err != nil {
-		_ = os.Remove(out)
+		_ = fsx.Remove(out)
 		return "", err
 	}
-	if err := os.Chmod(out, 0600); err != nil {
+	if err := fsx.Chmod(out, 0600); err != nil {
 		return "", err
 	}
 	return out, nil

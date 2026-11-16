@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -82,6 +84,9 @@ var beforeRename = func() {}
 // it to disk and renames it over path, so a reader sees either the old file
 // or the new one, never half of one.
 func atomicWrite(path string, data []byte, mode os.FileMode) error {
+	if runctx.DryRun() {
+		return nil
+	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
@@ -169,6 +174,9 @@ func record(m *Manifest, path string, owner Owner, content, proposed string, sec
 // closeSecret takes group and other permissions from a secret file that
 // already exists, and from its directory.
 func closeSecret(path string) {
+	if runctx.DryRun() {
+		return
+	}
 	if fi, err := os.Stat(path); err == nil && fi.Mode().Perm()&0077 != 0 {
 		_ = os.Chmod(path, fi.Mode().Perm()&^0077)
 	}
@@ -178,12 +186,19 @@ func closeSecret(path string) {
 // tightenDir closes a directory to everyone but its owner. It only ever
 // removes permissions.
 func tightenDir(dir string) {
+	if runctx.DryRun() {
+		return
+	}
 	if fi, err := os.Stat(dir); err == nil && fi.IsDir() && fi.Mode().Perm()&0077 != 0 {
 		_ = os.Chmod(dir, fi.Mode().Perm()&^0077)
 	}
 }
 
 func commit(path, content string, o Opts, m *Manifest, owner Owner, proposed string) error {
+	if runctx.DryRun() {
+		announce(path, content, o)
+		return nil
+	}
 	if o.secret() {
 		ui.RegisterSecretsFromText(content)
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -341,7 +356,7 @@ func Replace(path, content string, o Opts) error {
 // WriteSecret writes a credentials file: directory 0700, file 0600. Tools
 // like certbot refuse credentials that other users can read.
 func WriteSecret(path, content string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := fsx.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
 	return Replace(path, content, Opts{Mode: 0600, Secret: true})
@@ -427,4 +442,19 @@ const gitignoreText = "# Written by RemnaForge: keep secrets out of version cont
 func EnsureGitignore(dir string) error {
 	_, err := Write(filepath.Join(dir, ".gitignore"), gitignoreText, Opts{Kind: KindLines, Mode: 0644})
 	return err
+}
+
+// announce prints what commit would do in a dry run: the file, whether it
+// is new, and the diff against the file on disk. A secret file shows only
+// its size, because the plan is printed to the terminal and the log.
+func announce(path, content string, o Opts) {
+	old, err := os.ReadFile(path)
+	switch {
+	case o.secret():
+		runctx.Say("write %s (%d lines, content not shown)", path, strings.Count(content, "\n"))
+	case errors.Is(err, os.ErrNotExist):
+		runctx.Say("create %s (%d lines)", path, strings.Count(content, "\n"))
+	default:
+		runctx.Say("change %s:\n%s", path, ui.Redact(Diff(string(old), content)))
+	}
 }

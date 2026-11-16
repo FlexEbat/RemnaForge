@@ -14,6 +14,7 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/firewall"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -87,7 +88,7 @@ func EnableBBR() error {
 // DisableBBR removes the drop-in and puts the running kernel back on the
 // default congestion control.
 func DisableBBR() error {
-	if err := os.Remove(bbrConfPath); err != nil && !os.IsNotExist(err) {
+	if err := fsx.Remove(bbrConfPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return runCmd("sysctl", "-w", "net.ipv4.tcp_congestion_control="+kernelDefaultCongestion)
@@ -99,10 +100,10 @@ func writeBBRConf(path string) error {
 	if existing, err := os.ReadFile(path); err == nil && string(existing) == bbrConf {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := fsx.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(bbrConf), 0644)
+	return fsx.WriteFile(path, []byte(bbrConf), 0644)
 }
 
 var unattendedOnRE = regexp.MustCompile(`(?m)^\s*APT::Periodic::Unattended-Upgrade\s+"1"\s*;`)
@@ -142,10 +143,10 @@ func writeAutoUpgrades(on bool) error {
 	if existing, err := os.ReadFile(autoUpgradesPath); err == nil && string(existing) == want {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(autoUpgradesPath), 0755); err != nil {
+	if err := fsx.MkdirAll(filepath.Dir(autoUpgradesPath), 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(autoUpgradesPath, []byte(want), 0644)
+	return fsx.WriteFile(autoUpgradesPath, []byte(want), 0644)
 }
 
 // packageInstalled asks dpkg whether pkg is fully installed.

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
 )
 
 var usersRE = regexp.MustCompile(`users:\(\("([^"]+)"`)
@@ -143,13 +145,17 @@ func DefaultEnv() Env {
 		SSHPorts: SSHPorts,
 		WriteFile: func(path, content string, mode os.FileMode) error {
 			if i := strings.LastIndex(path, "/"); i > 0 {
-				if err := os.MkdirAll(path[:i], 0755); err != nil {
+				if err := fsx.MkdirAll(path[:i], 0755); err != nil {
 					return err
 				}
 			}
-			return os.WriteFile(path, []byte(content), mode)
+			return fsx.WriteFile(path, []byte(content), mode)
 		},
 		AppendConsent: func(line string) error {
+			if runctx.DryRun() {
+				runctx.Say("append the consent line to %s", ConsentLogPath)
+				return nil
+			}
 			f, err := os.OpenFile(ConsentLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 			if err != nil {
 				return err

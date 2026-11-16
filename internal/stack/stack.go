@@ -16,7 +16,9 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/backupcrypt"
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -33,7 +35,7 @@ func Teardown(dir string) error {
 			return fmt.Errorf("docker compose down in %s: %v: %s", dir, err, out)
 		}
 	}
-	if err := os.RemoveAll(dir); err != nil {
+	if err := fsx.RemoveAll(dir); err != nil {
 		return err
 	}
 	// A removed stack starts from fresh values the next time.
@@ -56,12 +58,16 @@ func BackupPanel(dir string) (string, error) {
 // run removes dest again: a half-written db.sql.gz next to a valid .env
 // looks like a usable backup and is not one.
 func backupPanelTo(dir, dest string) (err error) {
-	if err = os.MkdirAll(dest, 0700); err != nil {
+	if runctx.DryRun() {
+		runctx.Say("back up the panel database and .env into %s", dest)
+		return nil
+	}
+	if err = fsx.MkdirAll(dest, 0700); err != nil {
 		return err
 	}
 	defer func() {
 		if err != nil {
-			_ = os.RemoveAll(dest)
+			_ = fsx.RemoveAll(dest)
 		}
 	}()
 
@@ -129,7 +135,7 @@ func PromptBackup(dir string) bool {
 			fmt.Printf("%s%s: %v%s\n", ui.ColorRed, i18n.T("BACKUP_ENCRYPT_FAILED"), err, ui.ColorReset)
 			// A backup the operator asked to be encrypted must not stay behind
 			// in plain text, and the caller must not go on without one.
-			_ = os.RemoveAll(keep)
+			_ = fsx.RemoveAll(keep)
 			return false
 		}
 		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("BACKUP_ENCRYPTED"), ui.ColorReset)

@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/stack"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
@@ -57,7 +58,7 @@ func removeScriptOnly() {
 		return
 	}
 
-	_ = os.RemoveAll(dirRemnawave)
+	_ = fsx.RemoveAll(dirRemnawave)
 	_ = cfgfile.Forget(dirRemnawave, "remnawave.")
 	removeBinary()
 
@@ -87,7 +88,7 @@ func removeScriptAndPanel() {
 		}
 	}
 
-	_ = os.RemoveAll(dirRemnawave)
+	_ = fsx.RemoveAll(dirRemnawave)
 	_ = cfgfile.Forget(dirRemnawave, "remnawave.")
 	removeBinary()
 
@@ -98,6 +99,6 @@ func removeScriptAndPanel() {
 // removeBinary deletes the installed binary at its conventional paths.
 func removeBinary() {
 	for _, p := range binPaths {
-		_ = os.Remove(p)
+		_ = fsx.Remove(p)
 	}
 }

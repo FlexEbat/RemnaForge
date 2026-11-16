@@ -21,9 +21,11 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/journal"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -90,6 +92,10 @@ func HandleCertificates(domainsToCheck []string, certMethod, letsencryptEmail, t
 			return nil
 		}
 		line := fmt.Sprintf("      - /etc/letsencrypt/live/%s/fullchain.pem:/etc/nginx/ssl/%s/fullchain.pem:ro\n      - /etc/letsencrypt/live/%s/privkey.pem:/etc/nginx/ssl/%s/privkey.pem:ro\n", d, d, d, d)
+		if runctx.DryRun() {
+			runctx.Say("add the certificate mounts of %s to %s", d, composePath)
+			return nil
+		}
 		f, err := os.OpenFile(composePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
 			return err
@@ -231,7 +237,7 @@ func fixRenewHook(domainName string) {
 
 	if !strings.Contains(conf, "renew_hook") {
 		conf = strings.TrimRight(conf, "\n") + "\n" + desiredHook + "\n"
-		_ = os.WriteFile(renewalConf, []byte(conf), 0644)
+		_ = fsx.WriteFile(renewalConf, []byte(conf), 0644)
 		return
 	}
 
@@ -249,7 +255,7 @@ func fixRenewHook(domainName string) {
 				lines[i] = desiredHook
 			}
 		}
-		_ = os.WriteFile(renewalConf, []byte(strings.Join(lines, "\n")), 0644)
+		_ = fsx.WriteFile(renewalConf, []byte(strings.Join(lines, "\n")), 0644)
 		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("UPDATED_RENEW_AUTH"), ui.ColorReset)
 	}
 }

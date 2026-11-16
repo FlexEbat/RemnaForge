@@ -45,7 +45,7 @@ func Doctor() {
 	} else {
 		fmt.Printf("%s%s: %d%s\n", ui.ColorYellow, i18n.T("MAINT_DOCTOR_PROBLEMS"), failed, ui.ColorReset)
 	}
-	if path, err := verify.Save(verify.ReportDir, results, time.Now()); err == nil {
+	if path, err := verify.Save(verify.ReportDir, results, time.Now()); err == nil && path != "" {
 		fmt.Printf("%s%s %s%s\n", ui.ColorGray, i18n.T("REPORT_SAVED"), path, ui.ColorReset)
 	} else {
 		fmt.Printf("%s%s: %v%s\n", ui.ColorYellow, i18n.T("REPORT_NOT_SAVED"), err, ui.ColorReset)

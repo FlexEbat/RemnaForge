@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -92,6 +93,9 @@ func loadManifest() (Manifest, error) {
 }
 
 func saveManifest(m Manifest) error {
+	if runctx.DryRun() {
+		return nil
+	}
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
