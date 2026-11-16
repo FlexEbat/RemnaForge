@@ -59,6 +59,7 @@ VLESS 协议及其相关机制（XTLS、REALITY、VLESS Encryption）发展很�
 - 拒绝可预测的新域名（面板、订阅和节点）：首段为 `vpn`、`node`、`panel`、`proxy`、`admin`、`xray`、`vless`、`remna` 或国家代码（`nl`、`de1`、`de-node`）的名称，会在任何 DNS 或证书操作之前被拒绝，并重新提示输入。`stats`、`metrics` 等中性名称可用。
 - `doctor` 检查容器、healthcheck、PostgreSQL、面板后端、反向代理、TLS，并在设置了机器人令牌时检查 Telegram API；每个失败项下会给出处理建议，同样的内容会保存为报告到 `/usr/local/remnawave_reverse/reports/`（权限 0600，密钥已屏蔽）。
 - 每次安装结束时会运行与 `doctor` 相同的检查（容器、healthcheck、PostgreSQL、后端、代理、TLS，设置了令牌时还有 Telegram），在每个失败项下给出处理建议并保存报告。检查失败不会撤销安装。
+- `--dry-run`（例如 `remnaforge --dry-run`）会照常提问并执行只读检查，然后列出将要执行的每条命令和将要写入的每个文件（已有文件显示差异，不显示密钥），但不做任何更改。安装流程会在启动容器之前停止。
 - 绝不覆盖你修改过的配置文件：它记录自己写入的内容（`/usr/local/remnawave_reverse/manifest.json`），只替换仍保持原样的文件，对其他文件显示差异并让你选择保留、合并或替换，`.env` 按键合并，每次修改前备份（`/usr/local/remnawave_reverse/backups/<时间>/`）。写入是原子的，重复运行安装不会改变文件。
 - 每次安装都作为事务执行：失败时文件逐字节还原，本次创建的容器和网络被删除，无法回滚的内容（已安装的软件包、已申请的证书、cron 条目）会列出。数据卷和数据库绝不会被触碰。
 - 日志不含机密（密码、令牌、API 密钥以及生成或输入的内容都会被遮盖），`.env` 与凭据文件保持 0600 并位于受限目录，旁边写入 `.gitignore`，可用口令加密数据库备份（gpg，AES256；解密：主菜单中的“解密备份”，或 `gpg --decrypt FILE.gpg > FILE`），并可在面板菜单中轮换数据库密码和 `WEBHOOK_SECRET_HEADER`，若之后面板不正常则恢复旧值。
