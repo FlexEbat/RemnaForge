@@ -33,6 +33,11 @@ jobs:
             exit 1
           fi
 
+      # The proxy tests run `haproxy -c` on the generated configs and skip
+      # without the binary, so CI installs it to make them count.
+      - name: install haproxy
+        run: sudo apt-get update && sudo apt-get install -y haproxy
+
       - name: go test (unit, race detector)
         run: go test -race ./...
 

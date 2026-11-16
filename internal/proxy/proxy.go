@@ -57,6 +57,8 @@ func For(k Kind) (Backend, error) {
 		return nginx{}, nil
 	case Caddy:
 		return caddy{}, nil
+	case HAProxy:
+		return haproxy{}, nil
 	}
 	return nil, fmt.Errorf("proxy %q is not supported", k)
 }
