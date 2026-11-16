@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -82,7 +83,7 @@ func DecryptAll(files []string, passphrase string) ([]string, error) {
 		out, err := Decrypt(f, passphrase)
 		if err != nil {
 			for _, d := range done {
-				_ = os.Remove(d)
+				_ = fsx.Remove(d)
 			}
 			return nil, fmt.Errorf("%s: %w", filepath.Base(f), err)
 		}

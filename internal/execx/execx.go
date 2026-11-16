@@ -12,6 +12,9 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 // Timeouts per command class. They are variables so tests can shorten them.
@@ -72,6 +75,7 @@ type Cmd struct {
 	group    bool
 	timer    *time.Timer
 	timedOut atomic.Bool
+	skipped  bool // announced in a dry run and not started
 }
 
 // Command returns a Cmd that is killed after the timeout of its class.
@@ -100,6 +104,11 @@ func Interactive(name string, args ...string) *Cmd {
 
 // Start starts the command and arms the timer.
 func (c *Cmd) Start() error {
+	if runctx.DryRun() && !ReadOnly(c.Args[0], c.Args[1:]...) {
+		c.skipped = true
+		runctx.Say("run %s", ui.Redact(c.String()))
+		return nil
+	}
 	if c.group {
 		if c.SysProcAttr == nil {
 			c.SysProcAttr = &syscall.SysProcAttr{}
@@ -131,6 +140,9 @@ func (c *Cmd) kill() {
 
 // Wait waits for the command and reports a timeout as ErrTimeout.
 func (c *Cmd) Wait() error {
+	if c.skipped {
+		return nil
+	}
 	err := c.Cmd.Wait()
 	if c.timer != nil {
 		c.timer.Stop()

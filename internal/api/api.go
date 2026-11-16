@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -199,7 +200,7 @@ func GetPanelToken() (string, error) {
 			}
 		}
 
-		if err := os.MkdirAll(DirRemnawave, 0700); err == nil {
+		if err := fsx.MkdirAll(DirRemnawave, 0700); err == nil {
 			_ = cfgfile.WriteSecret(tokenFile, token)
 		}
 		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("TOKEN_RECEIVED_AND_SAVED"), ui.ColorReset)

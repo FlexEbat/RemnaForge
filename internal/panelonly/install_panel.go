@@ -7,7 +7,6 @@ package panelonly
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -17,9 +16,11 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 	"github.com/FlexEbat/RemnaForge/internal/validate"
@@ -204,7 +205,7 @@ POSTGRES_DB=postgres
 `
 
 func installPanelNginx() (*panelState, error) {
-	if err := os.MkdirAll(panelDir, 0755); err != nil {
+	if err := fsx.MkdirAll(panelDir, 0755); err != nil {
 		return nil, err
 	}
 
@@ -507,6 +508,10 @@ volumes:
 	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
+	if runctx.DryRun() {
+		runctx.Say("stop here: the stack is not started in a dry run, so the steps that need the running services (account, keys, profile, node, host, subscription token, checks) are skipped")
+		return nil
+	}
 	if err := validate.CheckStack(panelDir); err != nil {
 		return err
 	}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -106,6 +107,10 @@ func Stack(env Env, dir string) error {
 func CheckStack(dir string) error { return Stack(DefaultEnv(), dir) }
 
 func stack(env Env, dir string) error {
+	if runctx.DryRun() {
+		runctx.Say("validate %s: skipped, nothing was written in a dry run", dir)
+		return nil
+	}
 	if out, err := env.Run(dir, "docker", "compose", "config", "-q"); err != nil {
 		return &Error{Step: "docker compose config", Output: out, Err: err}
 	}

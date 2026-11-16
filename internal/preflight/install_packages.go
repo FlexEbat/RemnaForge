@@ -9,6 +9,7 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/journal"
 	"github.com/FlexEbat/RemnaForge/internal/sysinfo"
@@ -134,8 +135,8 @@ func InstallPackages() error {
 		return err
 	}
 
-	if err := os.MkdirAll(dirRemnawave, 0755); err == nil {
-		_ = os.WriteFile(installMarker, nil, 0644)
+	if err := fsx.MkdirAll(dirRemnawave, 0755); err == nil {
+		_ = fsx.WriteFile(installMarker, nil, 0644)
 	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("SUCCESS_INSTALL"), ui.ColorReset)
 

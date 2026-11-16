@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -40,7 +41,7 @@ func loadSavedLanguage() (string, bool) {
 		return saved, true
 	}
 
-	_ = os.Remove(langFilePath)
+	_ = fsx.Remove(langFilePath)
 	return "", false
 }
 
@@ -68,8 +69,8 @@ func promptLanguage() string {
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(langFilePath), 0755); err == nil {
-			_ = os.WriteFile(langFilePath, []byte(lang), 0644)
+		if err := fsx.MkdirAll(filepath.Dir(langFilePath), 0755); err == nil {
+			_ = fsx.WriteFile(langFilePath, []byte(lang), 0644)
 		}
 		return lang
 	}

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -124,7 +125,7 @@ func setSysctlIPv6Lines(interfaceName string, disable int) error {
 		kept = append(kept, fmt.Sprintf("%s = %d", k, disable))
 	}
 
-	return os.WriteFile(sysctlConf, []byte(strings.Join(kept, "\n")), 0644)
+	return fsx.WriteFile(sysctlConf, []byte(strings.Join(kept, "\n")), 0644)
 }
 
 // sysctlApply is the Go equivalent of: sysctl -p > /dev/null 2>&1

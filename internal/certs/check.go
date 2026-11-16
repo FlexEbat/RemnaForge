@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/domain"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -225,10 +226,10 @@ func FixLetsencryptStructure(domainName string) error {
 			return err
 		}
 		if info, err := os.Lstat(liveFile); err == nil && info.Mode()&os.ModeSymlink == 0 {
-			_ = os.Remove(liveFile)
+			_ = fsx.Remove(liveFile)
 		}
-		_ = os.Remove(liveFile)
-		if err := os.Symlink(archiveFile, liveFile); err != nil {
+		_ = fsx.Remove(liveFile)
+		if err := fsx.Symlink(archiveFile, liveFile); err != nil {
 			return err
 		}
 	}
@@ -248,14 +249,14 @@ func FixLetsencryptStructure(domainName string) error {
 	conf = removeLinesWithPrefix(conf, "renew_hook")
 	conf = strings.TrimRight(conf, "\n") + "\n" + expectedHook + "\n"
 
-	if err := os.WriteFile(renewalConf, []byte(conf), 0644); err != nil {
+	if err := fsx.WriteFile(renewalConf, []byte(conf), 0644); err != nil {
 		return err
 	}
 
-	_ = os.Chmod(certPath, 0644)
-	_ = os.Chmod(chainPath, 0644)
-	_ = os.Chmod(fullchainPath, 0644)
-	_ = os.Chmod(privkeyPath, 0600)
+	_ = fsx.Chmod(certPath, 0644)
+	_ = fsx.Chmod(chainPath, 0644)
+	_ = fsx.Chmod(fullchainPath, 0644)
+	_ = fsx.Chmod(privkeyPath, 0600)
 
 	return nil
 }

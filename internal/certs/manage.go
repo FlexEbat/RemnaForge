@@ -9,8 +9,10 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -66,7 +68,7 @@ func updateCurrentCertificates() {
 	const renewThreshold = 30
 	logDir := "/var/log/letsencrypt"
 	if _, err := os.Stat(logDir); err != nil {
-		_ = os.MkdirAll(logDir, 0755)
+		_ = fsx.MkdirAll(logDir, 0755)
 	}
 
 	entries, err := os.ReadDir(letsencryptLive)
@@ -140,7 +142,10 @@ func updateCurrentCertificates() {
 
 			fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
 			renewCmd := execx.Command("certbot", "renew", "--cert-name", domainName, "--no-random-sleep-on-renew")
-			logFile, _ := os.OpenFile(filepath.Join(logDir, "letsencrypt.log"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+			var logFile *os.File
+			if !runctx.DryRun() {
+				logFile, _ = os.OpenFile(filepath.Join(logDir, "letsencrypt.log"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+			}
 			if logFile != nil {
 				renewCmd.Stdout = logFile
 				renewCmd.Stderr = logFile

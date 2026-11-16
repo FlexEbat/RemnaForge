@@ -22,7 +22,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -95,10 +97,10 @@ func (ts *templateSet) randomName() string {
 // from, without picking one yet. installTemplate (below) covers the rest.
 func prepareTemplateSet(templateSource string) (*templateSet, error) {
 	// Clean up any leftovers from a previous run.
-	_ = os.RemoveAll(filepath.Join(optDir, "main.zip"))
-	_ = os.RemoveAll(filepath.Join(optDir, "simple-web-templates-main"))
-	_ = os.RemoveAll(filepath.Join(optDir, "sni-templates-main"))
-	_ = os.RemoveAll(filepath.Join(optDir, "nothing-sni-main"))
+	_ = fsx.RemoveAll(filepath.Join(optDir, "main.zip"))
+	_ = fsx.RemoveAll(filepath.Join(optDir, "simple-web-templates-main"))
+	_ = fsx.RemoveAll(filepath.Join(optDir, "sni-templates-main"))
+	_ = fsx.RemoveAll(filepath.Join(optDir, "nothing-sni-main"))
 
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("RANDOM_TEMPLATE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
@@ -226,7 +228,7 @@ func installTemplate(ts *templateSet, chosen string, pickVariant func(options []
 	switch {
 	case statErr == nil && info.IsDir():
 		if _, err := os.Stat(webRoot); os.IsNotExist(err) {
-			if err := os.MkdirAll(webRoot, 0755); err != nil {
+			if err := fsx.MkdirAll(webRoot, 0755); err != nil {
 				return fmt.Errorf("failed to create %s", webRoot)
 			}
 		}
@@ -250,9 +252,9 @@ func installTemplate(ts *templateSet, chosen string, pickVariant func(options []
 	}
 
 	// Final cleanup.
-	_ = os.RemoveAll(filepath.Join(optDir, "simple-web-templates-main"))
-	_ = os.RemoveAll(filepath.Join(optDir, "sni-templates-main"))
-	_ = os.RemoveAll(filepath.Join(optDir, "nothing-sni-main"))
+	_ = fsx.RemoveAll(filepath.Join(optDir, "simple-web-templates-main"))
+	_ = fsx.RemoveAll(filepath.Join(optDir, "sni-templates-main"))
+	_ = fsx.RemoveAll(filepath.Join(optDir, "nothing-sni-main"))
 
 	return nil
 }
@@ -269,6 +271,10 @@ func randomVariant(options []string) string {
 // Install flows (nginxnode, panelonly, panelfull) call this mid-install,
 // where stopping to ask the user which decoy page to use would not fit.
 func RandomHTML(templateSource string) error {
+	if runctx.DryRun() {
+		runctx.Say("download a selfsteal template and install it into the web root")
+		return nil
+	}
 	ts, err := prepareTemplateSet(templateSource)
 	if err != nil {
 		return err
@@ -280,6 +286,10 @@ func RandomHTML(templateSource string) error {
 // user pick which page to install instead of always rolling one at
 // random. ManageSelfstealTemplates is the only caller.
 func InteractiveInstall(templateSource string) error {
+	if runctx.DryRun() {
+		runctx.Say("download selfsteal templates and install the chosen one")
+		return nil
+	}
 	ts, err := prepareTemplateSet(templateSource)
 	if err != nil {
 		return err
@@ -357,7 +367,7 @@ func downloadWithRetry(url string) ([]byte, error) {
 // container.
 func replaceWebRoot(src, webRoot string) error {
 	backup := webRoot + ".bak"
-	_ = os.RemoveAll(backup)
+	_ = fsx.RemoveAll(backup)
 	haveBackup := copyDir(webRoot, backup) == nil
 
 	_ = clearDir(webRoot)
@@ -366,10 +376,10 @@ func replaceWebRoot(src, webRoot string) error {
 			_ = clearDir(webRoot)
 			_ = copyDir(backup, webRoot)
 		}
-		_ = os.RemoveAll(backup)
+		_ = fsx.RemoveAll(backup)
 		return err
 	}
-	_ = os.RemoveAll(backup)
+	_ = fsx.RemoveAll(backup)
 	return nil
 }
 
@@ -387,12 +397,12 @@ func extractZip(zr *zip.Reader, dest string) error {
 			return fmt.Errorf("%s: illegal file path outside extraction directory", f.Name)
 		}
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(path, 0755); err != nil {
+			if err := fsx.MkdirAll(path, 0755); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		if err := fsx.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
 		rc, err := f.Open()
@@ -416,7 +426,7 @@ func extractZip(zr *zip.Reader, dest string) error {
 
 func removeAll(baseDir string, names ...string) {
 	for _, n := range names {
-		_ = os.RemoveAll(filepath.Join(baseDir, n))
+		_ = fsx.RemoveAll(filepath.Join(baseDir, n))
 	}
 }
 
@@ -455,7 +465,7 @@ func obfuscateHTMLFiles(root string, t htmlTokens) error {
 		s = strings.Replace(s, "<body", fmt.Sprintf(`<body class="%s"`, t.class), 1)
 		s = strings.ReplaceAll(s, "CHANGEMEPLS", t.username)
 
-		return os.WriteFile(path, []byte(s), 0644)
+		return fsx.WriteFile(path, []byte(s), 0644)
 	})
 }
 
@@ -468,7 +478,7 @@ func obfuscateCSSFiles(root, comment, class string) {
 			return err
 		}
 		prefix := fmt.Sprintf("/* %s */\n.%s { display: block; }\n", comment, class)
-		return os.WriteFile(path, append([]byte(prefix), data...), 0644)
+		return fsx.WriteFile(path, append([]byte(prefix), data...), 0644)
 	})
 }
 
@@ -520,7 +530,7 @@ func clearDir(dir string) error {
 		return err
 	}
 	for _, e := range entries {
-		if err := os.RemoveAll(filepath.Join(dir, e.Name())); err != nil {
+		if err := fsx.RemoveAll(filepath.Join(dir, e.Name())); err != nil {
 			return err
 		}
 	}
@@ -538,7 +548,7 @@ func copyDir(src, dst string) error {
 		}
 		target := filepath.Join(dst, rel)
 		if fi.IsDir() {
-			return os.MkdirAll(target, fi.Mode())
+			return fsx.MkdirAll(target, fi.Mode())
 		}
 		return copyFile(path, target)
 	})
@@ -549,8 +559,8 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+	if err := fsx.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, 0644)
+	return fsx.WriteFile(dst, data, 0644)
 }

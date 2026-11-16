@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -65,6 +66,10 @@ func Report(results []Result, at time.Time) string {
 // Save writes the report to dir as report-<timestamp>.txt at mode 0600 in a
 // directory at 0700, with secrets masked, and returns the path.
 func Save(dir string, results []Result, at time.Time) (string, error) {
+	if runctx.DryRun() {
+		runctx.Say("save the report into %s", dir)
+		return "", nil
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}

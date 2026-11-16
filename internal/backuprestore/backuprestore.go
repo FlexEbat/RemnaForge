@@ -20,6 +20,7 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
+	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
@@ -58,6 +59,10 @@ func Run() error {
 		return runInteractive(scriptPath)
 	}
 
+	if runctx.DryRun() {
+		runctx.Say("download the backup-restore script to %s and run it", scriptPath)
+		return nil
+	}
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.DownloadingBackupRestore(), ui.ColorReset)
 	if err := downloadScript(scriptPath); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("DOWNLOAD_FAIL"), ui.ColorReset)
