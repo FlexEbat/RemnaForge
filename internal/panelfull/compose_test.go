@@ -25,7 +25,7 @@ func TestNginxComposeIsUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := buildCompose(proxy.Nginx, fullchain, privkey); got != string(want) {
+	if got := buildCompose(proxy.Nginx, "", fullchain, privkey); got != string(want) {
 		t.Error("the nginx compose file differs from the one the flow wrote before")
 	}
 }
@@ -53,7 +53,7 @@ func services(compose string) []string {
 }
 
 func TestHAProxyCompose(t *testing.T) {
-	got := buildCompose(proxy.HAProxy, fullchain, privkey)
+	got := buildCompose(proxy.HAProxy, "", fullchain, privkey)
 	want := "remnawave-db remnawave remnawave-redis remnawave-haproxy remnawave-selfsteal remnawave-subscription-page remnanode"
 	if s := strings.Join(services(got), " "); s != want {
 		t.Errorf("services:\n got %s\nwant %s", s, want)
@@ -82,8 +82,8 @@ func TestHAProxyCompose(t *testing.T) {
 // Nothing else about the file depends on the proxy: the services both
 // variants share are written once and the same.
 func TestComposeSharedPartIsTheSame(t *testing.T) {
-	n := buildCompose(proxy.Nginx, fullchain, privkey)
-	h := buildCompose(proxy.HAProxy, fullchain, privkey)
+	n := buildCompose(proxy.Nginx, "", fullchain, privkey)
+	h := buildCompose(proxy.HAProxy, "", fullchain, privkey)
 	count := func(names []string, want string) int {
 		c := 0
 		for _, n := range names {
@@ -100,5 +100,23 @@ func TestComposeSharedPartIsTheSame(t *testing.T) {
 	}
 	if strings.Count(n, "name: valkey-socket") != 1 || strings.Count(h, "name: valkey-socket") != 1 {
 		t.Error("the volumes footer must appear once in both variants")
+	}
+}
+
+// The certificate mounts go into the nginx service's volumes list, between
+// its config mount and the shared directories, where the flow used to
+// append them before it began to write the file whole.
+func TestNginxComposeCarriesTheCertificateMounts(t *testing.T) {
+	mounts := "      - /etc/letsencrypt/live/a.org/fullchain.pem:/etc/nginx/ssl/a.org/fullchain.pem:ro\n" +
+		"      - /etc/letsencrypt/live/a.org/privkey.pem:/etc/nginx/ssl/a.org/privkey.pem:ro\n"
+	got := buildCompose(proxy.Nginx, mounts, fullchain, privkey)
+	i := strings.Index(got, "./nginx.conf:/etc/nginx/conf.d/default.conf:ro\n")
+	j := strings.Index(got, mounts)
+	k := strings.Index(got, "      - /dev/shm:/dev/shm:rw")
+	if i < 0 || j < 0 || k < 0 || !(i < j && j < k) {
+		t.Errorf("order wrong: config mount %d, cert mounts %d, shared dirs %d", i, j, k)
+	}
+	if strings.Contains(buildCompose(proxy.HAProxy, "", fullchain, privkey), "/etc/nginx/ssl") {
+		t.Error("HAProxy has no nginx certificate mounts")
 	}
 }

@@ -35,6 +35,12 @@ import (
 // caller re-derive it.
 type Result struct {
 	Method string // "1" Cloudflare, "2" ACME HTTP-01, "3" Gcore
+	// ComposeMounts holds the volume lines that mount the certificates into
+	// the nginx container, one pair per certificate name. The caller puts
+	// them into the compose file right after the open volumes list of the
+	// nginx service, so the file is written once and whole. It is empty for
+	// HAProxy, whose container mounts the bundle directory.
+	ComposeMounts string
 }
 
 // HandleCertificates obtains the certificates for an nginx stack. It is
@@ -96,33 +102,23 @@ func HandleCertificatesFor(kind proxy.Kind, domainsToCheck []string, certMethod,
 		certMethod = "1"
 	}
 
-	composePath := filepath.Join(targetDir, "docker-compose.yml")
 	certDomainsAdded := map[string]bool{}
 	var certNames []string
+	var mounts strings.Builder
 
+	// addComposeCertLines records the nginx mounts of one certificate name,
+	// once. Nothing is written to disk here: the caller owns the compose
+	// file.
 	addComposeCertLines := func(d string) error {
 		if certDomainsAdded[d] {
 			return nil
 		}
+		certDomainsAdded[d] = true
 		if kind == proxy.HAProxy {
-			certDomainsAdded[d] = true
 			certNames = append(certNames, d)
 			return nil
 		}
-		line := fmt.Sprintf("      - /etc/letsencrypt/live/%s/fullchain.pem:/etc/nginx/ssl/%s/fullchain.pem:ro\n      - /etc/letsencrypt/live/%s/privkey.pem:/etc/nginx/ssl/%s/privkey.pem:ro\n", d, d, d, d)
-		if runctx.DryRun() {
-			runctx.Say("add the certificate mounts of %s to %s", d, composePath)
-			return nil
-		}
-		f, err := os.OpenFile(composePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		if _, err := f.WriteString(line); err != nil {
-			return err
-		}
-		certDomainsAdded[d] = true
+		mounts.WriteString(fmt.Sprintf("      - /etc/letsencrypt/live/%s/fullchain.pem:/etc/nginx/ssl/%s/fullchain.pem:ro\n      - /etc/letsencrypt/live/%s/privkey.pem:/etc/nginx/ssl/%s/privkey.pem:ro\n", d, d, d, d))
 		return nil
 	}
 
@@ -213,7 +209,7 @@ func HandleCertificatesFor(kind proxy.Kind, domainsToCheck []string, certMethod,
 		}
 	}
 
-	return Result{Method: certMethod}, nil
+	return Result{Method: certMethod, ComposeMounts: mounts.String()}, nil
 }
 
 // syncCertRenewalCron ensures a weekly root crontab entry exists for

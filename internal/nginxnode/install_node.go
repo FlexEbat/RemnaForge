@@ -213,7 +213,7 @@ func installationNode() error {
 `, state.certificate, certFullchain, certFullchain, certPrivkey, certPrivkey)
 
 	composePath := filepath.Join(nodeDir, "docker-compose.yml")
-	if _, err := cfgfile.Write(composePath, dockerComposeHead+composeTail, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
+	if _, err := cfgfile.Write(composePath, dockerComposeHead+certResult.ComposeMounts+composeTail, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return err
 	}
 	_ = cfgfile.EnsureGitignore(filepath.Dir(composePath))

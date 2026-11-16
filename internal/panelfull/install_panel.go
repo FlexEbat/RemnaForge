@@ -286,13 +286,15 @@ const nginxTail = `      - /dev/shm:/dev/shm:rw
 // buildCompose assembles docker-compose.yml: the common services, the proxy
 // (nginx continues the open volumes list of its service, HAProxy replaces
 // it and adds the selfsteal site), the subscription page and the node, which
-// mounts the certificate files for its Hysteria2 inbound.
-func buildCompose(kind proxy.Kind, certFullchain, certPrivkey string) string {
+// mounts the certificate files for its Hysteria2 inbound. certMounts are the
+// nginx volume lines the certificate step returned; they belong right after
+// the nginx service's open volumes list.
+func buildCompose(kind proxy.Kind, certMounts, certFullchain, certPrivkey string) string {
 	head, proxyPart := dockerComposeHead, nginxTail
 	if kind == proxy.HAProxy {
-		head, proxyPart = composeBase, proxy.HAProxyServices(certs.HAProxyBundleDir)
+		head, proxyPart = composeBase, proxy.HAProxyServices(certs.HAProxyBundleDir, proxy.Socket)
 	}
-	return head + proxyPart + fmt.Sprintf(`
+	return head + certMounts + proxyPart + fmt.Sprintf(`
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
     container_name: remnawave-subscription-page
@@ -402,7 +404,7 @@ func installationPanelNode(kind proxy.Kind) error {
 
 	certFullchain, certPrivkey := certs.NginxCertPaths(nodeCertDomain)
 
-	composeText := buildCompose(kind, certFullchain, certPrivkey)
+	composeText := buildCompose(kind, certResult.ComposeMounts, certFullchain, certPrivkey)
 	composePath := filepath.Join(panelDir, "docker-compose.yml")
 	if _, err := cfgfile.Write(composePath, composeText, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return err

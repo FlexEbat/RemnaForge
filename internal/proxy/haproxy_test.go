@@ -166,7 +166,7 @@ func TestHAProxyExtraAndServices(t *testing.T) {
 	if !strings.Contains(extra["selfsteal.conf"], "listen 127.0.0.1:8080;") {
 		t.Errorf("selfsteal.conf: %v", extra)
 	}
-	svc := HAProxyServices("/etc/letsencrypt/haproxy")
+	svc := HAProxyServices("/etc/letsencrypt/haproxy", Socket)
 	for _, want := range []string{
 		"remnawave-haproxy:", "image: haproxy:3.0", "network_mode: host",
 		"/etc/letsencrypt/haproxy:" + HAProxyCertDir + ":ro", "rm -f " + HAProxySocket,
@@ -175,5 +175,14 @@ func TestHAProxyExtraAndServices(t *testing.T) {
 		if !strings.Contains(svc, want) {
 			t.Errorf("services lack %q", want)
 		}
+	}
+	direct := HAProxyServices("/etc/letsencrypt/haproxy", Direct)
+	for _, bad := range []string{"selfsteal", "/dev/shm", "rm -f"} {
+		if strings.Contains(direct, bad) {
+			t.Errorf("HAProxy on 443 itself needs no %q", bad)
+		}
+	}
+	if !strings.Contains(direct, "exec haproxy -W -db") || !strings.Contains(direct, HAProxyCertDir+":ro") {
+		t.Errorf("the direct service must still run HAProxy with the bundles:\n%s", direct)
 	}
 }

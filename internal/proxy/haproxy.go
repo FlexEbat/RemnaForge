@@ -203,22 +203,31 @@ func (haproxy) Extra(Params) map[string]string {
 	return map[string]string{"selfsteal.conf": selfstealSite}
 }
 
-// HAProxyServices is the compose text of the two containers: HAProxy on the
-// host network with the certificate bundles and the shared /dev/shm, and
-// the nginx container that only serves the selfsteal site.
-func HAProxyServices(certBundleDir string) string {
-	return fmt.Sprintf(`  remnawave-haproxy:
+// HAProxyServices is the compose text of the HAProxy container, and for the
+// Socket layout also of the nginx container that only serves the selfsteal
+// site. HAProxy runs on the host network with the certificate bundles
+// mounted read-only. Behind Xray it shares /dev/shm and removes a stale
+// socket at start.
+func HAProxyServices(certBundleDir string, layout Layout) string {
+	volumes := fmt.Sprintf(`      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - %s:%s:ro
+`, certBundleDir, HAProxyCertDir)
+	command := `exec haproxy -W -db -f /usr/local/etc/haproxy/haproxy.cfg`
+	if layout == Socket {
+		volumes += "      - /dev/shm:/dev/shm:rw\n"
+		command = "rm -f " + HAProxySocket + " && " + command
+	}
+	out := fmt.Sprintf(`  remnawave-haproxy:
     image: haproxy:3.0
     container_name: remnawave-haproxy
     hostname: remnawave-haproxy
     <<: [*common, *logging]
     network_mode: host
     volumes:
-      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-      - %s:%s:ro
-      - /dev/shm:/dev/shm:rw
-    command: sh -c 'rm -f %s && exec haproxy -W -db -f /usr/local/etc/haproxy/haproxy.cfg'
-
+%s    command: sh -c '%s'
+`, volumes, command)
+	if layout == Socket {
+		out += `
   remnawave-selfsteal:
     image: nginx:1.28
     container_name: remnawave-selfsteal
@@ -228,5 +237,7 @@ func HAProxyServices(certBundleDir string) string {
     volumes:
       - ./selfsteal.conf:/etc/nginx/conf.d/default.conf:ro
       - /var/www/html:/var/www/html:ro
-`, certBundleDir, HAProxyCertDir, HAProxySocket)
+`
+	}
+	return out
 }
