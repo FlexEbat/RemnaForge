@@ -160,9 +160,10 @@ func TestHAProxyRefusesValuesThatBreakTheConfig(t *testing.T) {
 }
 
 func TestHAProxyExtraAndServices(t *testing.T) {
-	extra := Must(HAProxy).(interface {
-		Extra(Params) map[string]string
-	}).Extra(Params{})
+	extra := Must(HAProxy).Extra(Params{SelfstealDomain: "node.example.org"})
+	if Must(HAProxy).Extra(Params{}) != nil {
+		t.Error("a panel without a node has no selfsteal site to configure")
+	}
 	if !strings.Contains(extra["selfsteal.conf"], "listen 127.0.0.1:8080;") {
 		t.Errorf("selfsteal.conf: %v", extra)
 	}

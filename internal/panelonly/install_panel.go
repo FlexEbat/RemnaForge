@@ -50,7 +50,7 @@ type panelState struct {
 // dockerComposeHead is the first half of docker-compose.yml: everything
 // up to and including the remnawave-nginx service's still-open
 // volumes: list.
-const dockerComposeHead = `x-common: &common
+const composeBase = `x-common: &common
   ulimits:
     nofile:
       soft: 1048576
@@ -136,7 +136,10 @@ services:
       timeout: 10s
       retries: 3
 
-  remnawave-nginx:
+`
+
+// nginxService is the nginx service with its volumes list still open.
+const nginxService = `  remnawave-nginx:
     image: nginx:1.28
     container_name: remnawave-nginx
     hostname: remnawave-nginx
@@ -145,6 +148,10 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 `
+
+// dockerComposeHead is the compose file up to and including the nginx
+// service's still-open volumes list.
+const dockerComposeHead = composeBase + nginxService
 
 // dotEnvTemplate is the panel's .env file.
 const dotEnvTemplate = `### APP ###
@@ -261,50 +268,8 @@ func installPanelNginx() (*panelState, error) {
 	return state, nil
 }
 
-func InstallationPanelOnly() error {
-	return txn.Run("panelonly", installationPanelOnly)
-}
-
-func installationPanelOnly() error {
-	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
-	// if missing, so this doesn't just fail deep inside a later step with
-	// a confusing error.
-	if err := preflight.EnsureInstalled(); err != nil {
-		return err
-	}
-
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("INSTALLING_PANEL"), ui.ColorReset)
-	time.Sleep(1 * time.Second)
-
-	state, err := installPanelNginx()
-	if err != nil {
-		return err
-	}
-
-	// certs.HandleCertificates returns the actual method it used
-	// (wildcard vs per-domain), which is what determines whether the
-	// cert-domain fields below should be the base domain or the full
-	// domain - using that returned value directly instead of
-	// re-deriving it from scratch avoids the two ever disagreeing (see
-	// internal/nginxnode for a fuller walkthrough of the same pattern).
-	certResult, certErr := certs.HandleCertificates(
-		[]string{state.panelDomain, state.subDomain}, "", "", panelDir)
-	if certErr != nil {
-		return certErr
-	}
-	certMethod := certResult.Method
-
-	var panelCertDomain, subCertDomain string
-	if certMethod == "1" {
-		panelCertDomain = state.panelBaseDomain
-		subCertDomain = state.subBaseDomain
-	} else {
-		panelCertDomain = state.panelDomain
-		subCertDomain = state.subDomain
-	}
-
-	// Append the subscription-page service + networks/volumes.
-	composeTail := `
+// composeTail is the subscription page and the networks and volumes.
+const composeTail = `
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
     container_name: remnawave-subscription-page
@@ -336,24 +301,92 @@ volumes:
     driver: local
     external: false
 `
+
+// buildCompose assembles docker-compose.yml: the common services, the proxy
+// (nginx continues the open volumes list of its service after the
+// certificate mounts the certificate step returned, HAProxy owns port 443
+// and mounts the bundles), the subscription page, the networks and volumes.
+func buildCompose(kind proxy.Kind, certMounts string) string {
+	if kind == proxy.HAProxy {
+		return composeBase + proxy.HAProxyServices(certs.HAProxyBundleDir, proxy.Direct) + composeTail
+	}
+	return dockerComposeHead + certMounts + composeTail
+}
+
+// InstallationPanelOnly installs the panel alone behind nginx.
+func InstallationPanelOnly() error {
+	return txn.Run("panelonly", func() error { return installationPanelOnly(proxy.Nginx) })
+}
+
+// InstallationPanelOnlyHAProxy installs the panel alone with HAProxy on
+// port 443. Its nodes run on other hosts and use TLS profiles.
+func InstallationPanelOnlyHAProxy() error {
+	return txn.Run("panelonly-haproxy", func() error { return installationPanelOnly(proxy.HAProxy) })
+}
+
+func installationPanelOnly(kind proxy.Kind) error {
+	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
+	// if missing, so this doesn't just fail deep inside a later step with
+	// a confusing error.
+	if err := preflight.EnsureInstalled(); err != nil {
+		return err
+	}
+
+	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("INSTALLING_PANEL"), ui.ColorReset)
+	time.Sleep(1 * time.Second)
+
+	state, err := installPanelNginx()
+	if err != nil {
+		return err
+	}
+
+	// certs.HandleCertificates returns the actual method it used
+	// (wildcard vs per-domain), which is what determines whether the
+	// cert-domain fields below should be the base domain or the full
+	// domain - using that returned value directly instead of
+	// re-deriving it from scratch avoids the two ever disagreeing (see
+	// internal/nginxnode for a fuller walkthrough of the same pattern).
+	certResult, certErr := certs.HandleCertificatesFor(kind,
+		[]string{state.panelDomain, state.subDomain}, "", "", panelDir)
+	if certErr != nil {
+		return certErr
+	}
+	certMethod := certResult.Method
+
+	var panelCertDomain, subCertDomain string
+	if certMethod == "1" {
+		panelCertDomain = state.panelBaseDomain
+		subCertDomain = state.subBaseDomain
+	} else {
+		panelCertDomain = state.panelDomain
+		subCertDomain = state.subDomain
+	}
+
+	composeText := buildCompose(kind, certResult.ComposeMounts)
 	composePath := filepath.Join(panelDir, "docker-compose.yml")
-	if _, err := cfgfile.Write(composePath, dockerComposeHead+certResult.ComposeMounts+composeTail, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
+	if _, err := cfgfile.Write(composePath, composeText, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return err
 	}
 	_ = cfgfile.EnsureGitignore(filepath.Dir(composePath))
 
-	// Nginx.conf.
-	nginxConf, err := proxy.Must(proxy.Nginx).Panel(proxy.Params{
+	// The proxy's configuration.
+	be := proxy.Must(kind)
+	params := proxy.Params{
 		Layout:      proxy.Direct,
 		CookieName:  state.cookiesRandom1,
 		CookieValue: state.cookiesRandom2,
 		PanelDomain: state.panelDomain, PanelCert: panelCertDomain,
 		SubDomain: state.subDomain, SubCert: subCertDomain,
-	})
+	}
+	proxyConf, err := be.Panel(params)
 	if err != nil {
 		return err
 	}
-	if _, err := cfgfile.Write(filepath.Join(panelDir, "nginx.conf"), nginxConf, cfgfile.Opts{Kind: cfgfile.KindNginx}); err != nil {
+	confKind := cfgfile.KindNginx
+	if kind == proxy.HAProxy {
+		confKind = cfgfile.KindRaw
+	}
+	if _, err := cfgfile.Write(filepath.Join(panelDir, be.ConfigFile()), proxyConf, cfgfile.Opts{Kind: confKind}); err != nil {
 		return err
 	}
 
@@ -406,7 +439,13 @@ volumes:
 	// Delete the default config profile.
 	_ = api.DeleteConfigProfile(domainURL, token, "")
 
-	// Create our own config profile.
+	// Create our own config profile. With HAProxy it carries the XHTTP TLS
+	// inbound instead of Reality; Hysteria2 waits for the node profile menu,
+	// which asks for the node's certificate.
+	profileTag, profileInbounds := "", api.ConfigProfileInbounds{Raw: true}
+	if kind == proxy.HAProxy {
+		profileTag, profileInbounds = "XHTTP-TLS", api.ConfigProfileInbounds{XHTTP: true}
+	}
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
 	// The initial profile only carries the stock Raw inbound; a
 	// Hysteria2 cert path isn't needed until internal/nodeprofile turns
@@ -414,7 +453,7 @@ volumes:
 	// whether the node's certificate is a wildcard (see
 	// certs.AskCertDomain) instead of guessing from here, where this
 	// flow has no way to know what internal/nginxnode's install did.
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, "", "", "", api.ConfigProfileInbounds{Raw: true})
+	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, profileTag, "", "", profileInbounds)
 	if configProfileUUID == "" || inboundUUID == "" {
 		return fmt.Errorf("%s", i18n.T("ERROR_CREATE_CONFIG_PROFILE"))
 	}

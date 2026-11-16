@@ -54,6 +54,9 @@ func detectWebserver(dir string) string {
 	if _, err := os.Stat(filepath.Join(dir, "Caddyfile")); err == nil {
 		return "caddy"
 	}
+	if _, err := os.Stat(filepath.Join(dir, "haproxy.cfg")); err == nil {
+		return "haproxy"
+	}
 	return ""
 }
 
@@ -201,6 +204,10 @@ func openPanelAccess() {
 	}
 	if webserver == "caddy" {
 		openPanelAccessCaddy(dir)
+		return
+	}
+	if webserver == "haproxy" {
+		openPanelAccessHAProxy(dir)
 		return
 	}
 
@@ -372,6 +379,10 @@ func closePanelAccess() {
 		closePanelAccessCaddy(dir)
 		return
 	}
+	if webserver == "haproxy" {
+		closePanelAccessHAProxy(dir)
+		return
+	}
 
 	confPath := filepath.Join(dir, "nginx.conf")
 	data, err := os.ReadFile(confPath)
@@ -477,5 +488,67 @@ func closePanelAccessCaddy(dir string) {
 		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("PORT_8443_NOT_CONFIGURED"), ui.ColorReset)
 	}
 
+	closePort8443UFW()
+}
+
+// openPanelAccessHAProxy adds the 8443 frontend to haproxy.cfg and reloads
+// HAProxy with SIGUSR2, which binds the new port without cutting a
+// connection. A configuration HAProxy cannot parse leaves the old workers
+// running.
+func openPanelAccessHAProxy(dir string) {
+	confPath := filepath.Join(dir, "haproxy.cfg")
+	data, err := os.ReadFile(confPath)
+	if err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_ERROR"), ui.ColorReset)
+		return
+	}
+	panelDomain, cookie1, cookie2 := haproxyPanel(string(data))
+	if inUse, checked := portInUse("8443"); !checked {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NO_PORT_CHECK_TOOLS"), ui.ColorReset)
+		return
+	} else if inUse && !haproxyHas8443(string(data)) {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("PORT_8443_IN_USE"), ui.ColorReset)
+		return
+	}
+	updated, err := addHAProxy8443(string(data))
+	if err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_ERROR"), ui.ColorReset)
+		return
+	}
+	if err := cfgfile.Replace(confPath, updated, cfgfile.Opts{}); err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
+		return
+	}
+
+	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
+	_ = composeRun(dir, "kill", "-s", "USR2", "remnawave-haproxy")
+
+	_ = execx.Command("ufw", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
+	_ = execx.Command("ufw", "reload").Run()
+
+	panelLink := fmt.Sprintf("https://%s:8443/auth/login?%s=%s", panelDomain, cookie1, cookie2)
+	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("OPEN_PANEL_LINK"), ui.ColorReset)
+	fmt.Printf("%s%s%s\n", ui.ColorWhite, panelLink, ui.ColorReset)
+	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("PORT_8443_WARNING"), ui.ColorReset)
+}
+
+// closePanelAccessHAProxy removes the block openPanelAccessHAProxy added.
+func closePanelAccessHAProxy(dir string) {
+	confPath := filepath.Join(dir, "haproxy.cfg")
+	data, err := os.ReadFile(confPath)
+	if err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_ERROR"), ui.ColorReset)
+		return
+	}
+	updated, found := removeHAProxy8443(string(data))
+	if !found {
+		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("PORT_8443_NOT_CONFIGURED"), ui.ColorReset)
+	} else {
+		if err := cfgfile.Replace(confPath, updated, cfgfile.Opts{}); err != nil {
+			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
+			return
+		}
+		_ = composeRun(dir, "kill", "-s", "USR2", "remnawave-haproxy")
+	}
 	closePort8443UFW()
 }

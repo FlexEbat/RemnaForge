@@ -32,8 +32,8 @@ const nodeDir = "/opt/remnanode"
 
 var ipv4RE = regexp.MustCompile(`^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$`)
 
-// dockerComposeHead is the first half of the node's docker-compose.yml.
-const dockerComposeHead = `x-common: &common
+// composeBase is the compose file up to the proxy service.
+const composeBase = `x-common: &common
   ulimits:
     nofile:
       soft: 1048576
@@ -48,7 +48,10 @@ x-logging: &logging
       max-file: 5
 
 services:
-  remnawave-nginx:
+`
+
+// nginxService is the nginx service with its volumes list still open.
+const nginxService = `  remnawave-nginx:
     image: nginx:1.28
     container_name: remnawave-nginx
     hostname: remnawave-nginx
@@ -57,6 +60,10 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 `
+
+// dockerComposeHead is the first half of the node's docker-compose.yml, up
+// to the nginx service's still-open volumes list.
+const dockerComposeHead = composeBase + nginxService
 
 // nodeState carries the values gathered while prompting the user
 // through to where the docker-compose.yml/Caddyfile are written.
@@ -147,11 +154,56 @@ func readCertificate() string {
 	return strings.Join(lines, "\n")
 }
 
-func InstallationNode() error {
-	return txn.Run("nginxnode", installationNode)
+// nginxTail finishes the nginx service: the shared directories and the command.
+const nginxTail = `      - /dev/shm:/dev/shm:rw
+      - /var/www/html:/var/www/html:ro
+    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
+`
+
+// buildCompose assembles the node's docker-compose.yml. nginx continues the
+// open volumes list of its service after the certificate mounts the
+// certificate step returned; HAProxy replaces the service with its own and
+// the selfsteal site. The node mounts the certificate files for Hysteria2
+// either way.
+func buildCompose(kind proxy.Kind, certMounts, secretKey, certFullchain, certPrivkey string) string {
+	head, proxyPart := dockerComposeHead+certMounts, nginxTail
+	if kind == proxy.HAProxy {
+		head, proxyPart = composeBase, proxy.HAProxyServices(certs.HAProxyBundleDir, proxy.Socket)
+	}
+	return head + proxyPart + fmt.Sprintf(`
+  remnanode:
+    image: remnawave/node:latest
+    container_name: remnanode
+    hostname: remnanode
+    <<: [*common, *logging]
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - NODE_PORT=2222
+      - SECRET_KEY=%s
+      # Optional node settings (node 3.4+); uncomment to change:
+      # - SNI_VERIFICATION=true
+      # - NFTABLES_LOGGING=true
+    volumes:
+      - /dev/shm:/dev/shm:rw
+      - %s:%s:ro
+      - %s:%s:ro
+`, secretKey, certFullchain, certFullchain, certPrivkey, certPrivkey)
 }
 
-func installationNode() error {
+// InstallationNode installs a node behind nginx.
+func InstallationNode() error {
+	return txn.Run("nginxnode", func() error { return installationNode(proxy.Nginx) })
+}
+
+// InstallationNodeHAProxy installs a node behind HAProxy: every name is
+// routed by SNI and served over TLS that HAProxy terminates.
+func InstallationNodeHAProxy() error {
+	return txn.Run("nginxnode-haproxy", func() error { return installationNode(proxy.HAProxy) })
+}
+
+func installationNode(kind proxy.Kind) error {
 	// EnsureInstalled bootstraps docker/certbot/ufw and other dependencies
 	// if missing, so this doesn't just fail deep inside a later step with
 	// a confusing error.
@@ -173,7 +225,7 @@ func installationNode() error {
 	// domain - using that returned value directly avoids re-deriving it
 	// from scratch (e.g. from whether a wildcard cert happens to already
 	// be on disk) and ever disagreeing with it.
-	certResult, certErr := certs.HandleCertificates([]string{state.selfstealDomain}, "", "", nodeDir)
+	certResult, certErr := certs.HandleCertificatesFor(kind, []string{state.selfstealDomain}, "", "", nodeDir)
 	if certErr != nil {
 		return certErr
 	}
@@ -187,47 +239,31 @@ func installationNode() error {
 	}
 	certFullchain, certPrivkey := certs.NginxCertPaths(nodeCertDomain)
 
-	// Append the rest of docker-compose.yml.
-	composeTail := fmt.Sprintf(`      - /dev/shm:/dev/shm:rw
-      - /var/www/html:/var/www/html:ro
-    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
-
-  remnanode:
-    image: remnawave/node:latest
-    container_name: remnanode
-    hostname: remnanode
-    <<: [*common, *logging]
-    network_mode: host
-    cap_add:
-      - NET_ADMIN
-    environment:
-      - NODE_PORT=2222
-      - SECRET_KEY=%s
-      # Optional node settings (node 3.4+); uncomment to change:
-      # - SNI_VERIFICATION=true
-      # - NFTABLES_LOGGING=true
-    volumes:
-      - /dev/shm:/dev/shm:rw
-      - %s:%s:ro
-      - %s:%s:ro
-`, state.certificate, certFullchain, certFullchain, certPrivkey, certPrivkey)
-
+	composeText := buildCompose(kind, certResult.ComposeMounts, state.certificate, certFullchain, certPrivkey)
 	composePath := filepath.Join(nodeDir, "docker-compose.yml")
-	if _, err := cfgfile.Write(composePath, dockerComposeHead+certResult.ComposeMounts+composeTail, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
+	if _, err := cfgfile.Write(composePath, composeText, cfgfile.Opts{Kind: cfgfile.KindCompose}); err != nil {
 		return err
 	}
 	_ = cfgfile.EnsureGitignore(filepath.Dir(composePath))
 
-	// Nginx.conf.
-	nginxConf, err := proxy.Must(proxy.Nginx).Node(proxy.Params{
-		SelfstealDomain: state.selfstealDomain, SelfstealCert: nodeCertDomain,
-	})
+	// The proxy's configuration and any extra file of its stack.
+	be := proxy.Must(kind)
+	params := proxy.Params{SelfstealDomain: state.selfstealDomain, SelfstealCert: nodeCertDomain}
+	proxyConf, err := be.Node(params)
 	if err != nil {
 		return err
 	}
-
-	if _, err := cfgfile.Write(filepath.Join(nodeDir, "nginx.conf"), nginxConf, cfgfile.Opts{Kind: cfgfile.KindNginx}); err != nil {
+	confKind := cfgfile.KindNginx
+	if kind == proxy.HAProxy {
+		confKind = cfgfile.KindRaw
+	}
+	if _, err := cfgfile.Write(filepath.Join(nodeDir, be.ConfigFile()), proxyConf, cfgfile.Opts{Kind: confKind}); err != nil {
 		return err
+	}
+	for name, content := range be.Extra(params) {
+		if _, err := cfgfile.Write(filepath.Join(nodeDir, name), content, cfgfile.Opts{Kind: cfgfile.KindRaw}); err != nil {
+			return err
+		}
 	}
 
 	// Ufw (best-effort: this is a nice-to-have hardening step, not worth

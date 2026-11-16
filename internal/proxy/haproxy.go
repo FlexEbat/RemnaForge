@@ -198,8 +198,11 @@ const selfstealSite = `server {
 `
 
 // Extra returns the files besides haproxy.cfg that the stack needs: the
-// config of the static selfsteal site.
-func (haproxy) Extra(Params) map[string]string {
+// config of the static selfsteal site, when this host serves one.
+func (haproxy) Extra(p Params) map[string]string {
+	if p.SelfstealDomain == "" {
+		return nil
+	}
 	return map[string]string{"selfsteal.conf": selfstealSite}
 }
 
