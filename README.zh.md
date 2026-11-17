@@ -2,7 +2,7 @@
 
 # RemnaForge
 
-RemnaForge 通过交互式文本菜单在服务器上安装和维护 [Remnawave](https://docs.rw/)：面板、节点，或两者同时安装，后端使用 Nginx 或 Caddy。使用 Go 编写，以单个二进制文件分发，无需外部运行时。
+RemnaForge 通过交互式文本菜单在服务器上安装和维护 [Remnawave](https://docs.rw/)：面板、节点，或两者同时安装，后端使用 Nginx、Caddy 或 HAProxy。使用 Go 编写，以单个二进制文件分发，无需外部运行时。
 
 ## 目录
 
@@ -81,7 +81,20 @@ VLESS 协议及其相关机制（XTLS、REALITY、VLESS Encryption）发展很�
 
 ## 安装
 
-目前还没有预编译的二进制文件或安装包。
+每个[发布版本](https://github.com/FlexEbat/RemnaForge/releases)都附带 Linux（amd64 和 arm64）的预编译二进制文件。压缩包没有签名。`checksums.txt` 来自同一个发布版本，所以下面的校验只能发现下载损坏，无法发现发布本身被篡改；以 root 运行任何内容之前，请先阅读发布页面。
+
+```bash
+ARCH=$(uname -m); case "$ARCH" in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; *) echo "unsupported: $ARCH"; exit 1;; esac
+VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/FlexEbat/RemnaForge/releases/latest | sed 's#.*/v##')
+BASE=https://github.com/FlexEbat/RemnaForge/releases/download/v${VERSION}
+curl -fsSLO ${BASE}/remnaforge_${VERSION}_linux_${ARCH}.tar.gz
+curl -fsSLO ${BASE}/checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+tar -xzf remnaforge_${VERSION}_linux_${ARCH}.tar.gz remnaforge
+sudo install -m 0755 remnaforge /usr/local/bin/remnaforge
+```
+
+或者从源码构建：
 
 ```bash
 git clone https://github.com/FlexEbat/RemnaForge.git
