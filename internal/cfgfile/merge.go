@@ -350,3 +350,72 @@ func MergeLines(existing, proposed string) string {
 	}
 	return out
 }
+
+// haproxySection is one top-level section of a haproxy.cfg: its header line
+// and everything up to the next header, with the comment lines that lead it.
+type haproxySection struct {
+	key  string // the header with its spaces collapsed, such as "frontend https_in"
+	text string
+}
+
+// endMarkerRE matches the closing marker of a block that RemnaForge adds to
+// a file ("# remnaforge:8443 end"). It belongs to the section before it.
+var endMarkerRE = regexp.MustCompile(`^#\s*remnaforge:\S+\s+end\s*$`)
+
+// scanHAProxy splits a haproxy.cfg into sections. A section starts at a line
+// in column 0 that is not a comment; indented lines and blank lines belong
+// to the section above, and comment lines in column 0 lead the section
+// below, except a closing RemnaForge marker, which stays with its block.
+func scanHAProxy(conf string) []haproxySection {
+	var sections []haproxySection
+	var pending []string // comment and blank lines waiting for their section
+	cur := -1
+	flush := func(into int) {
+		if into >= 0 {
+			sections[into].text += strings.Join(pending, "")
+			pending = nil
+		}
+	}
+	for _, line := range strings.SplitAfter(conf, "\n") {
+		if line == "" {
+			continue
+		}
+		trimmed := strings.TrimRight(line, "\r\n")
+		switch {
+		case strings.TrimSpace(trimmed) == "" || strings.HasPrefix(trimmed, "#") && !endMarkerRE.MatchString(trimmed):
+			pending = append(pending, line)
+		case endMarkerRE.MatchString(trimmed):
+			pending = append(pending, line)
+			flush(cur)
+		case line[0] == ' ' || line[0] == '\t':
+			pending = append(pending, line)
+			flush(cur)
+		default:
+			// A header. What is waiting leads it.
+			sections = append(sections, haproxySection{key: collapse(trimmed), text: strings.Join(pending, "") + line})
+			pending = nil
+			cur = len(sections) - 1
+		}
+	}
+	flush(cur)
+	return sections
+}
+
+// MergeHAProxy puts the proposed haproxy.cfg first and appends every section
+// of the existing file that the proposed one does not define, such as a
+// frontend the operator added or the 8443 block of the panel access menu. A
+// section both define comes from the proposed file.
+func MergeHAProxy(existing, proposed string) string {
+	have := map[string]bool{}
+	for _, s := range scanHAProxy(proposed) {
+		have[s.key] = true
+	}
+	out := ensureNewline(proposed)
+	for _, s := range scanHAProxy(existing) {
+		if have[s.key] {
+			continue
+		}
+		out += "\n" + ensureNewline(strings.TrimLeft(s.text, "\n"))
+	}
+	return out
+}

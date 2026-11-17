@@ -255,7 +255,7 @@ func installationNode(kind proxy.Kind) error {
 	}
 	confKind := cfgfile.KindNginx
 	if kind == proxy.HAProxy {
-		confKind = cfgfile.KindRaw
+		confKind = cfgfile.KindHAProxy
 	}
 	if _, err := cfgfile.Write(filepath.Join(nodeDir, be.ConfigFile()), proxyConf, cfgfile.Opts{Kind: confKind}); err != nil {
 		return err

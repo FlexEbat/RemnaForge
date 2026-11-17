@@ -859,3 +859,128 @@ func TestMergeLines(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+const haproxyProposed = `global
+    maxconn 20000
+
+defaults
+    mode http
+    timeout client 60s
+
+frontend https_in
+    bind :443 ssl crt /etc/haproxy/certs/
+    use_backend panel if { ssl_fc_sni -i panel.example.org }
+    http-request silent-drop
+
+backend panel
+    server remnawave 127.0.0.1:3000
+`
+
+const haproxyUser = `global
+    maxconn 99
+
+# my own stats page
+frontend stats
+    mode http
+    bind 127.0.0.1:8404
+    stats enable
+
+frontend https_in
+    bind :443 ssl crt /etc/haproxy/certs/
+    use_backend mine if always_true
+
+# remnaforge:8443 begin
+frontend panel_8443
+    bind :8443 ssl crt /etc/haproxy/certs/
+    http-request silent-drop
+# remnaforge:8443 end
+
+backend mine
+    server a 10.0.0.1:80
+`
+
+func TestMergeHAProxy(t *testing.T) {
+	got := MergeHAProxy(haproxyUser, haproxyProposed)
+	if strings.Count(got, "maxconn") != 1 || !strings.Contains(got, "maxconn 20000") {
+		t.Errorf("the installer's global section must win:\n%s", got)
+	}
+	if strings.Contains(got, "use_backend mine") || !strings.Contains(got, "ssl_fc_sni -i panel.example.org") {
+		t.Errorf("the installer's https_in frontend must win:\n%s", got)
+	}
+	for _, kept := range []string{"# my own stats page\nfrontend stats", "stats enable", "backend mine", "server a 10.0.0.1:80"} {
+		if !strings.Contains(got, kept) {
+			t.Errorf("the operator's %q was lost:\n%s", kept, got)
+		}
+	}
+	// The block of the panel access menu survives with both its markers, or
+	// closing the access later could not find it.
+	if strings.Count(got, "# remnaforge:8443 begin") != 1 || strings.Count(got, "# remnaforge:8443 end") != 1 {
+		t.Errorf("the 8443 block lost a marker:\n%s", got)
+	}
+	begin, end := strings.Index(got, "# remnaforge:8443 begin"), strings.Index(got, "# remnaforge:8443 end")
+	if begin > end || !strings.Contains(got[begin:end], "frontend panel_8443") {
+		t.Errorf("the 8443 markers must enclose its frontend:\n%s", got)
+	}
+	if again := MergeHAProxy(got, haproxyProposed); again != got {
+		t.Errorf("merge is not stable:\n--- first\n%s\n--- second\n%s", got, again)
+	}
+}
+
+func TestMergeHAProxyWithoutAnythingToKeep(t *testing.T) {
+	if got := MergeHAProxy(haproxyProposed, haproxyProposed); got != haproxyProposed {
+		t.Errorf("an identical file must come back unchanged:\n%s", got)
+	}
+	if got := MergeHAProxy("", haproxyProposed); got != haproxyProposed {
+		t.Errorf("an empty file must give the proposal:\n%s", got)
+	}
+}
+
+func TestMergeHAProxySectionKeyIgnoresSpacing(t *testing.T) {
+	user := "frontend   https_in\n    bind :1\n"
+	got := MergeHAProxy(user, haproxyProposed)
+	if strings.Count(got, "frontend") != 1 {
+		t.Errorf("the same section with different spacing must meet its proposal:\n%s", got)
+	}
+}
+
+func TestWriteMergesHAProxyIntoAnEditedFile(t *testing.T) {
+	dir, a := setup(t)
+	path := filepath.Join(dir, "haproxy.cfg")
+	if err := os.WriteFile(path, []byte(haproxyUser), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a.answer = MergeIt
+	mustWrite(t, path, haproxyProposed, Opts{Kind: KindHAProxy})
+	if a.calls != 1 || !a.canMerge {
+		t.Errorf("the operator must be asked once, with the merge offered: calls %d, canMerge %v", a.calls, a.canMerge)
+	}
+	got := read(t, path)
+	if !strings.Contains(got, "backend mine") || !strings.Contains(got, "maxconn 20000") ||
+		strings.Count(got, "# remnaforge:8443 end") != 1 {
+		t.Errorf("the merge must keep the operator's sections and take the installer's:\n%s", got)
+	}
+}
+
+// The closing marker must stay with its block even when the section after
+// the block is one the installer redefines; otherwise the begin marker would
+// be left alone and the access menu could not remove the block.
+func TestMergeHAProxyKeepsTheClosingMarkerWithItsBlock(t *testing.T) {
+	user := `frontend https_in
+    bind :443
+
+# remnaforge:8443 begin
+frontend panel_8443
+    bind :8443
+# remnaforge:8443 end
+
+backend panel
+    server old 1.1.1.1:3000
+`
+	got := MergeHAProxy(user, haproxyProposed)
+	if strings.Count(got, "# remnaforge:8443 begin") != 1 || strings.Count(got, "# remnaforge:8443 end") != 1 {
+		t.Errorf("a marker was lost:\n%s", got)
+	}
+	if strings.Contains(got, "1.1.1.1") {
+		t.Errorf("the installer's backend must replace the old one:\n%s", got)
+	}
+}
