@@ -60,6 +60,9 @@ func detectWebserver(dir string) string {
 	return ""
 }
 
+// portChecker is portInUse; tests replace it.
+var portChecker = portInUse
+
 func portInUse(port string) (inUse bool, checked bool) {
 	if out, err := execx.Command("ss", "-tuln").Output(); err == nil {
 		return strings.Contains(string(out), ":"+port), true
@@ -191,148 +194,6 @@ func removeLineInBlock(text, blockStart, removeSubstr string) string {
 	return strings.Join(out, "\n")
 }
 
-func openPanelAccess() {
-	dir, ok := findInstallDir()
-	if !ok {
-		return
-	}
-
-	webserver := detectWebserver(dir)
-	if webserver == "" {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, fmt.Sprintf(i18n.T("CONFIG_NOT_FOUND"), dir), ui.ColorReset)
-		return
-	}
-	if webserver == "caddy" {
-		openPanelAccessCaddy(dir)
-		return
-	}
-	if webserver == "haproxy" {
-		openPanelAccessHAProxy(dir)
-		return
-	}
-
-	confPath := filepath.Join(dir, "nginx.conf")
-	data, err := os.ReadFile(confPath)
-	if err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_ERROR"), ui.ColorReset)
-		return
-	}
-	conf := string(data)
-
-	panelDomain := findPanelServerDomain(conf)
-	cookie1, cookie2 := findAuthCookies(conf)
-	if panelDomain == "" || cookie1 == "" || cookie2 == "" {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_ERROR"), ui.ColorReset)
-		return
-	}
-
-	if inUse, checked := portInUse("8443"); !checked {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NO_PORT_CHECK_TOOLS"), ui.ColorReset)
-		return
-	} else if inUse {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("PORT_8443_IN_USE"), ui.ColorReset)
-		return
-	}
-
-	updated, err := addListen8443(conf, panelDomain)
-	if err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
-		return
-	}
-	if err := cfgfile.Replace(confPath, updated, cfgfile.Opts{}); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
-		return
-	}
-
-	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	_ = composeRun(dir, "down", "remnawave-nginx")
-	_ = composeRun(dir, "up", "-d", "remnawave-nginx")
-
-	_ = execx.Command("ufw", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
-	_ = execx.Command("ufw", "reload").Run()
-
-	panelLink := fmt.Sprintf("https://%s:8443/auth/login?%s=%s", panelDomain, cookie1, cookie2)
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("OPEN_PANEL_LINK"), ui.ColorReset)
-	fmt.Printf("%s%s%s\n", ui.ColorWhite, panelLink, ui.ColorReset)
-	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("PORT_8443_WARNING"), ui.ColorReset)
-}
-
-// openPanelAccessCaddy is the Caddy branch of opening temporary panel
-// access. Unlike the Nginx branch above, all the Caddyfile pattern
-// matching here operates on the literal text "{$PANEL_DOMAIN}" (Caddy's
-// own env-var reference, written verbatim by internal/caddypanelonly
-// and internal/caddypanelfull, never substituted at file-creation
-// time), not on the real domain value. The real domain is only needed
-// for the final panel_link, and is read separately from
-// docker-compose.yml's PANEL_DOMAIN environment entry.
-func openPanelAccessCaddy(dir string) {
-	composeData, err := os.ReadFile(filepath.Join(dir, "docker-compose.yml"))
-	if err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CADDY_CONF_ERROR"), ui.ColorReset)
-		return
-	}
-	panelDomain := caddyPanelDomain(string(composeData))
-	if panelDomain == "" {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CADDY_CONF_ERROR"), ui.ColorReset)
-		return
-	}
-
-	caddyfilePath := filepath.Join(dir, "Caddyfile")
-	data, err := os.ReadFile(caddyfilePath)
-	if err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CADDY_CONF_ERROR"), ui.ColorReset)
-		return
-	}
-	caddyfile := string(data)
-
-	if strings.Contains(caddyfile, "https://{$PANEL_DOMAIN}:8443 {") {
-		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("PORT_8443_ALREADY_CONFIGURED"), ui.ColorReset)
-		return
-	}
-
-	if inUse, checked := portInUse("8443"); !checked {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NO_PORT_CHECK_TOOLS"), ui.ColorReset)
-		return
-	} else if inUse {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("PORT_8443_IN_USE"), ui.ColorReset)
-		return
-	}
-
-	caddyfile = strings.ReplaceAll(caddyfile,
-		"redir https://{$PANEL_DOMAIN}{uri} permanent",
-		"redir https://{$PANEL_DOMAIN}:8443{uri} permanent")
-	caddyfile = strings.ReplaceAll(caddyfile,
-		"https://{$PANEL_DOMAIN} {",
-		"https://{$PANEL_DOMAIN}:8443 {")
-	// Removes "bind unix/{$CADDY_SOCKET_PATH}" from the now-renamed block
-	// if present (internal/caddypanelfull's Caddyfile has it, since it
-	// wraps every domain behind the shared proxy_protocol/tls unix
-	// socket; internal/caddypanelonly's Caddyfile never had one in this
-	// block, so this is a no-op there).
-	caddyfile = removeLineInBlock(caddyfile, "https://{$PANEL_DOMAIN}:8443 {", "bind unix/{$CADDY_SOCKET_PATH}")
-
-	if err := cfgfile.Replace(caddyfilePath, caddyfile, cfgfile.Opts{}); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
-		return
-	}
-
-	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	_ = composeRun(dir, "down", "remnawave-caddy")
-	_ = composeRun(dir, "up", "-d", "remnawave-caddy")
-
-	_ = execx.Command("ufw", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
-	_ = execx.Command("ufw", "reload").Run()
-
-	cookie1, cookie2 := caddyExtractCookies(caddyfile)
-	panelLink := fmt.Sprintf("https://%s:8443/auth/login", panelDomain)
-	if cookie1 != "" && cookie2 != "" {
-		panelLink = fmt.Sprintf("%s?%s=%s", panelLink, cookie1, cookie2)
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("OPEN_PANEL_LINK"), ui.ColorReset)
-	fmt.Printf("%s%s%s\n", ui.ColorWhite, panelLink, ui.ColorReset)
-	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("PORT_8443_WARNING"), ui.ColorReset)
-}
-
 // addListen8443 inserts "listen 8443 ssl;" right after the panel domain's
 // server_name line (stripping any stale "listen 8443 ssl;" from that
 // block first, so re-running this is idempotent, then inserting a
@@ -362,64 +223,6 @@ func addListen8443(conf, panelDomain string) (string, error) {
 	return before + "\n    listen 8443 ssl;" + rest + after, nil
 }
 
-func closePanelAccess() {
-	dir, ok := findInstallDir()
-	if !ok {
-		return
-	}
-
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("PORT_8443_CLOSE"), ui.ColorReset)
-
-	webserver := detectWebserver(dir)
-	if webserver == "" {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, fmt.Sprintf(i18n.T("CONFIG_NOT_FOUND"), dir), ui.ColorReset)
-		return
-	}
-	if webserver == "caddy" {
-		closePanelAccessCaddy(dir)
-		return
-	}
-	if webserver == "haproxy" {
-		closePanelAccessHAProxy(dir)
-		return
-	}
-
-	confPath := filepath.Join(dir, "nginx.conf")
-	data, err := os.ReadFile(confPath)
-	if err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_ERROR"), ui.ColorReset)
-		return
-	}
-	conf := string(data)
-
-	panelDomain := findPanelServerDomain(conf)
-	if panelDomain == "" {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_ERROR"), ui.ColorReset)
-		return
-	}
-
-	// Removal is scoped to the domain's own server block, found with the
-	// same brace-depth-aware lookup as addListen8443.
-	block, found := findServerBlockForDomain(conf, panelDomain)
-	if found && listen8443RE.MatchString(block.Body(conf)) {
-		before := conf[:block.BodyStart+1]
-		body := listen8443RE.ReplaceAllString(block.Body(conf), "")
-		after := conf[block.BodyEnd-1:]
-		updated := before + body + after
-
-		if err := cfgfile.Replace(confPath, updated, cfgfile.Opts{}); err != nil {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
-			return
-		}
-		_ = composeRun(dir, "down", "remnawave-nginx")
-		_ = composeRun(dir, "up", "-d", "remnawave-nginx")
-	} else {
-		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("PORT_8443_NOT_CONFIGURED"), ui.ColorReset)
-	}
-
-	closePort8443UFW()
-}
-
 // closePort8443UFW is the shared trailing ufw cleanup used by both the
 // Nginx and Caddy branches of closing temporary panel access, factored
 // into one function instead of duplicated.
@@ -437,118 +240,308 @@ func closePort8443UFW() {
 	}
 }
 
-// closePanelAccessCaddy is the Caddy branch of closing temporary panel
-// access. As in openPanelAccessCaddy, the Caddyfile edits match the
-// literal "{$PANEL_DOMAIN}" placeholder text, not the real domain.
-//
-// The "bind unix/{$CADDY_SOCKET_PATH}" line is only reinserted when the
-// install's docker-compose.yml defines CADDY_SOCKET_PATH, which only
-// the panel+node flow does.
-func closePanelAccessCaddy(dir string) {
-	composeData, err := os.ReadFile(filepath.Join(dir, "docker-compose.yml"))
-	if err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CADDY_CONF_ERROR"), ui.ColorReset)
-		return
-	}
-	panelDomain := caddyPanelDomain(string(composeData))
-	if panelDomain == "" {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CADDY_CONF_ERROR"), ui.ColorReset)
-		return
-	}
-	hasCaddySocketPath := strings.Contains(string(composeData), "CADDY_SOCKET_PATH")
-
-	caddyfilePath := filepath.Join(dir, "Caddyfile")
-	data, err := os.ReadFile(caddyfilePath)
-	if err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("CADDY_CONF_ERROR"), ui.ColorReset)
-		return
-	}
-	caddyfile := string(data)
-
-	if strings.Contains(caddyfile, "https://{$PANEL_DOMAIN}:8443 {") {
-		caddyfile = strings.ReplaceAll(caddyfile,
-			"https://{$PANEL_DOMAIN}:8443 {",
-			"https://{$PANEL_DOMAIN} {")
-		if hasCaddySocketPath {
-			caddyfile = addLineAfter(caddyfile,
-				"https://{$PANEL_DOMAIN} {",
-				"    bind unix/{$CADDY_SOCKET_PATH}")
-		}
-		caddyfile = strings.ReplaceAll(caddyfile,
-			"redir https://{$PANEL_DOMAIN}:8443{uri} permanent",
-			"redir https://{$PANEL_DOMAIN}{uri} permanent")
-
-		if err := cfgfile.Replace(caddyfilePath, caddyfile, cfgfile.Opts{}); err != nil {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
-			return
-		}
-		_ = composeRun(dir, "down", "remnawave-caddy")
-		_ = composeRun(dir, "up", "-d", "remnawave-caddy")
-	} else {
-		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("PORT_8443_NOT_CONFIGURED"), ui.ColorReset)
-	}
-
-	closePort8443UFW()
+// accessPlan is what one proxy decides when temporary panel access on 8443
+// is opened or closed. Everything after that decision is the same for all
+// of them and lives in openPanelAccess and closePanelAccess.
+type accessPlan struct {
+	confPath string // the file to replace
+	updated  string // its new text
+	link     string // the panel link to print after opening
+	// nothingToDo is the i18n key of a message that replaces the whole
+	// change, such as "already configured".
+	nothingToDo string
 }
 
-// openPanelAccessHAProxy adds the 8443 frontend to haproxy.cfg and reloads
-// HAProxy with SIGUSR2, which binds the new port without cutting a
-// connection. A configuration HAProxy cannot parse leaves the old workers
-// running.
-func openPanelAccessHAProxy(dir string) {
-	confPath := filepath.Join(dir, "haproxy.cfg")
-	data, err := os.ReadFile(confPath)
+// accessProxy is what differs between the proxies: how the configuration
+// is read and edited, and how the proxy is restarted.
+type accessProxy struct {
+	// open and close read dir and return the plan. They print their own
+	// errors and return false when nothing can be done.
+	open, close func(dir string) (accessPlan, bool)
+	// restart makes the proxy read its new configuration.
+	restart func(dir string)
+}
+
+func accessFor(webserver string) accessProxy {
+	switch webserver {
+	case "caddy":
+		return accessProxy{open: caddyOpenPlan, close: caddyClosePlan, restart: restartByRecreate("remnawave-caddy")}
+	case "haproxy":
+		// SIGUSR2 starts a new worker and retires the old one, so no
+		// connection is cut, and a configuration HAProxy cannot parse
+		// leaves the old workers running.
+		return accessProxy{open: haproxyOpenPlan, close: haproxyClosePlan, restart: func(dir string) {
+			_ = composeRun(dir, "kill", "-s", "USR2", "remnawave-haproxy")
+		}}
+	}
+	return accessProxy{open: nginxOpenPlan, close: nginxClosePlan, restart: restartByRecreate("remnawave-nginx")}
+}
+
+func restartByRecreate(service string) func(string) {
+	return func(dir string) {
+		_ = composeRun(dir, "down", service)
+		_ = composeRun(dir, "up", "-d", service)
+	}
+}
+
+func printErr(key string) {
+	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T(key), ui.ColorReset)
+}
+
+func printNote(key string) {
+	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T(key), ui.ColorReset)
+}
+
+// port8443Free reports whether the plan may go ahead. Port 8443 in use is
+// fine when it is ours already (ours), and an error otherwise.
+func port8443Free(ours bool) bool {
+	inUse, checked := portChecker("8443")
+	switch {
+	case !checked:
+		printErr("NO_PORT_CHECK_TOOLS")
+		return false
+	case inUse && !ours:
+		printErr("PORT_8443_IN_USE")
+		return false
+	}
+	return true
+}
+
+// readConf reads a configuration file, printing errKey when it cannot.
+func readConf(path, errKey string) (string, bool) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_ERROR"), ui.ColorReset)
+		printErr(errKey)
+		return "", false
+	}
+	return string(data), true
+}
+
+func openPanelAccess() {
+	dir, ok := findInstallDir()
+	if !ok {
 		return
 	}
-	panelDomain, cookie1, cookie2 := haproxyPanel(string(data))
-	if inUse, checked := portInUse("8443"); !checked {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NO_PORT_CHECK_TOOLS"), ui.ColorReset)
-		return
-	} else if inUse && !haproxyHas8443(string(data)) {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("PORT_8443_IN_USE"), ui.ColorReset)
+	webserver := detectWebserver(dir)
+	if webserver == "" {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, fmt.Sprintf(i18n.T("CONFIG_NOT_FOUND"), dir), ui.ColorReset)
 		return
 	}
-	updated, err := addHAProxy8443(string(data))
-	if err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_ERROR"), ui.ColorReset)
+	p := accessFor(webserver)
+	plan, ok := p.open(dir)
+	if !ok {
 		return
 	}
-	if err := cfgfile.Replace(confPath, updated, cfgfile.Opts{}); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
+	if plan.nothingToDo != "" {
+		printNote(plan.nothingToDo)
+		return
+	}
+	if err := cfgfile.Replace(plan.confPath, plan.updated, cfgfile.Opts{}); err != nil {
+		printErr("NGINX_CONF_MODIFY_FAILED")
 		return
 	}
 
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	_ = composeRun(dir, "kill", "-s", "USR2", "remnawave-haproxy")
+	p.restart(dir)
 
 	_ = execx.Command("ufw", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
 	_ = execx.Command("ufw", "reload").Run()
 
-	panelLink := fmt.Sprintf("https://%s:8443/auth/login?%s=%s", panelDomain, cookie1, cookie2)
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("OPEN_PANEL_LINK"), ui.ColorReset)
-	fmt.Printf("%s%s%s\n", ui.ColorWhite, panelLink, ui.ColorReset)
-	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("PORT_8443_WARNING"), ui.ColorReset)
+	printNote("OPEN_PANEL_LINK")
+	fmt.Printf("%s%s%s\n", ui.ColorWhite, plan.link, ui.ColorReset)
+	printErr("PORT_8443_WARNING")
 }
 
-// closePanelAccessHAProxy removes the block openPanelAccessHAProxy added.
-func closePanelAccessHAProxy(dir string) {
-	confPath := filepath.Join(dir, "haproxy.cfg")
-	data, err := os.ReadFile(confPath)
-	if err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_ERROR"), ui.ColorReset)
+func closePanelAccess() {
+	dir, ok := findInstallDir()
+	if !ok {
 		return
 	}
-	updated, found := removeHAProxy8443(string(data))
-	if !found {
-		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("PORT_8443_NOT_CONFIGURED"), ui.ColorReset)
+	printNote("PORT_8443_CLOSE")
+
+	webserver := detectWebserver(dir)
+	if webserver == "" {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, fmt.Sprintf(i18n.T("CONFIG_NOT_FOUND"), dir), ui.ColorReset)
+		return
+	}
+	p := accessFor(webserver)
+	plan, ok := p.close(dir)
+	if !ok {
+		return
+	}
+	if plan.nothingToDo != "" {
+		printNote(plan.nothingToDo)
 	} else {
-		if err := cfgfile.Replace(confPath, updated, cfgfile.Opts{}); err != nil {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NGINX_CONF_MODIFY_FAILED"), ui.ColorReset)
+		if err := cfgfile.Replace(plan.confPath, plan.updated, cfgfile.Opts{}); err != nil {
+			printErr("NGINX_CONF_MODIFY_FAILED")
 			return
 		}
-		_ = composeRun(dir, "kill", "-s", "USR2", "remnawave-haproxy")
+		p.restart(dir)
 	}
 	closePort8443UFW()
+}
+
+// nginxOpenPlan adds "listen 8443 ssl;" to the panel's server block.
+func nginxOpenPlan(dir string) (accessPlan, bool) {
+	confPath := filepath.Join(dir, "nginx.conf")
+	conf, ok := readConf(confPath, "NGINX_CONF_ERROR")
+	if !ok {
+		return accessPlan{}, false
+	}
+	panelDomain := findPanelServerDomain(conf)
+	cookie1, cookie2 := findAuthCookies(conf)
+	if panelDomain == "" || cookie1 == "" || cookie2 == "" {
+		printErr("NGINX_CONF_ERROR")
+		return accessPlan{}, false
+	}
+	if !port8443Free(false) {
+		return accessPlan{}, false
+	}
+	updated, err := addListen8443(conf, panelDomain)
+	if err != nil {
+		printErr("NGINX_CONF_MODIFY_FAILED")
+		return accessPlan{}, false
+	}
+	return accessPlan{
+		confPath: confPath, updated: updated,
+		link: fmt.Sprintf("https://%s:8443/auth/login?%s=%s", panelDomain, cookie1, cookie2),
+	}, true
+}
+
+// nginxClosePlan removes the listen line from the panel's server block.
+// Removal is scoped to the domain's own block, found with the same
+// brace-depth-aware lookup as addListen8443.
+func nginxClosePlan(dir string) (accessPlan, bool) {
+	confPath := filepath.Join(dir, "nginx.conf")
+	conf, ok := readConf(confPath, "NGINX_CONF_ERROR")
+	if !ok {
+		return accessPlan{}, false
+	}
+	panelDomain := findPanelServerDomain(conf)
+	if panelDomain == "" {
+		printErr("NGINX_CONF_ERROR")
+		return accessPlan{}, false
+	}
+	block, found := findServerBlockForDomain(conf, panelDomain)
+	if !found || !listen8443RE.MatchString(block.Body(conf)) {
+		return accessPlan{nothingToDo: "PORT_8443_NOT_CONFIGURED"}, true
+	}
+	body := listen8443RE.ReplaceAllString(block.Body(conf), "")
+	return accessPlan{confPath: confPath, updated: conf[:block.BodyStart+1] + body + conf[block.BodyEnd-1:]}, true
+}
+
+// caddyOpenPlan moves the panel's site to 8443. All the Caddyfile pattern
+// matching works on the literal text "{$PANEL_DOMAIN}" (Caddy's own
+// env-var reference, written verbatim by internal/caddypanelonly and
+// internal/caddypanelfull, never substituted at file-creation time), not on
+// the real domain, which is only needed for the link and is read from
+// docker-compose.yml's PANEL_DOMAIN environment entry.
+func caddyOpenPlan(dir string) (accessPlan, bool) {
+	composeData, ok := readConf(filepath.Join(dir, "docker-compose.yml"), "CADDY_CONF_ERROR")
+	if !ok {
+		return accessPlan{}, false
+	}
+	panelDomain := caddyPanelDomain(composeData)
+	if panelDomain == "" {
+		printErr("CADDY_CONF_ERROR")
+		return accessPlan{}, false
+	}
+	caddyfilePath := filepath.Join(dir, "Caddyfile")
+	caddyfile, ok := readConf(caddyfilePath, "CADDY_CONF_ERROR")
+	if !ok {
+		return accessPlan{}, false
+	}
+	if strings.Contains(caddyfile, "https://{$PANEL_DOMAIN}:8443 {") {
+		return accessPlan{nothingToDo: "PORT_8443_ALREADY_CONFIGURED"}, true
+	}
+	if !port8443Free(false) {
+		return accessPlan{}, false
+	}
+	caddyfile = strings.ReplaceAll(caddyfile,
+		"redir https://{$PANEL_DOMAIN}{uri} permanent",
+		"redir https://{$PANEL_DOMAIN}:8443{uri} permanent")
+	caddyfile = strings.ReplaceAll(caddyfile,
+		"https://{$PANEL_DOMAIN} {",
+		"https://{$PANEL_DOMAIN}:8443 {")
+	// Removes "bind unix/{$CADDY_SOCKET_PATH}" from the now-renamed block if
+	// present (internal/caddypanelfull's Caddyfile has it, since it wraps
+	// every domain behind the shared proxy_protocol/tls unix socket;
+	// internal/caddypanelonly's never had one in this block, so this is a
+	// no-op there).
+	caddyfile = removeLineInBlock(caddyfile, "https://{$PANEL_DOMAIN}:8443 {", "bind unix/{$CADDY_SOCKET_PATH}")
+
+	link := fmt.Sprintf("https://%s:8443/auth/login", panelDomain)
+	if c1, c2 := caddyExtractCookies(caddyfile); c1 != "" && c2 != "" {
+		link = fmt.Sprintf("%s?%s=%s", link, c1, c2)
+	}
+	return accessPlan{confPath: caddyfilePath, updated: caddyfile, link: link}, true
+}
+
+// caddyClosePlan moves the panel's site back to 443. The
+// "bind unix/{$CADDY_SOCKET_PATH}" line is only reinserted when the
+// install's docker-compose.yml defines CADDY_SOCKET_PATH, which only the
+// panel+node flow does.
+func caddyClosePlan(dir string) (accessPlan, bool) {
+	composeData, ok := readConf(filepath.Join(dir, "docker-compose.yml"), "CADDY_CONF_ERROR")
+	if !ok {
+		return accessPlan{}, false
+	}
+	if caddyPanelDomain(composeData) == "" {
+		printErr("CADDY_CONF_ERROR")
+		return accessPlan{}, false
+	}
+	hasCaddySocketPath := strings.Contains(composeData, "CADDY_SOCKET_PATH")
+
+	caddyfilePath := filepath.Join(dir, "Caddyfile")
+	caddyfile, ok := readConf(caddyfilePath, "CADDY_CONF_ERROR")
+	if !ok {
+		return accessPlan{}, false
+	}
+	if !strings.Contains(caddyfile, "https://{$PANEL_DOMAIN}:8443 {") {
+		return accessPlan{nothingToDo: "PORT_8443_NOT_CONFIGURED"}, true
+	}
+	caddyfile = strings.ReplaceAll(caddyfile, "https://{$PANEL_DOMAIN}:8443 {", "https://{$PANEL_DOMAIN} {")
+	if hasCaddySocketPath {
+		caddyfile = addLineAfter(caddyfile, "https://{$PANEL_DOMAIN} {", "    bind unix/{$CADDY_SOCKET_PATH}")
+	}
+	caddyfile = strings.ReplaceAll(caddyfile,
+		"redir https://{$PANEL_DOMAIN}:8443{uri} permanent",
+		"redir https://{$PANEL_DOMAIN}{uri} permanent")
+	return accessPlan{confPath: caddyfilePath, updated: caddyfile}, true
+}
+
+// haproxyOpenPlan adds the 8443 frontend between its two marker lines.
+func haproxyOpenPlan(dir string) (accessPlan, bool) {
+	confPath := filepath.Join(dir, "haproxy.cfg")
+	conf, ok := readConf(confPath, "NGINX_CONF_ERROR")
+	if !ok {
+		return accessPlan{}, false
+	}
+	panelDomain, cookie1, cookie2 := haproxyPanel(conf)
+	if !port8443Free(haproxyHas8443(conf)) {
+		return accessPlan{}, false
+	}
+	updated, err := addHAProxy8443(conf)
+	if err != nil {
+		printErr("NGINX_CONF_ERROR")
+		return accessPlan{}, false
+	}
+	return accessPlan{
+		confPath: confPath, updated: updated,
+		link: fmt.Sprintf("https://%s:8443/auth/login?%s=%s", panelDomain, cookie1, cookie2),
+	}, true
+}
+
+// haproxyClosePlan removes the block haproxyOpenPlan added.
+func haproxyClosePlan(dir string) (accessPlan, bool) {
+	confPath := filepath.Join(dir, "haproxy.cfg")
+	conf, ok := readConf(confPath, "NGINX_CONF_ERROR")
+	if !ok {
+		return accessPlan{}, false
+	}
+	updated, found := removeHAProxy8443(conf)
+	if !found {
+		return accessPlan{nothingToDo: "PORT_8443_NOT_CONFIGURED"}, true
+	}
+	return accessPlan{confPath: confPath, updated: updated}, true
 }

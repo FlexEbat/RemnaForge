@@ -25,6 +25,8 @@ const (
 	KindNginx
 	// KindCaddy is a Caddyfile, merged by top-level block.
 	KindCaddy
+	// KindHAProxy is a haproxy.cfg, merged by top-level section.
+	KindHAProxy
 	// KindCompose is a docker-compose.yml, merged by service, network and volume.
 	KindCompose
 	// KindLines is a file of independent lines (.gitignore), merged by line.
@@ -233,6 +235,8 @@ func merged(kind Kind, existing, proposed string) (string, bool) {
 		return MergeNginx(existing, proposed), true
 	case KindCaddy:
 		return MergeCaddy(existing, proposed), true
+	case KindHAProxy:
+		return MergeHAProxy(existing, proposed), true
 	case KindCompose:
 		return MergeCompose(existing, proposed), true
 	case KindLines:
