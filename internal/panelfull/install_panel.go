@@ -19,6 +19,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/provision"
 	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
@@ -473,75 +474,23 @@ func installationPanelNode(kind proxy.Kind) error {
 		return err
 	}
 
-	// Register the superadmin account.
-	token := api.RegisterRemnawave(domainURL, st.superadminUser, st.superadminPass, "")
-	if token == "" {
-		return fmt.Errorf("%s", i18n.T("ERROR_REGISTER"))
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("REGISTRATION_SUCCESS"), ui.ColorReset)
-
-	// Fetch the real public key and patch it into
-	// docker-compose.yml's remnanode SECRET_KEY. This is the key
-	// difference from panelonly: the node is co-located here, so it
-	// needs its real key, not just a config-profile record.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_PUBLIC_KEY"), ui.ColorReset)
-	time.Sleep(1 * time.Second)
-	if err := api.GetPublicKey(domainURL, token, targetDir); err != nil {
-		return err
-	}
-
-	// Generate xray keys.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GENERATE_KEYS"), ui.ColorReset)
-	time.Sleep(1 * time.Second)
-	privateKey := api.GenerateXrayKeys(domainURL, token)
-	if privateKey == "" {
-		return fmt.Errorf("%s", i18n.T("ERROR_GENERATE_KEYS"))
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GENERATE_KEYS_SUCCESS"), ui.ColorReset)
-
-	// Delete the default config profile.
-	_ = api.DeleteConfigProfile(domainURL, token, "")
-
-	// Create our config profile. Behind HAProxy there is no Reality: the
+	// Provision the panel through its API. The node is co-located, so the
+	// panel's key goes into its compose entry and the node keeps the default
+	// docker network address. Behind HAProxy there is no Reality: the
 	// profile carries the TLS inbounds, XHTTP through the SNI routing and
 	// Hysteria2 on UDP 443.
 	profileTag, profileInbounds := "", api.ConfigProfileInbounds{Raw: true}
 	if kind == proxy.HAProxy {
 		profileTag, profileInbounds = "XHTTP-TLS", api.ConfigProfileInbounds{XHTTP: true, Hysteria2: true}
 	}
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, profileTag, certFullchain, certPrivkey, profileInbounds)
-	if configProfileUUID == "" || inboundUUID == "" {
-		return fmt.Errorf("%s", i18n.T("ERROR_CREATE_CONFIG_PROFILE"))
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
-
-	// Create the node without node_address/node_name overrides, unlike
-	// panelonly (which passes SELFSTEAL_DOMAIN as the name), so it gets
-	// CreateNode's own defaults (172.30.0.1 / "Steal"). Those defaults
-	// match the co-located node's actual docker-network address.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_NODE"), ui.ColorReset)
-	if err := api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, "", ""); err != nil {
-		return err
-	}
-
-	// Create the host.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_HOST"), ui.ColorReset)
-	if err := api.CreateHost(domainURL, token, inboundUUID, st.selfstealDomain, configProfileUUID, ""); err != nil {
-		return err
-	}
-
-	// Default squad.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_DEFAULT_SQUAD"), ui.ColorReset)
-	squadUUIDs, _ := api.GetDefaultSquad(domainURL, token)
-	if len(squadUUIDs) > 0 {
-		_ = api.UpdateSquad(domainURL, token, squadUUIDs[0], inboundUUID)
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("UPDATE_SQUAD"), ui.ColorReset)
-
-	// Subscription-page API token.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_API_TOKEN"), ui.ColorReset)
-	if err := api.CreateAPIToken(domainURL, token, targetDir, ""); err != nil {
+	if err := provision.Run(provision.Options{
+		DomainURL: domainURL, TargetDir: targetDir,
+		Username: st.superadminUser, Password: st.superadminPass,
+		SelfstealDomain: st.selfstealDomain,
+		PatchNodeKey:    true,
+		ProfileTag:      profileTag, Inbounds: profileInbounds,
+		CertFullchain: certFullchain, CertPrivkey: certPrivkey,
+	}); err != nil {
 		return err
 	}
 

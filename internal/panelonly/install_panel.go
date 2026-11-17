@@ -20,6 +20,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/provision"
 	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
@@ -420,68 +421,21 @@ func installationPanelOnly(kind proxy.Kind) error {
 		return err
 	}
 
-	// Register the superadmin account.
-	token := api.RegisterRemnawave(domainURL, state.superadminUser, state.superadminPass, "")
-	if token == "" {
-		return fmt.Errorf("%s", i18n.T("ERROR_REGISTER"))
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("REGISTRATION_SUCCESS"), ui.ColorReset)
-
-	// Generate xray keys.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GENERATE_KEYS"), ui.ColorReset)
-	time.Sleep(1 * time.Second)
-	privateKey := api.GenerateXrayKeys(domainURL, token)
-	if privateKey == "" {
-		return fmt.Errorf("%s", i18n.T("ERROR_GENERATE_KEYS"))
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GENERATE_KEYS_SUCCESS"), ui.ColorReset)
-
-	// Delete the default config profile.
-	_ = api.DeleteConfigProfile(domainURL, token, "")
-
-	// Create our own config profile. With HAProxy it carries the XHTTP TLS
-	// inbound instead of Reality; Hysteria2 waits for the node profile menu,
-	// which asks for the node's certificate.
+	// Provision the panel through its API. With HAProxy the profile carries
+	// the XHTTP TLS inbound instead of Reality; Hysteria2 waits for the node
+	// profile menu, which asks for the node's certificate. The node is on
+	// another host, so it is registered under its selfsteal name.
 	profileTag, profileInbounds := "", api.ConfigProfileInbounds{Raw: true}
 	if kind == proxy.HAProxy {
 		profileTag, profileInbounds = "XHTTP-TLS", api.ConfigProfileInbounds{XHTTP: true}
 	}
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
-	// The initial profile only carries the stock Raw inbound; a
-	// Hysteria2 cert path isn't needed until internal/nodeprofile turns
-	// Hysteria2 on later, at which point it asks the operator directly
-	// whether the node's certificate is a wildcard (see
-	// certs.AskCertDomain) instead of guessing from here, where this
-	// flow has no way to know what internal/nginxnode's install did.
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", state.selfstealDomain, privateKey, profileTag, "", "", profileInbounds)
-	if configProfileUUID == "" || inboundUUID == "" {
-		return fmt.Errorf("%s", i18n.T("ERROR_CREATE_CONFIG_PROFILE"))
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
-
-	// Create the node.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_NODE"), ui.ColorReset)
-	if err := api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, state.selfstealDomain, ""); err != nil {
-		return err
-	}
-
-	// Create the host.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_HOST"), ui.ColorReset)
-	if err := api.CreateHost(domainURL, token, inboundUUID, state.selfstealDomain, configProfileUUID, ""); err != nil {
-		return err
-	}
-
-	// Default squad.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_DEFAULT_SQUAD"), ui.ColorReset)
-	squadUUIDs, _ := api.GetDefaultSquad(domainURL, token)
-	if len(squadUUIDs) > 0 {
-		_ = api.UpdateSquad(domainURL, token, squadUUIDs[0], inboundUUID)
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("UPDATE_SQUAD"), ui.ColorReset)
-
-	// Subscription-page API token.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_API_TOKEN"), ui.ColorReset)
-	if err := api.CreateAPIToken(domainURL, token, targetDir, ""); err != nil {
+	if err := provision.Run(provision.Options{
+		DomainURL: domainURL, TargetDir: targetDir,
+		Username: state.superadminUser, Password: state.superadminPass,
+		SelfstealDomain: state.selfstealDomain,
+		ProfileTag:      profileTag, Inbounds: profileInbounds,
+		NodeAddress: state.selfstealDomain,
+	}); err != nil {
 		return err
 	}
 

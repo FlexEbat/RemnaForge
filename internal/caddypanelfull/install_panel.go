@@ -26,6 +26,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
+	"github.com/FlexEbat/RemnaForge/internal/provision"
 	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
@@ -426,74 +427,19 @@ func installationPanelNode() error {
 		return err
 	}
 
-	// Register the superadmin account.
-	token := api.RegisterRemnawave(domainURL, st.superadminUser, st.superadminPass, "")
-	if token == "" {
-		return fmt.Errorf("%s", i18n.T("ERROR_REGISTER"))
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("REGISTRATION_SUCCESS"), ui.ColorReset)
-
-	// Fetch the real public key and patch it into
-	// docker-compose.yml's remnanode SECRET_KEY. Key difference from
-	// caddypanelonly: the node is co-located here, so it needs its real
-	// key, not just a config-profile record. Same as internal/panelfull.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_PUBLIC_KEY"), ui.ColorReset)
-	time.Sleep(1 * time.Second)
-	if err := api.GetPublicKey(domainURL, token, targetDir); err != nil {
-		return err
-	}
-
-	// Generate xray keys.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GENERATE_KEYS"), ui.ColorReset)
-	time.Sleep(1 * time.Second)
-	privateKey := api.GenerateXrayKeys(domainURL, token)
-	if privateKey == "" {
-		return fmt.Errorf("%s", i18n.T("ERROR_GENERATE_KEYS"))
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GENERATE_KEYS_SUCCESS"), ui.ColorReset)
-
-	// Delete the default config profile.
-	_ = api.DeleteConfigProfile(domainURL, token, "")
-
-	// Create our config profile.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
-	// The node is co-located here, so its Hysteria2 inbound reads the
-	// same certificate Caddy itself obtained via ACME, out of the
+	// Provision the panel through its API. The node is co-located, so the
+	// panel's key goes into its compose entry, and its Hysteria2 inbound
+	// reads the certificate Caddy itself obtained via ACME out of the
 	// caddy_data volume both containers share (see certs.CaddyCertPaths).
 	nodeCertFullchain, nodeCertPrivkey := certs.CaddyCertPaths(st.selfstealDomain)
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, "StealConfig", st.selfstealDomain, privateKey, "", nodeCertFullchain, nodeCertPrivkey, api.ConfigProfileInbounds{Raw: true})
-	if configProfileUUID == "" || inboundUUID == "" {
-		return fmt.Errorf("%s", i18n.T("ERROR_CREATE_CONFIG_PROFILE"))
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), ui.ColorReset)
-
-	// Create the node without a node_address override (unlike
-	// caddypanelonly, which passes SELFSTEAL_DOMAIN as the address), so
-	// it gets CreateNode's own defaults (172.30.0.1 / "Steal"), matching
-	// the co-located node's actual docker-network address. Same as
-	// internal/panelfull.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_NODE"), ui.ColorReset)
-	if err := api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, "", ""); err != nil {
-		return err
-	}
-
-	// Create the host.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_HOST"), ui.ColorReset)
-	if err := api.CreateHost(domainURL, token, inboundUUID, st.selfstealDomain, configProfileUUID, ""); err != nil {
-		return err
-	}
-
-	// Default squad.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("GET_DEFAULT_SQUAD"), ui.ColorReset)
-	squadUUIDs, _ := api.GetDefaultSquad(domainURL, token)
-	if len(squadUUIDs) > 0 {
-		_ = api.UpdateSquad(domainURL, token, squadUUIDs[0], inboundUUID)
-	}
-	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("UPDATE_SQUAD"), ui.ColorReset)
-
-	// Subscription-page API token.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_API_TOKEN"), ui.ColorReset)
-	if err := api.CreateAPIToken(domainURL, token, targetDir, ""); err != nil {
+	if err := provision.Run(provision.Options{
+		DomainURL: domainURL, TargetDir: targetDir,
+		Username: st.superadminUser, Password: st.superadminPass,
+		SelfstealDomain: st.selfstealDomain,
+		PatchNodeKey:    true,
+		Inbounds:        api.ConfigProfileInbounds{Raw: true},
+		CertFullchain:   nodeCertFullchain, CertPrivkey: nodeCertPrivkey,
+	}); err != nil {
 		return err
 	}
 
