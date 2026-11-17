@@ -2,7 +2,7 @@
 
 # RemnaForge
 
-RemnaForge installs and maintains [Remnawave](https://docs.rw/) on a server through an interactive text menu: the panel, a node, or both at once, behind Nginx or Caddy. Written in Go, ships as a single binary with no external runtime.
+RemnaForge installs and maintains [Remnawave](https://docs.rw/) on a server through an interactive text menu: the panel, a node, or both at once, behind Nginx, Caddy or HAProxy. Written in Go, ships as a single binary with no external runtime.
 
 ## Table of contents
 
@@ -81,7 +81,20 @@ No need to install Docker, `docker compose`, `certbot`, or `ufw` ahead of time: 
 
 ## Installation
 
-No prebuilt binaries or packages yet.
+Prebuilt binaries for Linux (amd64 and arm64) are attached to each [release](https://github.com/FlexEbat/RemnaForge/releases). The archives are not signed. `checksums.txt` comes from the same release, so the check below catches a damaged download, not a compromised release; read the release page before you run anything as root.
+
+```bash
+ARCH=$(uname -m); case "$ARCH" in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; *) echo "unsupported: $ARCH"; exit 1;; esac
+VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/FlexEbat/RemnaForge/releases/latest | sed 's#.*/v##')
+BASE=https://github.com/FlexEbat/RemnaForge/releases/download/v${VERSION}
+curl -fsSLO ${BASE}/remnaforge_${VERSION}_linux_${ARCH}.tar.gz
+curl -fsSLO ${BASE}/checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+tar -xzf remnaforge_${VERSION}_linux_${ARCH}.tar.gz remnaforge
+sudo install -m 0755 remnaforge /usr/local/bin/remnaforge
+```
+
+Or build from source:
 
 ```bash
 git clone https://github.com/FlexEbat/RemnaForge.git
