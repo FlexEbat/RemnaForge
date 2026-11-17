@@ -1,0 +1,78 @@
+{
+ "Err": "",
+ "Requests": [
+  {
+   "Method": "POST",
+   "Path": "/api/auth/register",
+   "Body": "{\"password\":\"pass1\",\"username\":\"admin1\"}",
+   "Authed": false
+  },
+  {
+   "Method": "GET",
+   "Path": "/api/keygen",
+   "Body": "",
+   "Authed": true
+  },
+  {
+   "Method": "GET",
+   "Path": "/api/system/tools/x25519/generate",
+   "Body": "",
+   "Authed": true
+  },
+  {
+   "Method": "GET",
+   "Path": "/api/config-profiles",
+   "Body": "",
+   "Authed": true
+  },
+  {
+   "Method": "DELETE",
+   "Path": "/api/config-profiles/33333333-3333-4333-8333-333333333333",
+   "Body": "",
+   "Authed": true
+  },
+  {
+   "Method": "POST",
+   "Path": "/api/config-profiles",
+   "Body": "{\"config\":{\"dns\":{\"queryStrategy\":\"UseIPv4\",\"servers\":[{\"address\":\"https://dns.google/dns-query\",\"skipFallback\":false}]},\"inbounds\":[{\"port\":443,\"protocol\":\"vless\",\"settings\":{\"clients\":[],\"decryption\":\"none\"},\"sniffing\":{\"destOverride\":[\"http\",\"tls\",\"quic\"],\"enabled\":true},\"streamSettings\":{\"network\":\"tcp\",\"realitySettings\":{\"dest\":\"/dev/shm/nginx.sock\",\"privateKey\":\"PRIVATE-KEY\",\"serverNames\":[\"steal.example.org\"],\"shortIds\":[\"b293084b2508fe8c\"],\"show\":false,\"spiderX\":\"\",\"xver\":1},\"security\":\"reality\"},\"tag\":\"Raw\"}],\"log\":{\"loglevel\":\"warning\"},\"outbounds\":[{\"protocol\":\"freedom\",\"tag\":\"DIRECT\"},{\"protocol\":\"blackhole\",\"tag\":\"BLOCK\"}],\"routing\":{\"rules\":[{\"domain\":[\"geosite:private\",\"geosite:category-ru\"],\"outboundTag\":\"BLOCK\",\"type\":\"field\"},{\"ip\":[\"geoip:private\",\"geoip:ru\"],\"outboundTag\":\"BLOCK\",\"type\":\"field\"},{\"outboundTag\":\"BLOCK\",\"protocol\":[\"bittorrent\"],\"type\":\"field\"}]}},\"name\":\"StealConfig\"}",
+   "Authed": true
+  },
+  {
+   "Method": "POST",
+   "Path": "/api/nodes",
+   "Body": "{\"address\":\"172.30.0.1\",\"configProfile\":{\"activeConfigProfileUuid\":\"00000000-0000-4000-8000-000000000002\",\"activeInbounds\":[\"00000000-0000-4000-8000-000000000001\"]},\"consumptionMultiplier\":1,\"countryCode\":\"XX\",\"excludedInbounds\":[],\"isTrafficTrackingActive\":false,\"name\":\"Steal\",\"notifyPercent\":0,\"port\":2222,\"trafficLimitBytes\":0,\"trafficResetDay\":31}",
+   "Authed": true
+  },
+  {
+   "Method": "POST",
+   "Path": "/api/hosts",
+   "Body": "{\"address\":\"steal.example.org\",\"allowInsecure\":false,\"alpn\":null,\"fingerprint\":\"chrome\",\"host\":\"\",\"inbound\":{\"configProfileInboundUuid\":\"00000000-0000-4000-8000-000000000001\",\"configProfileUuid\":\"00000000-0000-4000-8000-000000000002\"},\"isDisabled\":false,\"path\":\"\",\"port\":443,\"remark\":\"Steal\",\"securityLayer\":\"DEFAULT\",\"sni\":\"steal.example.org\"}",
+   "Authed": true
+  },
+  {
+   "Method": "GET",
+   "Path": "/api/internal-squads",
+   "Body": "",
+   "Authed": true
+  },
+  {
+   "Method": "GET",
+   "Path": "/api/internal-squads",
+   "Body": "",
+   "Authed": true
+  },
+  {
+   "Method": "PATCH",
+   "Path": "/api/internal-squads",
+   "Body": "{\"inbounds\":[\"22222222-2222-4222-8222-222222222222\",\"00000000-0000-4000-8000-000000000001\"],\"uuid\":\"11111111-1111-4111-8111-111111111111\"}",
+   "Authed": true
+  },
+  {
+   "Method": "POST",
+   "Path": "/api/tokens",
+   "Body": "{\"tokenName\":\"subscription-page\"}",
+   "Authed": true
+  }
+ ],
+ "Compose": "services:\n  remnanode:\n    environment:\n      - NODE_PORT=2222\n      - SECRET_KEY=\"SECRET-FROM-PANEL\"\n  remnawave-subscription-page:\n    environment:\n      - REMNAWAVE_API_TOKEN=API-TOKEN-FOR-SUBSCRIPTION\n"
+}

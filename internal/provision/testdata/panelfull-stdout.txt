@@ -1,0 +1,28 @@
+[1;32mRegistration completed successfully![0m
+[1;33mGetting public key...[0m
+[1;32mPublic key successfully obtained[0m
+[1;33mGenerating x25519 keys...[0m
+[1;32mKeys successfully generated[0m
+[1;33mCreating config profile...[0m
+[1;32mConfig profile successfully created[0m
+[1;33mCreating node[0m
+[1;32mNode successfully created[0m
+[1;33mCreating host[0m
+[1;32mHost successfully created[0m
+[1;33mGetting default squad[0m
+[1;32mSquad successfully updated[0m
+[1;33mCreating API token for Subscription Page...[0m
+[1;32mRegistration completed successfully![0m
+[1;33mGetting public key...[0m
+[1;32mPublic key successfully obtained[0m
+[1;33mGenerating x25519 keys...[0m
+[1;32mKeys successfully generated[0m
+[1;33mCreating config profile...[0m
+[1;32mConfig profile successfully created[0m
+[1;33mCreating node[0m
+[1;32mNode successfully created[0m
+[1;33mCreating host[0m
+[1;32mHost successfully created[0m
+[1;33mGetting default squad[0m
+[1;32mSquad successfully updated[0m
+[1;33mCreating API token for Subscription Page...[0m
