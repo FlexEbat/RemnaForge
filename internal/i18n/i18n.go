@@ -520,6 +520,12 @@ var english = map[string]string{
 	"WILDCARD_CERT_FOUND":                     "Wildcard certificate found in /etc/letsencrypt/live/",
 	// Added by the review fixes (v1.23.4): warning when stable values are not saved.
 	"STABLE_NOT_SAVED": "Could not save the generated values for the next run: %v. A rerun can generate different ones.",
+	// Added by the review fixes (v1.23.5): crontab read and write errors.
+	"CRON_READ_FAILED":  "Could not read the root crontab: %v. The certificate renewal job was not changed.",
+	"CRON_WRITE_FAILED": "Could not write the root crontab: %v. Certificates are not renewed until the job exists.",
+	// Added by the review fixes (v1.23.5): Gcore plugin messages that were hardcoded in English.
+	"INSTALLING_GCORE_PLUGIN": "Installing the certbot-dns-gcore plugin...",
+	"GCORE_PLUGIN_INSTALLED":  "Plugin installed successfully.",
 }
 var russian = map[string]string{
 	"BACKUP_DECRYPT_DONE":                     "Расшифровано: %s",
@@ -1033,6 +1039,12 @@ var russian = map[string]string{
 	"WILDCARD_CERT_FOUND":                     "Wildcard-сертификат найден в /etc/letsencrypt/live/",
 	// Added by the review fixes (v1.23.4): warning when stable values are not saved.
 	"STABLE_NOT_SAVED": "Не удалось сохранить сгенерированные значения для следующего запуска: %v. Повторный запуск может создать другие.",
+	// Added by the review fixes (v1.23.5): crontab read and write errors.
+	"CRON_READ_FAILED":  "Не удалось прочитать crontab пользователя root: %v. Задача обновления сертификатов не изменена.",
+	"CRON_WRITE_FAILED": "Не удалось записать crontab пользователя root: %v. Сертификаты не обновляются, пока задачи нет.",
+	// Added by the review fixes (v1.23.5): Gcore plugin messages that were hardcoded in English.
+	"INSTALLING_GCORE_PLUGIN": "Установка плагина certbot-dns-gcore...",
+	"GCORE_PLUGIN_INSTALLED":  "Плагин установлен.",
 }
 
 // availableTemplates is used by internal/selfsteal.InteractiveInstall

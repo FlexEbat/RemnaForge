@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
@@ -73,10 +74,13 @@ func AskCertDomain(domainName string) string {
 // every domain's renewal.conf, shared by FixLetsencryptStructure (this
 // file) and fixRenewHook (handle.go).
 //
+// A node-only install keeps its stack in /opt/remnanode, so the hook picks
+// the directory that has a compose file instead of assuming the panel's.
+//
 // The trailing nginx reload is a harmless no-op right after
 // `docker compose up -d`, and a safety net should that ever stop
 // restarting the container.
-const renewHookCommand = `renew_hook = sh -c 'cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx && docker compose exec remnawave-nginx nginx -s reload'`
+const renewHookCommand = `renew_hook = sh -c 'd=/opt/remnawave; [ -f "$d/docker-compose.yml" ] || d=/opt/remnanode; cd "$d" && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx && docker compose exec remnawave-nginx nginx -s reload'`
 
 // latestMatchingDir returns the highest natural-sort-ordered directory
 // name under base matching prefix*, or "" if none exist.
@@ -249,7 +253,7 @@ func FixLetsencryptStructure(domainName string) error {
 	conf = removeLinesWithPrefix(conf, "renew_hook")
 	conf = strings.TrimRight(conf, "\n") + "\n" + expectedHook + "\n"
 
-	if err := fsx.WriteFile(renewalConf, []byte(conf), 0644); err != nil {
+	if err := cfgfile.Replace(renewalConf, conf, cfgfile.Opts{}); err != nil {
 		return err
 	}
 

@@ -47,7 +47,7 @@ Found a bug? Open an issue on GitHub.
 
 - Installs the Remnawave panel, a node, or both on one server.
 - Two webservers to choose from: Nginx or Caddy.
-- For Nginx, issues and renews TLS certificates via `certbot`: Cloudflare DNS-01, ACME HTTP-01, Gcore DNS-01. Caddy issues and renews its own certificates through its built-in ACME client.
+- For Nginx, issues and renews TLS certificates via `certbot`: Cloudflare DNS-01, ACME HTTP-01, Gcore DNS-01. Caddy issues and renews its own certificates through its built-in ACME client. A weekly cron job runs `certbot renew`. For HTTP-01 it opens port 80 in ufw only while a certificate is due, through certbot hooks, and closes only a rule it opened itself; each renewed certificate restarts the proxy through its own `renew_hook`.
 - A node's config profile carries one inbound by default: VLESS+Reality (`Raw`). Every node (co-located or standalone) is already set up to take two more: Hysteria2 (`HYSTERIA-BBR`, TLS terminated by Xray itself) and VLESS+XHTTP (`XHTTP-TLS` over `/api/v2/stream-events`) — the matching nginx.conf/Caddyfile location/route and the node's certificate mount into the container are already in place, turned on later via the "Manage Node Profile" menu item.
 - Registers a node with an already-running panel through its HTTP API.
 - Installs an HTML template (random, or picked manually from several sources) on the selfsteal domain to disguise unauthorized connections.

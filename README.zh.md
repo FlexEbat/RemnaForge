@@ -47,7 +47,7 @@ VLESS 协议及其相关机制（XTLS、REALITY、VLESS Encryption）发展很�
 
 - 在一台服务器上安装 Remnawave 面板、节点，或两者同时安装。
 - 可选两种反向代理：Nginx 或 Caddy。
-- Nginx 模式下通过 `certbot` 签发和续期 TLS 证书：Cloudflare DNS-01、ACME HTTP-01、Gcore DNS-01。Caddy 模式下通过内置 ACME 客户端自行签发和续期证书。
+- Nginx 模式下通过 `certbot` 签发和续期 TLS 证书：Cloudflare DNS-01、ACME HTTP-01、Gcore DNS-01。Caddy 模式下通过内置 ACME 客户端自行签发和续期证书。 cron 每周运行一次 `certbot renew`。HTTP-01 方式只在有证书到期时，通过 certbot 钩子在 ufw 中开放 80 端口，并且只关闭脚本自己开放的规则；每个续期后的证书通过自己的 `renew_hook` 重启代理。
 - 节点的配置 profile 默认只带一个 inbound：VLESS+Reality（`Raw`）。每个节点（无论是同机部署还是独立部署）都已经预先配置好，可以随时再启用两个 inbound：Hysteria2（`HYSTERIA-BBR`，TLS 由 Xray 自己终结）和 VLESS+XHTTP（`XHTTP-TLS`，通过 `/api/v2/stream-events`）——对应的 nginx.conf/Caddyfile location/route，以及节点证书到容器的挂载都已经就绪，只是需要之后通过「Manage Node Profile」菜单项手动开启。
 - 通过面板的 HTTP API 把节点注册到已运行的面板上。
 - 在 selfsteal 域名上安装一个 HTML 模板（随机选取，或从多个来源手动选择），用于伪装未授权连接的流量。
