@@ -139,10 +139,10 @@ func prepareTemplateSet(templateSource string) (*templateSet, error) {
 	// Cd into the extracted folder + drop unwanted files.
 	var templateDir string
 	switch {
-	case strings.Contains(selectedURL, "eGamesAPI"):
+	case selectedURL == templateURLs[0]:
 		templateDir = filepath.Join(optDir, "simple-web-templates-main")
 		removeAll(templateDir, "assets", ".gitattributes", "README.md", "_config.yml")
-	case strings.Contains(selectedURL, "nothing-sni"):
+	case selectedURL == templateURLs[2]:
 		templateDir = filepath.Join(optDir, "nothing-sni-main")
 		removeAll(templateDir, ".github", "README.md")
 	default:
@@ -328,6 +328,13 @@ func InteractiveInstall(templateSource string) error {
 // maxDownloadSize caps a template archive download.
 const maxDownloadSize = 100 << 20
 
+// Limits for what the downloaded template archive may unpack to. They are
+// variables so tests can lower them.
+var (
+	maxZipEntries    = 20000
+	maxExtractedSize = int64(400 << 20)
+)
+
 // downloadWithRetry fetches url, retrying with a 3-second delay between
 // attempts (up to 10 tries) on failure.
 func downloadWithRetry(url string) ([]byte, error) {
@@ -389,7 +396,22 @@ func replaceWebRoot(src, webRoot string) error {
 // templateURLs are fixed, trusted GitHub archives, so this is
 // a safeguard against a compromised template repo or a tampered-with
 // download.
+//
+// It also bounds what an archive can unpack to: a small download can expand
+// into gigabytes, and a header can lie about its size, so the copy itself is
+// limited as well.
 func extractZip(zr *zip.Reader, dest string) error {
+	if len(zr.File) > maxZipEntries {
+		return fmt.Errorf("archive has %d entries, the limit is %d", len(zr.File), maxZipEntries)
+	}
+	var declared uint64
+	for _, f := range zr.File {
+		declared += f.UncompressedSize64
+	}
+	if declared > uint64(maxExtractedSize) {
+		return fmt.Errorf("archive unpacks to %d bytes, the limit is %d", declared, maxExtractedSize)
+	}
+	remaining := maxExtractedSize
 	destClean := filepath.Clean(dest) + string(filepath.Separator)
 	for _, f := range zr.File {
 		path := filepath.Join(dest, f.Name)
@@ -414,11 +436,14 @@ func extractZip(zr *zip.Reader, dest string) error {
 			rc.Close()
 			return err
 		}
-		_, copyErr := io.Copy(out, rc)
+		n, copyErr := io.Copy(out, io.LimitReader(rc, remaining+1))
 		out.Close()
 		rc.Close()
 		if copyErr != nil {
 			return copyErr
+		}
+		if remaining -= n; remaining < 0 {
+			return fmt.Errorf("archive unpacks to more than %d bytes", maxExtractedSize)
 		}
 	}
 	return nil

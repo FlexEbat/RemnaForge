@@ -656,16 +656,6 @@ func buildProfileConfig(inbounds []map[string]any) map[string]any {
 	}
 }
 
-// BuildProfileConfig builds a full profile config document for the
-// given inbound selection, reusing existingByTag's settings for any
-// inbound kind already present under its tag (existingByTag may be
-// nil). Exported for internal/nodeprofile, which builds a replacement
-// config for an already-existing profile before calling
-// UpdateConfigProfile.
-func BuildProfileConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, certFullchain, certPrivkey string, existingByTag map[string]map[string]any) map[string]any {
-	return buildProfileConfig(buildInboundConfig(sel, domain, privateKey, rawTag, certFullchain, certPrivkey, existingByTag))
-}
-
 // MergeProfileConfig returns existing with its "inbounds" replaced by the
 // managed inbounds for the given selection, keeping everything else the
 // operator may have customised: log, dns, outbounds, routing and any

@@ -105,7 +105,7 @@ func findRealityTag(byTag map[string]map[string]any) string {
 }
 
 // inboundsByTag pulls each inbound out of an existing config's
-// "inbounds" array into a map keyed by tag, so api.BuildProfileConfig
+// "inbounds" array into a map keyed by tag, so the config builder
 // can reuse an inbound's already-issued secrets instead of generating
 // new ones just because the selection changed.
 func inboundsByTag(config map[string]any) map[string]map[string]any {
@@ -214,7 +214,7 @@ func ManageNodeProfile() {
 	if _, hysteria2AlreadyActive := byTag["HYSTERIA-BBR"]; selection.Hysteria2 && !hysteria2AlreadyActive {
 		// Only newly enabling Hysteria2 needs a cert path: an
 		// already-active Hysteria2 inbound is reused verbatim by
-		// api.BuildProfileConfig, so asking here would be a pointless
+		// the config builder, so asking here would be a pointless
 		// prompt whose answer gets thrown away.
 		//
 		// This flow doesn't provision the node's files itself, so it

@@ -3,6 +3,8 @@ package backuprestore
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -32,5 +34,19 @@ func TestScriptPinFormat(t *testing.T) {
 	}
 	if strings.Contains(scriptURL, "/main/") {
 		t.Error("scriptURL must not follow a moving branch")
+	}
+}
+
+func TestExistingScriptIsRunOnlyWhenPinned(t *testing.T) {
+	dir := t.TempDir()
+	if present, pinned := existingScript(filepath.Join(dir, "none.sh")); present || pinned {
+		t.Error("a missing file was reported as present")
+	}
+	other := filepath.Join(dir, "backup-restore.sh")
+	if err := os.WriteFile(other, []byte("#!/bin/sh\necho not the pinned script\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if present, pinned := existingScript(other); !present || pinned {
+		t.Errorf("a foreign script was trusted: present=%v pinned=%v", present, pinned)
 	}
 }

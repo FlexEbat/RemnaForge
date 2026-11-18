@@ -33,8 +33,6 @@ const (
 	OwnerInstaller Owner = "installer"
 	// OwnerUser: the operator changed the file or chose to keep their version.
 	OwnerUser Owner = "user"
-	// OwnerThirdParty: another program created the file.
-	OwnerThirdParty Owner = "third-party"
 )
 
 // Paths and the clock are variables so tests can use a temporary directory.

@@ -171,8 +171,3 @@ func systemdActive(unit string) bool {
 func systemdEnabled(unit string) bool {
 	return execx.Command("systemctl", "is-enabled", "--quiet", unit).Run() == nil
 }
-
-// ensureDocker installs Docker via get.docker.com's install script,
-// streamed from net/http directly into `sh`'s stdin rather than being
-// written to a temp file first, so nothing touches disk and there's no
-// leftover script file to clean up.

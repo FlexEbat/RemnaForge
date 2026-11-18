@@ -541,6 +541,11 @@ var english = map[string]string{
 	"PROXY_CONFIG_RESTORED": "The old configuration is back and the proxy runs. Nothing was changed.",
 	"PORT_8443_NO_UFW":      "ufw is not active, so the tool does not touch the firewall. Open or close TCP port 8443 in your firewall yourself.",
 	"PORT_8443_UFW_FAILED":  "ufw could not open port 8443. Open it yourself.",
+	// Added by the review fixes (v1.23.7): backup script verification.
+	"BACKUP_SCRIPT_REPLACED": "The existing backup-restore.sh is not the pinned version. Downloading the pinned one over it.",
+	// Added by the review fixes (v1.23.7): Docker install messages.
+	"INSTALLING_DOCKER":            "Installing Docker...",
+	"ERROR_DOWNLOAD_DOCKER_SCRIPT": "Failed to download the Docker install script",
 }
 var russian = map[string]string{
 	"BACKUP_DECRYPT_DONE":                     "Расшифровано: %s",
@@ -1075,6 +1080,11 @@ var russian = map[string]string{
 	"PROXY_CONFIG_RESTORED": "Прежняя конфигурация возвращена, прокси работает. Ничего не изменено.",
 	"PORT_8443_NO_UFW":      "ufw не активен, поэтому инструмент не меняет файрвол. Откройте или закройте TCP-порт 8443 в вашем файрволе самостоятельно.",
 	"PORT_8443_UFW_FAILED":  "ufw не смог открыть порт 8443. Откройте его самостоятельно.",
+	// Added by the review fixes (v1.23.7): backup script verification.
+	"BACKUP_SCRIPT_REPLACED": "Существующий backup-restore.sh не совпадает с закреплённой версией. Скачиваю закреплённую поверх него.",
+	// Added by the review fixes (v1.23.7): Docker install messages.
+	"INSTALLING_DOCKER":            "Установка Docker...",
+	"ERROR_DOWNLOAD_DOCKER_SCRIPT": "Ошибка: Не удалось загрузить установочный скрипт Docker",
 }
 
 // availableTemplates is used by internal/selfsteal.InteractiveInstall

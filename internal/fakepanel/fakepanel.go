@@ -77,16 +77,6 @@ func (p *Panel) Reset() {
 	p.requests, p.nextID = nil, 0
 }
 
-// Sequence is the requests as "METHOD /path" lines, which is how most tests
-// compare an order of calls.
-func (p *Panel) Sequence() []string {
-	var out []string
-	for _, r := range p.Requests() {
-		out = append(out, r.Method+" "+r.Path)
-	}
-	return out
-}
-
 // uuid hands out ids in the format the panel uses; the api package refuses
 // anything else.
 func (p *Panel) uuid() string {

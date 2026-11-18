@@ -2,6 +2,7 @@ package dockercheck
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -407,5 +408,103 @@ func TestLinesAndRegistryLine(t *testing.T) {
 	}
 	if got := RegistryLine(errors.New("timeout")); !strings.Contains(got, "timeout") {
 		t.Errorf("got %q", got)
+	}
+}
+
+func TestParseOSRelease(t *testing.T) {
+	cases := []struct {
+		name, in, distro, codename string
+		ok                         bool
+	}{
+		{"debian", "ID=debian\nVERSION_CODENAME=bookworm\n", "debian", "bookworm", true},
+		{"ubuntu", "ID=ubuntu\nVERSION_CODENAME=noble\nUBUNTU_CODENAME=noble\n", "ubuntu", "noble", true},
+		{"ubuntu derivative", "ID=linuxmint\nID_LIKE=\"ubuntu debian\"\nVERSION_CODENAME=wilma\nUBUNTU_CODENAME=noble\n", "ubuntu", "noble", true},
+		{"debian derivative has no Docker suite", "ID=kali\nID_LIKE=debian\nVERSION_CODENAME=kali-rolling\n", "", "", false},
+		{"other", "ID=fedora\nVERSION_ID=40\n", "", "", false},
+		{"no codename", "ID=debian\n", "", "", false},
+	}
+	for _, c := range cases {
+		distro, codename, ok := parseOSRelease(c.in)
+		if distro != c.distro || codename != c.codename || ok != c.ok {
+			t.Errorf("%s: got %q %q %v", c.name, distro, codename, ok)
+		}
+	}
+}
+
+func TestDockerSources(t *testing.T) {
+	got := dockerSources("ubuntu", "noble", "amd64")
+	want := "Types: deb\nURIs: https://download.docker.com/linux/ubuntu\nSuites: noble\nComponents: stable\nArchitectures: amd64\nSigned-By: /etc/apt/keyrings/docker.asc\n"
+	if got != want {
+		t.Errorf("got:\n%s", got)
+	}
+}
+
+func aptHost(t *testing.T, osRelease string) (*fake, Env, *[]string, map[string]string) {
+	t.Helper()
+	f := newFake()
+	f.have["docker"] = false
+	f.answers["systemctl is-active --quiet docker"] = ""
+	f.answers["systemctl is-enabled --quiet docker"] = ""
+	f.answers["dpkg --print-architecture"] = "arm64\n"
+	env := f.env()
+	var apt []string
+	written := map[string]string{}
+	env.ReadFile = func(string) ([]byte, error) { return []byte(osRelease), nil }
+	env.WriteFile = func(path string, data []byte, _ os.FileMode) error { written[path] = string(data); return nil }
+	env.Apt = func(args ...string) error { apt = append(apt, strings.Join(args, " ")); return nil }
+	return f, env, &apt, written
+}
+
+func TestEnsureInstallsFromTheAptRepositoryOnUbuntu(t *testing.T) {
+	f, env, apt, written := aptHost(t, "ID=ubuntu\nUBUNTU_CODENAME=noble\nVERSION_CODENAME=noble\n")
+	// Docker is "installed" once apt has run.
+	env.Apt = func(args ...string) error {
+		*apt = append(*apt, strings.Join(args, " "))
+		if len(args) > 1 && args[1] == "-y" && strings.Contains(strings.Join(args, " "), "docker-ce") {
+			f.have["docker"] = true
+			f.answers["docker info --format {{.ServerVersion}}"] = "27.3.1\n"
+			f.answers["docker compose version --short"] = "2.29.7\n"
+		}
+		return nil
+	}
+	if err := Ensure(env); err != nil {
+		t.Fatal(err)
+	}
+	if f.scripts != 0 {
+		t.Error("the convenience script ran on Ubuntu")
+	}
+	if f.fetched != "https://download.docker.com/linux/ubuntu/gpg" {
+		t.Errorf("the key came from %q", f.fetched)
+	}
+	if !strings.Contains(written[dockerSourcesPath], "Suites: noble") || !strings.Contains(written[dockerSourcesPath], "Architectures: arm64") {
+		t.Errorf("sources file:\n%s", written[dockerSourcesPath])
+	}
+	if _, ok := written[dockerKeyPath]; !ok {
+		t.Error("the key was not written")
+	}
+	joined := strings.Join(*apt, "\n")
+	for _, want := range []string{"update", "install -y ca-certificates curl", "install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("apt calls lack %q:\n%s", want, joined)
+		}
+	}
+}
+
+func TestEnsureFallsBackToTheScriptOnAnotherSystem(t *testing.T) {
+	f, env, apt, _ := aptHost(t, "ID=fedora\n")
+	_ = Ensure(env)
+	if f.scripts != 1 || f.fetched != "https://get.docker.com" || len(*apt) != 0 {
+		t.Errorf("scripts=%d fetched=%q apt=%q", f.scripts, f.fetched, *apt)
+	}
+}
+
+func TestEnsureStopsWhenTheDockerKeyCannotBeDownloaded(t *testing.T) {
+	f, env, _, written := aptHost(t, "ID=debian\nVERSION_CODENAME=bookworm\n")
+	f.fetchErr = errors.New("offline")
+	if err := Ensure(env); err == nil {
+		t.Error("no error for a missing key")
+	}
+	if len(written) != 0 {
+		t.Errorf("files were written without a key: %v", written)
 	}
 }

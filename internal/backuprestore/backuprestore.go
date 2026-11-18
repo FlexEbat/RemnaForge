@@ -55,8 +55,13 @@ func Run() error {
 	if _, lookErr := exec.LookPath("rw-backup"); lookErr == nil {
 		return runInteractive("rw-backup")
 	}
-	if _, statErr := os.Stat(scriptPath); statErr == nil {
+	// A script that is already there is run only when it is the pinned one.
+	// It runs as root, and a file in the home directory could be anything.
+	switch present, pinned := existingScript(scriptPath); {
+	case pinned:
 		return runInteractive(scriptPath)
+	case present:
+		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("BACKUP_SCRIPT_REPLACED"), ui.ColorReset)
 	}
 
 	if runctx.DryRun() {
@@ -73,6 +78,16 @@ func Run() error {
 	}
 
 	return runInteractive(scriptPath)
+}
+
+// existingScript reports whether a file is at path and whether it is the
+// pinned script.
+func existingScript(path string) (present, pinned bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false, false
+	}
+	return true, verifyScript(data, scriptSHA256) == nil
 }
 
 // downloadScript writes the script to a temporary file next to dest and
