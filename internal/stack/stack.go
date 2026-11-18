@@ -15,6 +15,7 @@ import (
 
 	"github.com/FlexEbat/RemnaForge/internal/backupcrypt"
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
+	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
@@ -108,20 +109,67 @@ func backupPanelTo(dir, dest string) (err error) {
 	return out.Sync()
 }
 
+// dbVolume is the Docker volume that holds the panel database.
+const dbVolume = "remnawave-db-data"
+
+// dbRunning and dbVolumeExists are variables so tests can answer for Docker.
+var (
+	dbRunning = func() bool {
+		return execx.Command("docker", "inspect", "-f", "{{.State.Running}}", "remnawave-db").Run() == nil
+	}
+	dbVolumeExists = func() bool { return dockercheck.VolumeExists(dbVolume) }
+)
+
+// ResolveExistingDBVolume deals with a database volume that an earlier run
+// left behind. The transaction of a failed install keeps volumes, and the
+// next install refuses to start on a database initialised with another
+// password: the operator then had no way forward but a full Reinstall. The
+// operator can now remove the volume here by typing DATA. Docker refuses to
+// remove a volume that a container still uses, which protects a live panel.
+func ResolveExistingDBVolume(ask func(string) string) error {
+	if !dbVolumeExists() {
+		return nil
+	}
+	fmt.Printf("%s"+i18n.T("DB_VOLUME_EXISTS")+"%s\n", ui.ColorRed, dbVolume, ui.ColorReset)
+	if ask(i18n.T("DB_VOLUME_REMOVE_PROMPT")) != "DATA" {
+		return fmt.Errorf("existing database volume")
+	}
+	if out, err := execx.Command("docker", "volume", "rm", dbVolume).CombinedOutput(); err != nil {
+		fmt.Printf("%s%s: %s%s\n", ui.ColorRed, i18n.T("DB_VOLUME_REMOVE_FAILED"), strings.TrimSpace(string(out)), ui.ColorReset)
+		return fmt.Errorf("existing database volume")
+	}
+	return nil
+}
+
 // PromptBackup offers a database backup of the panel stack in dir,
 // when one is installed and its database container is running. The
 // backup goes straight to /root, outside dir, because the caller
 // deletes dir next. It returns false when the operator asked for a
 // backup and none was written; the caller must then stop before
 // removing anything, since the volumes hold the only copy of the data.
-func PromptBackup(dir string) bool {
-	if _, err := os.Stat(filepath.Join(dir, "docker-compose.yml")); err != nil {
+//
+// A stopped database cannot be dumped. When its volume still exists, the
+// caller's next step deletes the data, so the operator confirms that
+// explicitly instead of the prompt passing in silence.
+func PromptBackup(dir string) bool { return promptBackup(dir, ui.Reading) }
+
+func promptBackup(dir string, ask func(string) string) bool {
+	compose, err := os.ReadFile(filepath.Join(dir, "docker-compose.yml"))
+	if err != nil {
 		return true
 	}
-	if execx.Command("docker", "inspect", "-f", "{{.State.Running}}", "remnawave-db").Run() != nil {
+	if !dbRunning() {
+		if !strings.Contains(string(compose), "remnawave-db") || !dbVolumeExists() {
+			return true
+		}
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("DB_STOPPED_NO_BACKUP"), ui.ColorReset)
+		if ask(i18n.T("DB_STOPPED_CONFIRM")) != "DATA" {
+			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CONFIRM_ABORTED"), ui.ColorReset)
+			return false
+		}
 		return true
 	}
-	answer := ui.Reading(i18n.T("BACKUP_BEFORE_REMOVE"))
+	answer := ask(i18n.T("BACKUP_BEFORE_REMOVE"))
 	if answer != "y" && answer != "Y" {
 		return true
 	}
@@ -130,7 +178,7 @@ func PromptBackup(dir string) bool {
 		fmt.Printf("%s%s: %v%s\n", ui.ColorRed, i18n.T("BACKUP_FAILED"), err, ui.ColorReset)
 		return false
 	}
-	if answer := ui.Reading(i18n.T("BACKUP_ENCRYPT")); answer == "y" || answer == "Y" {
+	if answer := ask(i18n.T("BACKUP_ENCRYPT")); answer == "y" || answer == "Y" {
 		if err := encryptBackup(keep, backupcrypt.Prompt); err != nil {
 			fmt.Printf("%s%s: %v%s\n", ui.ColorRed, i18n.T("BACKUP_ENCRYPT_FAILED"), err, ui.ColorReset)
 			// A backup the operator asked to be encrypted must not stay behind

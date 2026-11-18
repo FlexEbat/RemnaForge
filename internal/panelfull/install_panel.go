@@ -12,7 +12,6 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/api"
 	"github.com/FlexEbat/RemnaForge/internal/certs"
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
-	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
@@ -23,6 +22,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/selfsteal"
+	"github.com/FlexEbat/RemnaForge/internal/stack"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 	"github.com/FlexEbat/RemnaForge/internal/validate"
@@ -268,9 +268,8 @@ func installPanelNodeNginx() (*state, error) {
 		st.metricsUser, st.metricsPass,
 	)
 	dotEnv = genutil.HardenEnv(dotEnv)
-	if dockercheck.VolumeExists("remnawave-db-data") {
-		fmt.Printf("%s"+i18n.T("DB_VOLUME_EXISTS")+"%s\n", ui.ColorRed, "remnawave-db-data", ui.ColorReset)
-		return nil, fmt.Errorf("existing database volume")
+	if err := stack.ResolveExistingDBVolume(ui.Reading); err != nil {
+		return nil, err
 	}
 	if _, err := cfgfile.Write(filepath.Join(panelDir, ".env"), dotEnv, cfgfile.Opts{Kind: cfgfile.KindEnv}); err != nil {
 		return nil, err

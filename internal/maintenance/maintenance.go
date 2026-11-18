@@ -14,11 +14,14 @@ import (
 )
 
 const (
-	panelDir = "/opt/remnawave"
-	nodeDir  = "/opt/remnanode"
+	nodeDir = "/opt/remnanode"
 
 	announcementsURL = "https://f.docs.rw/c/announces/19"
 )
+
+// panelDir is a variable so tests can point the migration at a temporary
+// directory.
+var panelDir = "/opt/remnawave"
 
 // Menu is the entry point of the "versions, diagnostics and migration"
 // main-menu item.

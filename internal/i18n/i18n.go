@@ -526,6 +526,21 @@ var english = map[string]string{
 	// Added by the review fixes (v1.23.5): Gcore plugin messages that were hardcoded in English.
 	"INSTALLING_GCORE_PLUGIN": "Installing the certbot-dns-gcore plugin...",
 	"GCORE_PLUGIN_INSTALLED":  "Plugin installed successfully.",
+	// Added by the review fixes (v1.23.6): confirmation when the database cannot be backed up.
+	"DB_STOPPED_NO_BACKUP": "The database container is not running, so a backup cannot be made, and the next step deletes the database volume with all panel data.",
+	"DB_STOPPED_CONFIRM":   "Type DATA to delete the database without a backup, anything else to stop: ",
+	// Added by the review fixes (v1.23.6): removal of a database volume left by a failed install.
+	"DB_VOLUME_REMOVE_PROMPT": "Type DATA to remove this volume and its data and go on, anything else to stop: ",
+	"DB_VOLUME_REMOVE_FAILED": "Could not remove the volume (a container may still use it; remove the stack first)",
+	// Added by the review fixes (v1.23.6): migration rollback messages.
+	"MAINT_MIGRATE_PULL_FAILED": "Pulling the images failed: %v. The files are back in their 2.x state and the stack keeps running as before. The backup is in %s.",
+	"MAINT_MIGRATE_UP_FAILED":   "Starting the stack failed: %v. The files stay migrated to 3.x; run docker compose up -d in /opt/remnawave after you fix the cause. The backup is in %s.",
+	// Added by the review fixes (v1.23.6): temporary panel access on 8443.
+	"CONF_MODIFY_FAILED":    "Could not change the proxy configuration.",
+	"PROXY_NOT_RUNNING":     "The proxy did not start with the new configuration. Putting the old configuration back.",
+	"PROXY_CONFIG_RESTORED": "The old configuration is back and the proxy runs. Nothing was changed.",
+	"PORT_8443_NO_UFW":      "ufw is not active, so the tool does not touch the firewall. Open or close TCP port 8443 in your firewall yourself.",
+	"PORT_8443_UFW_FAILED":  "ufw could not open port 8443. Open it yourself.",
 }
 var russian = map[string]string{
 	"BACKUP_DECRYPT_DONE":                     "Расшифровано: %s",
@@ -1045,6 +1060,21 @@ var russian = map[string]string{
 	// Added by the review fixes (v1.23.5): Gcore plugin messages that were hardcoded in English.
 	"INSTALLING_GCORE_PLUGIN": "Установка плагина certbot-dns-gcore...",
 	"GCORE_PLUGIN_INSTALLED":  "Плагин установлен.",
+	// Added by the review fixes (v1.23.6): confirmation when the database cannot be backed up.
+	"DB_STOPPED_NO_BACKUP": "Контейнер базы данных не запущен, поэтому резервную копию сделать нельзя, а следующий шаг удалит том базы данных со всеми данными панели.",
+	"DB_STOPPED_CONFIRM":   "Введите DATA, чтобы удалить базу данных без резервной копии, или что угодно другое, чтобы остановиться: ",
+	// Added by the review fixes (v1.23.6): removal of a database volume left by a failed install.
+	"DB_VOLUME_REMOVE_PROMPT": "Введите DATA, чтобы удалить этот том вместе с данными и продолжить, или что угодно другое, чтобы остановиться: ",
+	"DB_VOLUME_REMOVE_FAILED": "Не удалось удалить том (возможно, его ещё использует контейнер; сначала удалите стек)",
+	// Added by the review fixes (v1.23.6): migration rollback messages.
+	"MAINT_MIGRATE_PULL_FAILED": "Не удалось скачать образы: %v. Файлы возвращены в состояние 2.x, стек работает как раньше. Резервная копия: %s.",
+	"MAINT_MIGRATE_UP_FAILED":   "Не удалось запустить стек: %v. Файлы остаются в состоянии 3.x; после устранения причины выполните docker compose up -d в /opt/remnawave. Резервная копия: %s.",
+	// Added by the review fixes (v1.23.6): temporary panel access on 8443.
+	"CONF_MODIFY_FAILED":    "Не удалось изменить конфигурацию прокси.",
+	"PROXY_NOT_RUNNING":     "Прокси не запустился с новой конфигурацией. Возвращаю прежнюю.",
+	"PROXY_CONFIG_RESTORED": "Прежняя конфигурация возвращена, прокси работает. Ничего не изменено.",
+	"PORT_8443_NO_UFW":      "ufw не активен, поэтому инструмент не меняет файрвол. Откройте или закройте TCP-порт 8443 в вашем файрволе самостоятельно.",
+	"PORT_8443_UFW_FAILED":  "ufw не смог открыть порт 8443. Откройте его самостоятельно.",
 }
 
 // availableTemplates is used by internal/selfsteal.InteractiveInstall

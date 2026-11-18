@@ -142,3 +142,74 @@ func TestRestartStrategies(t *testing.T) {
 		t.Error("every proxy needs a restart step")
 	}
 }
+
+func stubProxyChecks(t *testing.T, running func(string) bool) {
+	t.Helper()
+	oldRun, oldWait := containerRunning, waitBetweenChecks
+	containerRunning = running
+	waitBetweenChecks = func() {}
+	t.Cleanup(func() { containerRunning, waitBetweenChecks = oldRun, oldWait })
+}
+
+// A configuration the proxy rejects used to leave the panel without its
+// reverse proxy, with the bad file in place.
+func TestApplyPlanPutsTheOldConfigBackWhenTheProxyDoesNotStart(t *testing.T) {
+	dir := t.TempDir()
+	put(t, dir, "nginx.conf", "old config\n")
+	restarts := 0
+	healthy := false
+	stubProxyChecks(t, func(string) bool { return healthy })
+	p := accessProxy{name: "nginx", container: "remnawave-nginx", restart: func(string) {
+		restarts++
+		healthy = restarts > 1 // the second restart reads the restored file
+	}}
+	plan := accessPlan{confPath: filepath.Join(dir, "nginx.conf"), updated: "broken config\n"}
+
+	if applyPlan(p, dir, plan) {
+		t.Fatal("a proxy that did not start counted as success")
+	}
+	got, _ := os.ReadFile(plan.confPath)
+	if string(got) != "old config\n" {
+		t.Errorf("nginx.conf = %q, want the old text back", got)
+	}
+	if restarts != 2 {
+		t.Errorf("restarts = %d, want 2 (new config, then the restored one)", restarts)
+	}
+}
+
+func TestApplyPlanKeepsTheNewConfigWhenTheProxyRuns(t *testing.T) {
+	dir := t.TempDir()
+	put(t, dir, "nginx.conf", "old config\n")
+	stubProxyChecks(t, func(string) bool { return true })
+	p := accessProxy{name: "nginx", container: "remnawave-nginx", restart: func(string) {}}
+	plan := accessPlan{confPath: filepath.Join(dir, "nginx.conf"), updated: "new config\n"}
+	if !applyPlan(p, dir, plan) {
+		t.Fatal("a healthy proxy counted as failure")
+	}
+	if got, _ := os.ReadFile(plan.confPath); string(got) != "new config\n" {
+		t.Errorf("nginx.conf = %q", got)
+	}
+}
+
+// HAProxy reloads in place and keeps its old workers on a bad file, so there
+// is no container to wait for.
+func TestApplyPlanSkipsTheCheckForHAProxy(t *testing.T) {
+	dir := t.TempDir()
+	put(t, dir, "haproxy.cfg", "old\n")
+	stubProxyChecks(t, func(string) bool { t.Fatal("HAProxy was checked"); return false })
+	p := accessProxy{name: "haproxy", restart: func(string) {}}
+	if !applyPlan(p, dir, accessPlan{confPath: filepath.Join(dir, "haproxy.cfg"), updated: "new\n"}) {
+		t.Error("HAProxy apply failed")
+	}
+}
+
+func TestEveryRecreatedProxyIsChecked(t *testing.T) {
+	for _, web := range []string{"nginx", "caddy"} {
+		if accessFor(web).container == "" {
+			t.Errorf("%s has no container to check", web)
+		}
+	}
+	if accessFor("haproxy").container != "" {
+		t.Error("HAProxy reloads in place and needs no container check")
+	}
+}

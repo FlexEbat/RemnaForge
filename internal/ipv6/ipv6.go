@@ -6,17 +6,17 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
-	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
-const sysctlConf = "/etc/sysctl.conf"
+// sysctlConf is a variable so tests can point it at a temporary file.
+var sysctlConf = "/etc/sysctl.conf"
 
 // MenuNav lets the caller wire up navigation back to the parent menu.
 type MenuNav struct {
@@ -104,13 +104,18 @@ func setSysctlIPv6Lines(interfaceName string, disable int) error {
 		return err
 	}
 
-	lines := strings.Split(string(existing), "\n")
+	return cfgfile.Replace(sysctlConf, rewriteSysctl(string(existing), keys, disable), cfgfile.Opts{Mode: 0644})
+}
+
+// rewriteSysctl drops every line that mentions one of keys, as
+// "sed -i '/<key>/d'" does, and appends "<key> = <disable>" for each key.
+// The result ends with a newline.
+func rewriteSysctl(existing string, keys []string, disable int) string {
 	var kept []string
-	for _, line := range lines {
+	for _, line := range strings.Split(strings.TrimRight(existing, "\n"), "\n") {
 		drop := false
 		for _, k := range keys {
-			// Equivalent to: sed -i '/<key>/d' /etc/sysctl.conf
-			if matched, _ := regexp.MatchString(regexp.QuoteMeta(k), line); matched {
+			if strings.Contains(line, k) {
 				drop = true
 				break
 			}
@@ -119,13 +124,13 @@ func setSysctlIPv6Lines(interfaceName string, disable int) error {
 			kept = append(kept, line)
 		}
 	}
-
+	if len(kept) == 1 && kept[0] == "" {
+		kept = nil
+	}
 	for _, k := range keys {
-		// Equivalent to: echo "<key> = <0|1>" >> /etc/sysctl.conf
 		kept = append(kept, fmt.Sprintf("%s = %d", k, disable))
 	}
-
-	return fsx.WriteFile(sysctlConf, []byte(strings.Join(kept, "\n")), 0644)
+	return strings.Join(kept, "\n") + "\n"
 }
 
 // sysctlApply is the Go equivalent of: sysctl -p > /dev/null 2>&1
