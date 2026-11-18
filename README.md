@@ -129,7 +129,7 @@ On the very first run the tool asks for an interface language (English/Русс�
 0. Exit
 ```
 
-`remnaforge doctor`, `remnaforge versions` and `remnaforge --version` run without the menu.
+`remnaforge doctor`, `remnaforge versions` and `remnaforge --version` run without the menu. `doctor` needs root. An unknown argument, such as a mistyped `--dry-run`, stops the program with status 2 and does not start the menu.
 
 Item 1, after the install type is chosen (panel+node / panel only / add a node to an existing panel / node only), asks Nginx or Caddy, then asks everything else interactively: domains, the panel's IP when installing a standalone node, the certificate issuance method.
 

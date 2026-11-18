@@ -2,6 +2,7 @@ package cfgfile
 
 import (
 	"github.com/FlexEbat/RemnaForge/internal/ui"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -982,5 +983,31 @@ backend panel
 	}
 	if strings.Contains(got, "1.1.1.1") {
 		t.Errorf("the installer's backend must replace the old one:\n%s", got)
+	}
+}
+
+func TestStableOrWarnsWhenTheValueCannotBeSaved(t *testing.T) {
+	dir, _ := setup(t)
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	old := ManifestPath
+	ManifestPath = filepath.Join(blocker, "manifest.json")
+	defer func() { ManifestPath = old }()
+
+	realStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	got := StableOr("remnawave.cookie1", func() string { return "fresh-value" })
+	w.Close()
+	os.Stdout = realStdout
+	out, _ := io.ReadAll(r)
+
+	if got != "fresh-value" {
+		t.Errorf("StableOr returned %q, want the generated value", got)
+	}
+	if !strings.Contains(string(out), "Could not save") {
+		t.Errorf("no warning was printed: %q", out)
 	}
 }

@@ -129,3 +129,29 @@ func TestNoSecretFlagsOnCommandLines(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRedactPasswordWithAmpersandAndRussianLabel(t *testing.T) {
+	ForgetSecrets()
+	cases := map[string]string{
+		"Password: ab!CD12&xyzTAIL9":  "Password: ***",
+		"Пароль: ab!CD12&xyzTAIL9":    "Пароль: ***",
+		"POSTGRES_PASSWORD=a&b&c&d12": "POSTGRES_PASSWORD=***",
+		"cookie1=sessionvalue123":     "cookie1=***",
+	}
+	for in, want := range cases {
+		if got := Redact(in); got != want {
+			t.Errorf("Redact(%q)\n got  %q\n want %q", in, got, want)
+		}
+	}
+}
+
+func TestScannerAcceptsLongLine(t *testing.T) {
+	long := strings.Repeat("a", 200*1024)
+	sc := newScanner(strings.NewReader(long + "\nnext\n"))
+	if !sc.Scan() || len(sc.Text()) != len(long) {
+		t.Fatalf("a 200 KiB line was not read whole: %v", sc.Err())
+	}
+	if !sc.Scan() || sc.Text() != "next" {
+		t.Fatalf("the line after a long one was lost")
+	}
+}

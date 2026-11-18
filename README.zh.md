@@ -129,7 +129,7 @@ sudo remnaforge
 0. Exit
 ```
 
-`remnaforge doctor`、`remnaforge versions` 和 `remnaforge --version` 无需进入菜单即可使用。
+`remnaforge doctor`、`remnaforge versions` 和 `remnaforge --version` 无需进入菜单即可使用。 `doctor` 需要 root 权限。未知参数（例如拼错的 `--dry-run`）会使程序以状态码 2 退出，不会启动菜单。
 
 选择第 1 项后，先确定安装类型（面板+节点 / 仅面板 / 向已有面板添加节点 / 仅节点），接着询问使用 Nginx 还是 Caddy，然后逐项交互式询问其余信息：域名、独立安装节点时面板的 IP、证书签发方式。
 

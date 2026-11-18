@@ -107,7 +107,7 @@ func MigrateV2ToV3() {
 	}
 	fmt.Printf("%s"+i18n.T("BACKUP_DONE")+"%s\n", ui.ColorGreen, dest, ui.ColorReset)
 
-	if err := cfgfile.Replace(envPath, newEnv, cfgfile.Opts{}); err != nil {
+	if err := cfgfile.Replace(envPath, newEnv, cfgfile.Opts{Secret: true}); err != nil {
 		fmt.Printf("%s%v%s\n", ui.ColorRed, err, ui.ColorReset)
 		return
 	}

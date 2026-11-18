@@ -72,7 +72,7 @@ func backupPanelTo(dir, dest string) (err error) {
 	}()
 
 	if data, readErr := os.ReadFile(filepath.Join(dir, ".env")); readErr == nil {
-		if err = cfgfile.Replace(filepath.Join(dest, ".env"), string(data), cfgfile.Opts{}); err != nil {
+		if err = cfgfile.Replace(filepath.Join(dest, ".env"), string(data), cfgfile.Opts{Secret: true}); err != nil {
 			return err
 		}
 	}

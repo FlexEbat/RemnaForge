@@ -20,7 +20,20 @@ var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 // bufio.Scanner reads stdin in chunks, so a new scanner per call would
 // silently swallow whatever line was buffered but unread by the previous
 // scanner, losing input.
-var stdinScanner = bufio.NewScanner(os.Stdin)
+var stdinScanner = newStdinScanner()
+
+// maxInputLine is the longest line Reading accepts. The default Scanner
+// buffer of 64 KiB made a long pasted line look like end of input and
+// ended the program with status 130.
+const maxInputLine = 1 << 20
+
+func newStdinScanner() *bufio.Scanner { return newScanner(os.Stdin) }
+
+func newScanner(r io.Reader) *bufio.Scanner {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64*1024), maxInputLine)
+	return sc
+}
 
 // Question formats a prompt string with the standard "[?]" marker.
 func Question(msg string) string {
@@ -209,10 +222,11 @@ func ReadSecret(prompt string) string {
 	return line
 }
 
-// ReadingSecret is Reading for a token or a password: whatever the operator
-// types is masked in the log from then on.
+// ReadingSecret is ReadSecret for a token or a password: the terminal does
+// not echo what the operator types, and the value is masked in the log from
+// then on.
 func ReadingSecret(prompt string) string {
-	v := Reading(prompt)
+	v := ReadSecret(prompt)
 	RegisterSecret(v)
 	return v
 }

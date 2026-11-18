@@ -18,6 +18,11 @@ import (
 // check_root/check_os, then the main menu.
 func main() {
 	args, dry := splitDryRun(os.Args[1:])
+	if err := checkArgs(args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usage)
+		ui.Exit(2)
+	}
 	runctx.SetDryRun(dry)
 	if len(args) > 0 && runSubcommand(args[0]) {
 		return
@@ -59,6 +64,25 @@ func main() {
 	menu.Run()
 }
 
+const usage = "usage: remnaforge [--dry-run] [--version | doctor | versions]"
+
+// checkArgs rejects what the program does not know. An unknown argument used
+// to start the interactive menu, so a typo such as "--dryrun" ran a real,
+// changing session.
+func checkArgs(args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	switch args[0] {
+	case "--version", "-v", "version", "doctor", "versions", "--help", "-h", "help":
+		if len(args) > 1 {
+			return fmt.Errorf("remnaforge: unexpected argument %q", args[1])
+		}
+		return nil
+	}
+	return fmt.Errorf("remnaforge: unknown argument %q", args[0])
+}
+
 // splitDryRun removes every --dry-run from args and reports whether there
 // was one.
 func splitDryRun(args []string) (rest []string, dry bool) {
@@ -80,12 +104,17 @@ func runSubcommand(arg string) bool {
 		fmt.Println(menu.AppName, menu.AppVersion)
 	case "doctor":
 		i18n.SetLanguage("en")
+		// The checks read Docker and root-owned files, and the report goes to
+		// a root-owned directory. Without root they report false failures.
+		if err := oscheck.CheckRoot(); err != nil {
+			ui.ErrorExit(err.Error())
+		}
 		maintenance.Doctor()
 	case "versions":
 		i18n.SetLanguage("en")
 		maintenance.ShowVersions()
 	case "--help", "-h", "help":
-		fmt.Println("usage: remnaforge [--dry-run] [--version | doctor | versions]")
+		fmt.Println(usage)
 		fmt.Println("without arguments the interactive menu is started")
 		fmt.Println("--dry-run asks the questions and shows what would change, without changing anything")
 	default:

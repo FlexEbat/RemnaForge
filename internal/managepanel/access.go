@@ -2,6 +2,7 @@ package managepanel
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -347,9 +348,25 @@ func openPanelAccess() {
 	_ = execx.Command("ufw", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
 	_ = execx.Command("ufw", "reload").Run()
 
+	registerLinkSecrets(plan.link)
 	printNote("OPEN_PANEL_LINK")
 	fmt.Printf("%s%s%s\n", ui.ColorWhite, plan.link, ui.ColorReset)
 	printErr("PORT_8443_WARNING")
+}
+
+// registerLinkSecrets makes the log mask the query values of the panel link:
+// the link carries the secret cookie value, and the operator needs it on the
+// screen but not in the log file.
+func registerLinkSecrets(link string) {
+	u, err := url.Parse(link)
+	if err != nil {
+		return
+	}
+	for _, values := range u.Query() {
+		for _, v := range values {
+			ui.RegisterSecret(v)
+		}
+	}
 }
 
 func closePanelAccess() {

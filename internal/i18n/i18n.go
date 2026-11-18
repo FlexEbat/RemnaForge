@@ -518,6 +518,8 @@ var english = map[string]string{
 	"WARNING_LABEL":                           "WARNING:",
 	"WARNING_NODE_PANEL":                      "Adding a node should only be done on the server where the panel is installed, not on the node server.",
 	"WILDCARD_CERT_FOUND":                     "Wildcard certificate found in /etc/letsencrypt/live/",
+	// Added by the review fixes (v1.23.4): warning when stable values are not saved.
+	"STABLE_NOT_SAVED": "Could not save the generated values for the next run: %v. A rerun can generate different ones.",
 }
 var russian = map[string]string{
 	"BACKUP_DECRYPT_DONE":                     "Расшифровано: %s",
@@ -1029,6 +1031,8 @@ var russian = map[string]string{
 	"WARNING_LABEL":                           "ВНИМАНИЕ:",
 	"WARNING_NODE_PANEL":                      "Добавление ноды должно выполняться только на сервере, где установлена панель, а не на сервере ноды.",
 	"WILDCARD_CERT_FOUND":                     "Wildcard-сертификат найден в /etc/letsencrypt/live/",
+	// Added by the review fixes (v1.23.4): warning when stable values are not saved.
+	"STABLE_NOT_SAVED": "Не удалось сохранить сгенерированные значения для следующего запуска: %v. Повторный запуск может создать другие.",
 }
 
 // availableTemplates is used by internal/selfsteal.InteractiveInstall

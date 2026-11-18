@@ -28,8 +28,9 @@ func (c check) result() verify.Result {
 	return verify.Result{Name: c.name, OK: c.ok, Detail: c.detail}
 }
 
-// Doctor runs the read-only health checks against the local installation,
-// prints one line per check, and saves the same lines as a report. The
+// Doctor runs the health checks against the local installation, prints one
+// line per check, and saves the same lines as a report. The report is the
+// only thing it writes. The
 // container, database, application, proxy, TLS and Telegram checks come
 // from internal/verify, the same ones an install flow ends with.
 func Doctor() {

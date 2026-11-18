@@ -248,7 +248,7 @@ func installPanelNginx() (*panelState, error) {
 		cookiesRandom1:  cfgfile.StableOr("remnawave.cookie1", genutil.GenerateUser),
 		cookiesRandom2:  cfgfile.StableOr("remnawave.cookie2", genutil.GenerateUser),
 		metricsUser:     cfgfile.StableOr("remnawave.metrics_user", genutil.GenerateUser),
-		metricsPass:     cfgfile.StableOr("remnawave.metrics_pass", genutil.GenerateUser),
+		metricsPass:     cfgfile.StableOr("remnawave.metrics_pass", func() string { return genutil.GenerateAlnumSecret(32) }),
 		appSecret:       cfgfile.StableOr("remnawave.app_secret", func() string { return genutil.GenerateAlnumSecret(64) }),
 	}
 

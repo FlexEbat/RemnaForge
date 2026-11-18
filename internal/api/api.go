@@ -57,10 +57,13 @@ func makeAPIRequestWithStatus(method, url, token, data string) (statusCode int, 
 
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
+		fmt.Printf("%s%v%s\n", ui.ColorRed, err, ui.ColorReset)
 		return 0, nil
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Forwarded-For", "127.0.0.1")
 	req.Header.Set("X-Forwarded-Proto", "https")
@@ -97,6 +100,7 @@ func RegisterRemnawave(domainURL, username, password, token string) string {
 			} `json:"response"`
 		}
 		_ = json.Unmarshal(resp, &parsed)
+		ui.RegisterSecret(parsed.Response.AccessToken)
 		return parsed.Response.AccessToken
 	}
 	fmt.Printf("%s%s: %s%s\n", ui.ColorRed, i18n.T("ERROR_REGISTER"), string(resp), ui.ColorReset)
@@ -263,6 +267,7 @@ func GetPublicKey(domainURL, token, targetDir string) error {
 	}
 	_ = json.Unmarshal(resp, &parsed)
 	secretKey := parsed.Response.SecretKey
+	ui.RegisterSecret(secretKey)
 	if secretKey == "" {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_EXTRACT_PUBLIC_KEY"), ui.ColorReset)
 		return fmt.Errorf("no secretKey in response: %s", resp)
@@ -308,6 +313,7 @@ func GenerateXrayKeys(domainURL, token string) string {
 	if len(parsed.Response.Keypairs) > 0 {
 		privateKey = parsed.Response.Keypairs[0].PrivateKey
 	}
+	ui.RegisterSecret(privateKey)
 	if privateKey == "" {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_EXTRACT_PRIVATE_KEY"), ui.ColorReset)
 	}
