@@ -19,10 +19,13 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
+// installDirs is a variable so tests can use temporary directories.
+var installDirs = []string{"/opt/remnawave", "/opt/remnanode"}
+
 // findInstallDir returns whichever of /opt/remnawave or /opt/remnanode
 // exists.
 func findInstallDir() (string, bool) {
-	for _, d := range []string{"/opt/remnawave", "/opt/remnanode"} {
+	for _, d := range installDirs {
 		if info, err := os.Stat(d); err == nil && info.IsDir() {
 			return d, true
 		}
@@ -31,22 +34,33 @@ func findInstallDir() (string, bool) {
 	return "", false
 }
 
-// dockerImageRunning reports whether any running container was started
-// from image.
-func dockerImageRunning(image string) bool {
-	out, err := execx.Command("docker", "ps", "-q", "--filter", "ancestor="+image).Output()
-	return err == nil && strings.TrimSpace(string(out)) != ""
+// anyPanelOrNodeRunning reports whether a container of a Remnawave panel or
+// node image runs, whatever its tag. The list used to hold three exact tags
+// (backend:latest, node:latest, backend:2), and every install since 3.x runs
+// remnawave/backend:3, so a panel-only host looked stopped: Stop said "not
+// running" and Update refused.
+func anyPanelOrNodeRunning() bool {
+	out, err := execx.Command("docker", "ps", "--format", "{{.Image}}").Output()
+	return err == nil && hasRemnawaveImage(string(out))
 }
 
-// anyPanelOrNodeRunning checks the three known panel/node image tags:
-// remnawave/backend:latest, remnawave/node:latest, remnawave/backend:2.
-func anyPanelOrNodeRunning() bool {
-	for _, img := range []string{"remnawave/backend:latest", "remnawave/node:latest", "remnawave/backend:2"} {
-		if dockerImageRunning(img) {
+// hasRemnawaveImage reports whether one of the image names, one per line, is
+// a Remnawave backend or node image.
+func hasRemnawaveImage(images string) bool {
+	for _, line := range strings.Split(images, "\n") {
+		img := strings.TrimSpace(line)
+		if strings.HasPrefix(img, "remnawave/backend:") || strings.HasPrefix(img, "remnawave/node:") ||
+			img == "remnawave/backend" || img == "remnawave/node" {
 			return true
 		}
 	}
 	return false
+}
+
+// printComposeFailure tells the operator that a docker compose command
+// failed. Start and Stop used to report success whatever the command did.
+func printComposeFailure(subcommand string, err error) {
+	fmt.Printf("%s%s%s\n", ui.ColorRed, fmt.Sprintf(i18n.T("COMPOSE_COMMAND_FAILED"), subcommand, err), ui.ColorReset)
 }
 
 func composeRun(dir string, args ...string) error {
@@ -146,7 +160,10 @@ func startPanelNode() {
 	fmt.Printf("%s%s...%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL_NODE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	_ = composeRun(dir, "up", "-d")
+	if err := composeRun(dir, "up", "-d"); err != nil {
+		printComposeFailure("up", err)
+		return
+	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("PANEL_RUN"), ui.ColorReset)
 }
 
@@ -164,7 +181,10 @@ func stopPanelNode() {
 	fmt.Printf("%s%s...%s\n", ui.ColorYellow, i18n.T("STOPPING_REMNAWAVE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	_ = composeRun(dir, "down")
+	if err := composeRun(dir, "down"); err != nil {
+		printComposeFailure("down", err)
+		return
+	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("PANEL_STOP"), ui.ColorReset)
 }
 
@@ -192,6 +212,20 @@ func composeImageIDs(dir string) string {
 	}
 	sort.Strings(ids)
 	return strings.Join(ids, "\n")
+}
+
+// lastLines returns the last n non-empty lines of s.
+func lastLines(s string, n int) string {
+	var lines []string
+	for _, l := range strings.Split(s, "\n") {
+		if strings.TrimSpace(l) != "" {
+			lines = append(lines, l)
+		}
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func uniqueSortedLines(s string) []string {
@@ -231,7 +265,16 @@ func updatePanelNode() {
 	pullCmd := execx.Command("docker", "compose", "pull")
 	pullCmd.Dir = dir
 	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	pullOutput, _ := pullCmd.CombinedOutput()
+	pullOutput, pullErr := pullCmd.CombinedOutput()
+	if pullErr != nil {
+		// A failed pull leaves the images as they were, which used to be
+		// reported as "no update available".
+		printComposeFailure("pull", pullErr)
+		if tail := lastLines(string(pullOutput), 3); tail != "" {
+			fmt.Println(tail)
+		}
+		return
+	}
 
 	after := composeImageIDs(dir)
 

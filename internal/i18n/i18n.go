@@ -546,6 +546,8 @@ var english = map[string]string{
 	// Added by the review fixes (v1.23.7): Docker install messages.
 	"INSTALLING_DOCKER":            "Installing Docker...",
 	"ERROR_DOWNLOAD_DOCKER_SCRIPT": "Failed to download the Docker install script",
+	// Added by the review fixes (v1.23.10): docker compose failures in the manage menu.
+	"COMPOSE_COMMAND_FAILED": "docker compose %s failed: %v",
 }
 var russian = map[string]string{
 	"BACKUP_DECRYPT_DONE":                     "Расшифровано: %s",
@@ -1085,6 +1087,8 @@ var russian = map[string]string{
 	// Added by the review fixes (v1.23.7): Docker install messages.
 	"INSTALLING_DOCKER":            "Установка Docker...",
 	"ERROR_DOWNLOAD_DOCKER_SCRIPT": "Ошибка: Не удалось загрузить установочный скрипт Docker",
+	// Added by the review fixes (v1.23.10): docker compose failures in the manage menu.
+	"COMPOSE_COMMAND_FAILED": "docker compose %s завершилась с ошибкой: %v",
 }
 
 // availableTemplates is used by internal/selfsteal.InteractiveInstall

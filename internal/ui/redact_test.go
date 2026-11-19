@@ -155,3 +155,23 @@ func TestScannerAcceptsLongLine(t *testing.T) {
 		t.Fatalf("the line after a long one was lost")
 	}
 }
+
+func TestReadSecretBlockReadsThroughTheSharedScannerAndMasksTheLines(t *testing.T) {
+	ForgetSecrets()
+	old := stdinScanner
+	stdinScanner = newScanner(strings.NewReader("\nAAAA-first-line-of-the-key\nBBBB-second-line-of-the-key\n\ny\n"))
+	defer func() { stdinScanner = old }()
+
+	got := ReadSecretBlock("key: ")
+	if got != "AAAA-first-line-of-the-key\nBBBB-second-line-of-the-key" {
+		t.Errorf("block = %q", got)
+	}
+	// The next prompt reads what came after the blank line: nothing was
+	// swallowed by a second scanner.
+	if next, ok := ReadLine(); !ok || next != "y" {
+		t.Errorf("the line after the block = %q, %v", next, ok)
+	}
+	if out := Redact("compose: AAAA-first-line-of-the-key"); strings.Contains(out, "first-line") {
+		t.Errorf("the pasted key reaches the log: %q", out)
+	}
+}

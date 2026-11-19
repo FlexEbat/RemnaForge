@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 )
 
@@ -50,6 +51,38 @@ func Reading(prompt string) string {
 		Exit(130)
 	}
 	return stdinScanner.Text()
+}
+
+// ReadSecretBlock prints prompt and reads pasted multi-line text, such as the
+// key the panel gives a node, until a blank line that follows non-blank
+// content or until the end of input. It reads through the same scanner as
+// Reading: a second scanner on stdin loses whatever the first has already
+// buffered, which a fast paste or piped input hits. Every line is masked in
+// the log from then on.
+func ReadSecretBlock(prompt string) string {
+	fmt.Print(Question(prompt))
+	var lines []string
+	for stdinScanner.Scan() {
+		line := stdinScanner.Text()
+		if line == "" {
+			if len(lines) > 0 {
+				break
+			}
+			continue
+		}
+		lines = append(lines, line)
+		RegisterSecret(line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// ReadLine reads one line from the shared scanner without a prompt. ok is
+// false at the end of input.
+func ReadLine() (line string, ok bool) {
+	if !stdinScanner.Scan() {
+		return "", false
+	}
+	return stdinScanner.Text(), true
 }
 
 // ErrorExit prints msg in red and exits with status 1.
