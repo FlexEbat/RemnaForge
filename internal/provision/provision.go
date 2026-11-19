@@ -50,6 +50,8 @@ type Options struct {
 // Run provisions the panel. It prints the same progress lines the flows
 // printed and returns the first error.
 func Run(o Options) error {
+	// The flows print this password at the end; the log must not keep it.
+	ui.RegisterSecret(o.Password)
 	token := api.RegisterRemnawave(o.DomainURL, o.Username, o.Password, "")
 	if token == "" {
 		return fmt.Errorf("%s", i18n.T("ERROR_REGISTER"))

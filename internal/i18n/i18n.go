@@ -518,6 +518,34 @@ var english = map[string]string{
 	"WARNING_LABEL":                           "WARNING:",
 	"WARNING_NODE_PANEL":                      "Adding a node should only be done on the server where the panel is installed, not on the node server.",
 	"WILDCARD_CERT_FOUND":                     "Wildcard certificate found in /etc/letsencrypt/live/",
+	// Added by the review fixes (v1.23.4): warning when stable values are not saved.
+	"STABLE_NOT_SAVED": "Could not save the generated values for the next run: %v. A rerun can generate different ones.",
+	// Added by the review fixes (v1.23.5): crontab read and write errors.
+	"CRON_READ_FAILED":  "Could not read the root crontab: %v. The certificate renewal job was not changed.",
+	"CRON_WRITE_FAILED": "Could not write the root crontab: %v. Certificates are not renewed until the job exists.",
+	// Added by the review fixes (v1.23.5): Gcore plugin messages that were hardcoded in English.
+	"INSTALLING_GCORE_PLUGIN": "Installing the certbot-dns-gcore plugin...",
+	"GCORE_PLUGIN_INSTALLED":  "Plugin installed successfully.",
+	// Added by the review fixes (v1.23.6): confirmation when the database cannot be backed up.
+	"DB_STOPPED_NO_BACKUP": "The database container is not running, so a backup cannot be made, and the next step deletes the database volume with all panel data.",
+	"DB_STOPPED_CONFIRM":   "Type DATA to delete the database without a backup, anything else to stop: ",
+	// Added by the review fixes (v1.23.6): removal of a database volume left by a failed install.
+	"DB_VOLUME_REMOVE_PROMPT": "Type DATA to remove this volume and its data and go on, anything else to stop: ",
+	"DB_VOLUME_REMOVE_FAILED": "Could not remove the volume (a container may still use it; remove the stack first)",
+	// Added by the review fixes (v1.23.6): migration rollback messages.
+	"MAINT_MIGRATE_PULL_FAILED": "Pulling the images failed: %v. The files are back in their 2.x state and the stack keeps running as before. The backup is in %s.",
+	"MAINT_MIGRATE_UP_FAILED":   "Starting the stack failed: %v. The files stay migrated to 3.x; run docker compose up -d in /opt/remnawave after you fix the cause. The backup is in %s.",
+	// Added by the review fixes (v1.23.6): temporary panel access on 8443.
+	"CONF_MODIFY_FAILED":    "Could not change the proxy configuration.",
+	"PROXY_NOT_RUNNING":     "The proxy did not start with the new configuration. Putting the old configuration back.",
+	"PROXY_CONFIG_RESTORED": "The old configuration is back and the proxy runs. Nothing was changed.",
+	"PORT_8443_NO_UFW":      "ufw is not active, so the tool does not touch the firewall. Open or close TCP port 8443 in your firewall yourself.",
+	"PORT_8443_UFW_FAILED":  "ufw could not open port 8443. Open it yourself.",
+	// Added by the review fixes (v1.23.7): backup script verification.
+	"BACKUP_SCRIPT_REPLACED": "The existing backup-restore.sh is not the pinned version. Downloading the pinned one over it.",
+	// Added by the review fixes (v1.23.7): Docker install messages.
+	"INSTALLING_DOCKER":            "Installing Docker...",
+	"ERROR_DOWNLOAD_DOCKER_SCRIPT": "Failed to download the Docker install script",
 }
 var russian = map[string]string{
 	"BACKUP_DECRYPT_DONE":                     "Расшифровано: %s",
@@ -1029,6 +1057,34 @@ var russian = map[string]string{
 	"WARNING_LABEL":                           "ВНИМАНИЕ:",
 	"WARNING_NODE_PANEL":                      "Добавление ноды должно выполняться только на сервере, где установлена панель, а не на сервере ноды.",
 	"WILDCARD_CERT_FOUND":                     "Wildcard-сертификат найден в /etc/letsencrypt/live/",
+	// Added by the review fixes (v1.23.4): warning when stable values are not saved.
+	"STABLE_NOT_SAVED": "Не удалось сохранить сгенерированные значения для следующего запуска: %v. Повторный запуск может создать другие.",
+	// Added by the review fixes (v1.23.5): crontab read and write errors.
+	"CRON_READ_FAILED":  "Не удалось прочитать crontab пользователя root: %v. Задача обновления сертификатов не изменена.",
+	"CRON_WRITE_FAILED": "Не удалось записать crontab пользователя root: %v. Сертификаты не обновляются, пока задачи нет.",
+	// Added by the review fixes (v1.23.5): Gcore plugin messages that were hardcoded in English.
+	"INSTALLING_GCORE_PLUGIN": "Установка плагина certbot-dns-gcore...",
+	"GCORE_PLUGIN_INSTALLED":  "Плагин установлен.",
+	// Added by the review fixes (v1.23.6): confirmation when the database cannot be backed up.
+	"DB_STOPPED_NO_BACKUP": "Контейнер базы данных не запущен, поэтому резервную копию сделать нельзя, а следующий шаг удалит том базы данных со всеми данными панели.",
+	"DB_STOPPED_CONFIRM":   "Введите DATA, чтобы удалить базу данных без резервной копии, или что угодно другое, чтобы остановиться: ",
+	// Added by the review fixes (v1.23.6): removal of a database volume left by a failed install.
+	"DB_VOLUME_REMOVE_PROMPT": "Введите DATA, чтобы удалить этот том вместе с данными и продолжить, или что угодно другое, чтобы остановиться: ",
+	"DB_VOLUME_REMOVE_FAILED": "Не удалось удалить том (возможно, его ещё использует контейнер; сначала удалите стек)",
+	// Added by the review fixes (v1.23.6): migration rollback messages.
+	"MAINT_MIGRATE_PULL_FAILED": "Не удалось скачать образы: %v. Файлы возвращены в состояние 2.x, стек работает как раньше. Резервная копия: %s.",
+	"MAINT_MIGRATE_UP_FAILED":   "Не удалось запустить стек: %v. Файлы остаются в состоянии 3.x; после устранения причины выполните docker compose up -d в /opt/remnawave. Резервная копия: %s.",
+	// Added by the review fixes (v1.23.6): temporary panel access on 8443.
+	"CONF_MODIFY_FAILED":    "Не удалось изменить конфигурацию прокси.",
+	"PROXY_NOT_RUNNING":     "Прокси не запустился с новой конфигурацией. Возвращаю прежнюю.",
+	"PROXY_CONFIG_RESTORED": "Прежняя конфигурация возвращена, прокси работает. Ничего не изменено.",
+	"PORT_8443_NO_UFW":      "ufw не активен, поэтому инструмент не меняет файрвол. Откройте или закройте TCP-порт 8443 в вашем файрволе самостоятельно.",
+	"PORT_8443_UFW_FAILED":  "ufw не смог открыть порт 8443. Откройте его самостоятельно.",
+	// Added by the review fixes (v1.23.7): backup script verification.
+	"BACKUP_SCRIPT_REPLACED": "Существующий backup-restore.sh не совпадает с закреплённой версией. Скачиваю закреплённую поверх него.",
+	// Added by the review fixes (v1.23.7): Docker install messages.
+	"INSTALLING_DOCKER":            "Установка Docker...",
+	"ERROR_DOWNLOAD_DOCKER_SCRIPT": "Ошибка: Не удалось загрузить установочный скрипт Docker",
 }
 
 // availableTemplates is used by internal/selfsteal.InteractiveInstall

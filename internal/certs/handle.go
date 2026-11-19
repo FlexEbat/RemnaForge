@@ -6,7 +6,7 @@
 // undertaking than shelling out to a well-tested tool that a Remnawave
 // server already needs installed.
 //
-// HandleCertificates takes targetDir as an explicit parameter (rather
+// HandleCertificatesFor takes targetDir as an explicit parameter (rather
 // than a single hardcoded path), so each caller's SSL docker-compose
 // volume-mount lines get appended to its own compose file: this matters
 // because internal/panelfull/internal/panelonly point at
@@ -19,18 +19,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
-	"github.com/FlexEbat/RemnaForge/internal/execx"
-	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
-	"github.com/FlexEbat/RemnaForge/internal/journal"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
 	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
-// Result is returned by HandleCertificates so callers like nginxnode can
+// Result is returned by HandleCertificatesFor so callers like nginxnode can
 // know which domain's certificate to reference, instead of having every
 // caller re-derive it.
 type Result struct {
@@ -41,12 +39,6 @@ type Result struct {
 	// nginx service, so the file is written once and whole. It is empty for
 	// HAProxy, whose container mounts the bundle directory.
 	ComposeMounts string
-}
-
-// HandleCertificates obtains the certificates for an nginx stack. It is
-// HandleCertificatesFor with nginx.
-func HandleCertificates(domainsToCheck []string, certMethod, letsencryptEmail, targetDir string) (Result, error) {
-	return HandleCertificatesFor(proxy.Nginx, domainsToCheck, certMethod, letsencryptEmail, targetDir)
 }
 
 // HandleCertificatesFor obtains the certificates and wires them to the
@@ -153,7 +145,7 @@ func HandleCertificatesFor(kind proxy.Kind, domainsToCheck []string, certMethod,
 		for _, d := range domainsToCheck {
 			if err := GetCertificates(d, "2", letsencryptEmail); err != nil {
 				fmt.Printf("%s%s %s%s\n", ui.ColorRed, i18n.T("CERT_GENERATION_FAILED"), d, ui.ColorReset)
-				continue
+				return Result{}, err
 			}
 			if err := addComposeCertLines(d); err != nil {
 				return Result{}, err
@@ -173,17 +165,13 @@ func HandleCertificatesFor(kind proxy.Kind, domainsToCheck []string, certMethod,
 		}
 	}
 
-	cronCommand := "/usr/bin/certbot renew --quiet"
-	if certMethod == "2" {
-		cronCommand = "ufw allow 80 && /usr/bin/certbot renew --quiet && ufw delete allow 80 && ufw reload && cd /opt/remnawave && docker compose down && docker compose up"
+	cronCommand := renewCronCommand(certMethod)
+	if needCertificates && certMethod == "2" {
+		if err := InstallHTTP01Hook(); err != nil {
+			return Result{}, err
+		}
 	}
 	if kind == proxy.HAProxy {
-		// The renew hook reloads HAProxy, so the cron line only renews and
-		// opens port 80 for the HTTP-01 method.
-		cronCommand = "/usr/bin/certbot renew --quiet"
-		if certMethod == "2" {
-			cronCommand = "ufw allow 80 && /usr/bin/certbot renew --quiet && ufw delete allow 80 && ufw reload"
-		}
 		if err := InstallHAProxyHook(); err != nil {
 			return Result{}, err
 		}
@@ -196,70 +184,21 @@ func HandleCertificatesFor(kind proxy.Kind, domainsToCheck []string, certMethod,
 			}
 		}
 	}
-	syncCertRenewalCron(cronCommand, minDaysLeft)
+	// A failed crontab update is reported by the function; the certificates
+	// are issued, so the run goes on.
+	_ = syncCertRenewalCron(cronCommand, minDaysLeft, needCertificates)
 
-	if kind == proxy.HAProxy {
-		for _, name := range certNames {
+	// Every certificate this run issued gets the renew_hook that restarts the
+	// proxy, whatever the method: the HTTP-01 method had none, and the cron
+	// job restarted the whole stack instead. An HAProxy bundle needs its hook
+	// for existing certificates as well.
+	if needCertificates || kind == proxy.HAProxy {
+		for name := range certDomainsAdded {
 			fixRenewHook(name)
-		}
-	}
-	for d := range uniqueDomains {
-		if kind != proxy.HAProxy {
-			fixRenewHook(d)
 		}
 	}
 
 	return Result{Method: certMethod, ComposeMounts: mounts.String()}, nil
-}
-
-// syncCertRenewalCron ensures a weekly root crontab entry exists for
-// certbot renewal, replacing it if the certificate is close to expiry
-// and the entry doesn't already match.
-func syncCertRenewalCron(cronCommand string, minDaysLeft int) {
-	journal.Add("cron", i18n.T("JOURNAL_CRON"))
-	existing := currentCrontab()
-
-	hasRenewLine := strings.Contains(existing, "/usr/bin/certbot renew")
-	hasExactRule := strings.Contains(existing, "0 5 * * 0")
-
-	switch {
-	case !hasRenewLine:
-		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("ADDING_CRON_FOR_EXISTING_CERTS"), ui.ColorReset)
-		addCronRule(existing, cronCommand)
-
-	case minDaysLeft <= 30 && !hasExactRule:
-		fmt.Printf("%s%s %d %s%s\n", ui.ColorYellow, i18n.T("CERT_EXPIRY_SOON"), minDaysLeft, i18n.T("DAYS"), ui.ColorReset)
-		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("UPDATING_CRON"), ui.ColorReset)
-		var kept []string
-		for _, line := range strings.Split(existing, "\n") {
-			if !strings.Contains(line, "/usr/bin/certbot renew") {
-				kept = append(kept, line)
-			}
-		}
-		addCronRule(strings.Join(kept, "\n"), cronCommand)
-
-	default:
-		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CRON_ALREADY_EXISTS"), ui.ColorReset)
-	}
-}
-
-func currentCrontab() string {
-	out, _ := execx.Command("crontab", "-u", "root", "-l").Output()
-	return string(out)
-}
-
-// addCronRule is the Go equivalent of: (crontab -l; echo "0 5 * * 0 $cmd") | crontab -
-func addCronRule(existing, cronCommand string) {
-	rule := "0 5 * * 0 " + cronCommand
-	newCrontab := strings.TrimRight(existing, "\n")
-	if newCrontab != "" {
-		newCrontab += "\n"
-	}
-	newCrontab += rule + "\n"
-
-	cmd := execx.Command("crontab", "-u", "root", "-")
-	cmd.Stdin = strings.NewReader(newCrontab)
-	_ = cmd.Run()
 }
 
 // fixRenewHook makes sure each domain's renewal.conf has the
@@ -277,7 +216,7 @@ func fixRenewHook(domainName string) {
 
 	if !strings.Contains(conf, "renew_hook") {
 		conf = strings.TrimRight(conf, "\n") + "\n" + desiredHook + "\n"
-		_ = fsx.WriteFile(renewalConf, []byte(conf), 0644)
+		_ = cfgfile.Replace(renewalConf, conf, cfgfile.Opts{})
 		return
 	}
 
@@ -295,7 +234,7 @@ func fixRenewHook(domainName string) {
 				lines[i] = desiredHook
 			}
 		}
-		_ = fsx.WriteFile(renewalConf, []byte(strings.Join(lines, "\n")), 0644)
+		_ = cfgfile.Replace(renewalConf, strings.Join(lines, "\n"), cfgfile.Opts{})
 		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("UPDATED_RENEW_AUTH"), ui.ColorReset)
 	}
 }

@@ -47,7 +47,7 @@ VLESS 协议及其相关机制（XTLS、REALITY、VLESS Encryption）发展很�
 
 - 在一台服务器上安装 Remnawave 面板、节点，或两者同时安装。
 - 可选两种反向代理：Nginx 或 Caddy。
-- Nginx 模式下通过 `certbot` 签发和续期 TLS 证书：Cloudflare DNS-01、ACME HTTP-01、Gcore DNS-01。Caddy 模式下通过内置 ACME 客户端自行签发和续期证书。
+- Nginx 模式下通过 `certbot` 签发和续期 TLS 证书：Cloudflare DNS-01、ACME HTTP-01、Gcore DNS-01。Caddy 模式下通过内置 ACME 客户端自行签发和续期证书。 cron 每周运行一次 `certbot renew`。HTTP-01 方式只在有证书到期时，通过 certbot 钩子在 ufw 中开放 80 端口，并且只关闭脚本自己开放的规则；每个续期后的证书通过自己的 `renew_hook` 重启代理。
 - 节点的配置 profile 默认只带一个 inbound：VLESS+Reality（`Raw`）。每个节点（无论是同机部署还是独立部署）都已经预先配置好，可以随时再启用两个 inbound：Hysteria2（`HYSTERIA-BBR`，TLS 由 Xray 自己终结）和 VLESS+XHTTP（`XHTTP-TLS`，通过 `/api/v2/stream-events`）——对应的 nginx.conf/Caddyfile location/route，以及节点证书到容器的挂载都已经就绪，只是需要之后通过「Manage Node Profile」菜单项手动开启。
 - 通过面板的 HTTP API 把节点注册到已运行的面板上。
 - 在 selfsteal 域名上安装一个 HTML 模板（随机选取，或从多个来源手动选择），用于伪装未授权连接的流量。
@@ -62,10 +62,10 @@ VLESS 协议及其相关机制（XTLS、REALITY、VLESS Encryption）发展很�
 - `--dry-run`（例如 `remnaforge --dry-run`）会照常提问并执行只读检查，然后列出将要执行的每条命令和将要写入的每个文件（已有文件显示差异，不显示密钥），但不做任何更改。安装流程会在启动容器之前停止。
 - 面板、节点或两者同机，都可以在 Nginx、Caddy 之外选择 HAProxy。HAProxy 以 TCP 方式读取 443 端口，按 SNI 路由并终止 TLS，用 PROXY protocol 传递客户端地址，并由一个小型 nginx 容器提供静态 selfsteal 站点。HAProxy 安装使用 TLS 配置（XHTTP 和 Hysteria2），不使用 Reality。证书按名称合并为一个文件，每次续期后在不中断连接的情况下重新加载。
 - 绝不覆盖你修改过的配置文件：它记录自己写入的内容（`/usr/local/remnawave_reverse/manifest.json`），只替换仍保持原样的文件，对其他文件显示差异并让你选择保留、合并或替换，`.env` 按键合并，每次修改前备份（`/usr/local/remnawave_reverse/backups/<时间>/`）。写入是原子的，重复运行安装不会改变文件。
-- 每次安装都作为事务执行：失败时文件逐字节还原，本次创建的容器和网络被删除，无法回滚的内容（已安装的软件包、已申请的证书、cron 条目）会列出。数据卷和数据库绝不会被触碰。
+- 每次安装都作为事务执行：失败时文件逐字节还原，本次创建的容器和网络被删除，无法回滚的内容（已安装的软件包、已申请的证书、cron 条目）会列出。数据卷和数据库绝不会被触碰。 下一次安装会在这类失败遗留的数据库卷处停止，只有输入 `DATA` 才会删除它；重装和卸载在数据库容器已停止、无法备份时同样要求输入 `DATA`。
 - 日志不含机密（密码、令牌、API 密钥以及生成或输入的内容都会被遮盖），`.env` 与凭据文件保持 0600 并位于受限目录，旁边写入 `.gitignore`，可用口令加密数据库备份（gpg，AES256；解密：主菜单中的“解密备份”，或 `gpg --decrypt FILE.gpg > FILE`），并可在面板菜单中轮换数据库密码和 `WEBHOOK_SECRET_HEADER`，若之后面板不正常则恢复旧值。
 - 启动任何东西之前先验证生成的配置：先 `docker compose config`，再在临时容器中检查代理配置（`nginx -t`、`haproxy -c -f`，或在构建好的镜像上运行 `caddy validate`，并先检查该镜像包含 `proxy_protocol` 模块）。文件有误时安装会连同工具自己的输出一起停止，在 `docker compose up` 之前。
-- 在全新服务器上、首次安装前预装依赖：`docker`、`docker compose`、`certbot`、`ufw`、`cron`。它本身不会修改主机设置：BBR、自动安全更新、系统软件包升级和防火墙需要在“系统调优”菜单中手动开启。防火墙流程会显示已安装的工具和正在监听的端口，询问要配置哪个工具（ufw、firewalld、nftables 或 iptables），先放行你的 SSH 端口，展示每条命令，并在你确认之前不做任何修改；每次回答都会记录到 `/var/log/remnaforge-consent.log`。也可以安装 fail2ban 或 CrowdSec。
+- 在全新服务器上、首次安装前预装依赖：`docker`、`docker compose`、`certbot`、`ufw`、`cron`。它本身不会修改主机设置：BBR、自动安全更新、系统软件包升级和防火墙需要在“系统调优”菜单中手动开启。防火墙流程会显示已安装的工具和正在监听的端口，询问要配置哪个工具（ufw、firewalld、nftables 或 iptables），先放行你的 SSH 端口，展示每条命令，并在你确认之前不做任何修改；每次回答都会记录到 `/var/log/remnaforge-consent.log`。也可以安装 fail2ban 或 CrowdSec。 在 Debian 和 Ubuntu（及 Ubuntu 衍生版）上，Docker 从 Docker 官方 apt 仓库安装，由 apt 签名校验并保持更新；其他系统则回退到 Docker 的安装脚本。
 - 面板备份与恢复 —— 委托给第三方工具 [distillium/remnawave-backup-restore](https://github.com/distillium/remnawave-backup-restore)（MIT 许可），自身不做具体实现。
 - 完整卸载（容器、镜像、数据卷）或仅移除 RemnaForge 自身的状态。
 - 界面支持英语和俄语，首次运行时选择。
@@ -129,7 +129,7 @@ sudo remnaforge
 0. Exit
 ```
 
-`remnaforge doctor`、`remnaforge versions` 和 `remnaforge --version` 无需进入菜单即可使用。
+`remnaforge doctor`、`remnaforge versions` 和 `remnaforge --version` 无需进入菜单即可使用。 `doctor` 需要 root 权限。未知参数（例如拼错的 `--dry-run`）会使程序以状态码 2 退出，不会启动菜单。
 
 选择第 1 项后，先确定安装类型（面板+节点 / 仅面板 / 向已有面板添加节点 / 仅节点），接着询问使用 Nginx 还是 Caddy，然后逐项交互式询问其余信息：域名、独立安装节点时面板的 IP、证书签发方式。
 

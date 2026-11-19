@@ -95,8 +95,11 @@ func policyMessage(name string, err *PolicyError) string {
 
 // Read prompts with the i18n key promptKey until the operator enters a name
 // that passes CheckPolicy. Every prompt for a new domain goes through Read,
-// before any DNS or certificate work; names that are syntactically invalid
-// are returned as typed and rejected later by CheckDomain.
+// before any DNS or certificate work. The name comes back in lower case and
+// without a trailing dot, the form certbot and the proxies use: "Panel.Example.com"
+// would otherwise get a certificate under "panel.example.com" and never be
+// found again under the typed name. Names that are syntactically invalid are
+// returned that way too and rejected later by CheckDomain.
 func Read(promptKey string) string {
 	return readWith(ui.Reading, promptKey)
 }
@@ -109,6 +112,12 @@ func readWith(ask func(string) string, promptKey string) string {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, policyMessage(name, pe), ui.ColorReset)
 			continue
 		}
-		return name
+		return Normalize(name)
 	}
+}
+
+// Normalize returns name in lower case, without surrounding spaces and
+// without a trailing dot.
+func Normalize(name string) string {
+	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
 }

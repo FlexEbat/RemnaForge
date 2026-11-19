@@ -147,3 +147,16 @@ func TestNoDomainPromptSkipsPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestReadReturnsTheNormalizedName(t *testing.T) {
+	for in, want := range map[string]string{
+		"Zebra.Example.COM":   "zebra.example.com",
+		"zebra.example.com.":  "zebra.example.com",
+		"  zebra.example.com": "zebra.example.com",
+	} {
+		got := readWith(func(string) string { return in }, "ENTER_PANEL_DOMAIN")
+		if got != want {
+			t.Errorf("readWith(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -2,10 +2,12 @@ package managepanel
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
@@ -227,6 +229,10 @@ func addListen8443(conf, panelDomain string) (string, error) {
 // Nginx and Caddy branches of closing temporary panel access, factored
 // into one function instead of duplicated.
 func closePort8443UFW() {
+	if !ufwActive() {
+		printNote("PORT_8443_NO_UFW")
+		return
+	}
 	ufwStatus, _ := execx.Command("ufw", "status").Output()
 	if strings.Contains(string(ufwStatus), "8443") && strings.Contains(string(ufwStatus), "ALLOW") {
 		_ = execx.Command("ufw", "delete", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
@@ -238,6 +244,84 @@ func closePort8443UFW() {
 	} else {
 		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("PORT_8443_ALREADY_CLOSED"), ui.ColorReset)
 	}
+}
+
+// ufwActive reports whether ufw is installed and switched on. The other
+// firewalls the installer can configure are not handled here, and saying
+// "already closed" for them would be wrong.
+func ufwActive() bool {
+	out, err := execx.Command("ufw", "status").Output()
+	return err == nil && strings.Contains(string(out), "Status: active")
+}
+
+// openPort8443 opens the port in ufw and says so when ufw cannot do it.
+func openPort8443() {
+	if !ufwActive() {
+		printNote("PORT_8443_NO_UFW")
+		return
+	}
+	if err := execx.Command("ufw", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run(); err != nil {
+		printErr("PORT_8443_UFW_FAILED")
+		return
+	}
+	if err := execx.Command("ufw", "reload").Run(); err != nil {
+		printErr("UFW_RELOAD_FAILED")
+	}
+}
+
+var (
+	// containerRunning and waitBetweenChecks are variables so tests do not
+	// need Docker or a second of waiting.
+	containerRunning = func(name string) bool {
+		out, err := execx.Command("docker", "inspect", "-f", "{{.State.Running}}", name).Output()
+		return err == nil && strings.TrimSpace(string(out)) == "true"
+	}
+	waitBetweenChecks = func() { time.Sleep(time.Second) }
+)
+
+// proxyUp waits up to five seconds for the container to run.
+func proxyUp(container string) bool {
+	for i := 0; i < 5; i++ {
+		if containerRunning(container) {
+			return true
+		}
+		waitBetweenChecks()
+	}
+	return false
+}
+
+// applyPlan writes the plan's configuration and restarts the proxy. When the
+// proxy does not come up, the old configuration goes back, so a rejected
+// change does not leave the panel without its reverse proxy. It reports
+// whether the change took effect.
+func applyPlan(p accessProxy, dir string, plan accessPlan) bool {
+	old, readErr := os.ReadFile(plan.confPath)
+	if err := cfgfile.Replace(plan.confPath, plan.updated, cfgfile.Opts{}); err != nil {
+		if p.name == "nginx" {
+			printErr("NGINX_CONF_MODIFY_FAILED")
+		} else {
+			printErr("CONF_MODIFY_FAILED")
+		}
+		return false
+	}
+	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
+	p.restart(dir)
+	if p.container == "" || proxyUp(p.container) {
+		return true
+	}
+	printErr("PROXY_NOT_RUNNING")
+	if readErr != nil {
+		return false
+	}
+	if err := cfgfile.Replace(plan.confPath, string(old), cfgfile.Opts{}); err != nil {
+		printErr("CONF_MODIFY_FAILED")
+		return false
+	}
+	p.restart(dir)
+	if proxyUp(p.container) {
+		printNote("PROXY_CONFIG_RESTORED")
+	}
+	return false
 }
 
 // accessPlan is what one proxy decides when temporary panel access on 8443
@@ -255,6 +339,11 @@ type accessPlan struct {
 // accessProxy is what differs between the proxies: how the configuration
 // is read and edited, and how the proxy is restarted.
 type accessProxy struct {
+	// name is the proxy kind: "nginx", "caddy" or "haproxy".
+	name string
+	// container must be running after a restart. Empty skips the check: HAProxy
+	// reloads in place and keeps its old workers when it cannot parse the file.
+	container string
 	// open and close read dir and return the plan. They print their own
 	// errors and return false when nothing can be done.
 	open, close func(dir string) (accessPlan, bool)
@@ -265,16 +354,16 @@ type accessProxy struct {
 func accessFor(webserver string) accessProxy {
 	switch webserver {
 	case "caddy":
-		return accessProxy{open: caddyOpenPlan, close: caddyClosePlan, restart: restartByRecreate("remnawave-caddy")}
+		return accessProxy{name: "caddy", container: "remnawave-caddy", open: caddyOpenPlan, close: caddyClosePlan, restart: restartByRecreate("remnawave-caddy")}
 	case "haproxy":
 		// SIGUSR2 starts a new worker and retires the old one, so no
 		// connection is cut, and a configuration HAProxy cannot parse
 		// leaves the old workers running.
-		return accessProxy{open: haproxyOpenPlan, close: haproxyClosePlan, restart: func(dir string) {
+		return accessProxy{name: "haproxy", open: haproxyOpenPlan, close: haproxyClosePlan, restart: func(dir string) {
 			_ = composeRun(dir, "kill", "-s", "USR2", "remnawave-haproxy")
 		}}
 	}
-	return accessProxy{open: nginxOpenPlan, close: nginxClosePlan, restart: restartByRecreate("remnawave-nginx")}
+	return accessProxy{name: "nginx", container: "remnawave-nginx", open: nginxOpenPlan, close: nginxClosePlan, restart: restartByRecreate("remnawave-nginx")}
 }
 
 func restartByRecreate(service string) func(string) {
@@ -336,20 +425,31 @@ func openPanelAccess() {
 		printNote(plan.nothingToDo)
 		return
 	}
-	if err := cfgfile.Replace(plan.confPath, plan.updated, cfgfile.Opts{}); err != nil {
-		printErr("NGINX_CONF_MODIFY_FAILED")
+	if !applyPlan(p, dir, plan) {
 		return
 	}
 
-	fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
-	p.restart(dir)
+	openPort8443()
 
-	_ = execx.Command("ufw", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
-	_ = execx.Command("ufw", "reload").Run()
-
+	registerLinkSecrets(plan.link)
 	printNote("OPEN_PANEL_LINK")
 	fmt.Printf("%s%s%s\n", ui.ColorWhite, plan.link, ui.ColorReset)
 	printErr("PORT_8443_WARNING")
+}
+
+// registerLinkSecrets makes the log mask the query values of the panel link:
+// the link carries the secret cookie value, and the operator needs it on the
+// screen but not in the log file.
+func registerLinkSecrets(link string) {
+	u, err := url.Parse(link)
+	if err != nil {
+		return
+	}
+	for _, values := range u.Query() {
+		for _, v := range values {
+			ui.RegisterSecret(v)
+		}
+	}
 }
 
 func closePanelAccess() {
@@ -372,11 +472,9 @@ func closePanelAccess() {
 	if plan.nothingToDo != "" {
 		printNote(plan.nothingToDo)
 	} else {
-		if err := cfgfile.Replace(plan.confPath, plan.updated, cfgfile.Opts{}); err != nil {
-			printErr("NGINX_CONF_MODIFY_FAILED")
+		if !applyPlan(p, dir, plan) {
 			return
 		}
-		p.restart(dir)
 	}
 	closePort8443UFW()
 }

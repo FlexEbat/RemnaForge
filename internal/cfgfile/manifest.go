@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
@@ -31,8 +33,6 @@ const (
 	OwnerInstaller Owner = "installer"
 	// OwnerUser: the operator changed the file or chose to keep their version.
 	OwnerUser Owner = "user"
-	// OwnerThirdParty: another program created the file.
-	OwnerThirdParty Owner = "third-party"
 )
 
 // Paths and the clock are variables so tests can use a temporary directory.
@@ -157,12 +157,15 @@ func Lookup(path string) (Entry, bool) {
 }
 
 // StableOr is Stable for call sites that cannot do anything about a manifest
-// that does not work: it falls back to a fresh value, and the write that
-// follows reports the broken manifest.
+// that does not work: it falls back to a fresh value that a later run may
+// not repeat, and tells the operator so.
 func StableOr(name string, generate func() string) string {
 	v, err := Stable(name, generate)
-	if err != nil || v == "" {
-		return generate()
+	if v == "" {
+		v = generate()
+	}
+	if err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorYellow, fmt.Sprintf(i18n.T("STABLE_NOT_SAVED"), err), ui.ColorReset)
 	}
 	return v
 }
@@ -183,7 +186,7 @@ func SecretPaths() []string {
 	return out
 }
 
-var secretNameRE = regexp.MustCompile(`(?i)pass|secret|token|key`)
+var secretNameRE = regexp.MustCompile(`(?i)pass|secret|token|key|cookie`)
 
 // registerIfSecret lets the log redact a stable value whose name says it is
 // a credential.

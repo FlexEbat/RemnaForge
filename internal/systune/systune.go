@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/firewall"
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
@@ -103,7 +104,7 @@ func writeBBRConf(path string) error {
 	if err := fsx.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
-	return fsx.WriteFile(path, []byte(bbrConf), 0644)
+	return cfgfile.Replace(path, bbrConf, cfgfile.Opts{Mode: 0644})
 }
 
 var unattendedOnRE = regexp.MustCompile(`(?m)^\s*APT::Periodic::Unattended-Upgrade\s+"1"\s*;`)
@@ -146,7 +147,7 @@ func writeAutoUpgrades(on bool) error {
 	if err := fsx.MkdirAll(filepath.Dir(autoUpgradesPath), 0755); err != nil {
 		return err
 	}
-	return fsx.WriteFile(autoUpgradesPath, []byte(want), 0644)
+	return cfgfile.Replace(autoUpgradesPath, want, cfgfile.Opts{Mode: 0644})
 }
 
 // packageInstalled asks dpkg whether pkg is fully installed.

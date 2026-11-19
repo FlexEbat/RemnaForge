@@ -20,7 +20,12 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
-var hasUpperRE = regexp.MustCompile(`[A-Z]`)
+// globalKeyRE matches a Cloudflare Global API Key: 37 lowercase hex digits.
+// Everything else is an API token. The code used to take a key with an
+// uppercase letter for a token, so a token without one was sent as a key.
+var globalKeyRE = regexp.MustCompile(`^[0-9a-f]{37}$`)
+
+func isCloudflareToken(key string) bool { return !globalKeyRE.MatchString(key) }
 
 // secretsDir is the Go equivalent of `~/.secrets/certbot`.
 func secretsDir() string {
@@ -38,7 +43,7 @@ func CheckAPI(apiKey, email string) (validAPIKey, validEmail string, err error) 
 
 	for attempt := 1; attempt <= attempts; attempt++ {
 		req, _ := http.NewRequest("GET", "https://api.cloudflare.com/client/v4/zones", nil)
-		if hasUpperRE.MatchString(apiKey) {
+		if isCloudflareToken(apiKey) {
 			req.Header.Set("Authorization", "Bearer "+apiKey)
 		} else {
 			req.Header.Set("X-Auth-Key", apiKey)
@@ -101,7 +106,7 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 
 		iniPath := filepath.Join(secretsDir(), "cloudflare.ini")
 		var ini string
-		if hasUpperRE.MatchString(validKey) {
+		if isCloudflareToken(validKey) {
 			ini = fmt.Sprintf("dns_cloudflare_api_token = %s\n", validKey)
 		} else {
 			ini = fmt.Sprintf("dns_cloudflare_email = %s\ndns_cloudflare_api_key = %s\n", validEmail, validKey)
@@ -127,7 +132,13 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 		}
 
 	case "2": // ACME HTTP-01 (no wildcard)
-		_ = execx.Command("ufw", "allow", "80/tcp", "comment", "HTTP for ACME challenge").Run()
+		// The hook opens port 80 only when ufw is active and has no rule for
+		// it, and closes only what it opened, so the rule of the firewall plan
+		// stays.
+		closePort80, hookErr := openPort80()
+		if hookErr != nil {
+			return hookErr
+		}
 
 		certErr := runCertbot(
 			"certonly",
@@ -141,8 +152,7 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 			"--elliptic-curve", "secp384r1",
 		)
 
-		_ = execx.Command("ufw", "delete", "allow", "80/tcp").Run()
-		_ = execx.Command("ufw", "reload").Run()
+		closePort80()
 
 		if certErr != nil {
 			return certErr
@@ -150,12 +160,12 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 
 	case "3": // Gcore DNS-01 (wildcard)
 		if !certbotHasPlugin("dns-gcore") {
-			fmt.Printf("%sInstalling certbot-dns-gcore plugin...%s\n", ui.ColorYellow, ui.ColorReset)
+			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("INSTALLING_GCORE_PLUGIN"), ui.ColorReset)
 			if err := installGcorePlugin(); err != nil {
 				fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_INSTALL_GCORE_PLUGIN"), ui.ColorReset)
 				return err
 			}
-			fmt.Printf("%sPlugin installed successfully.%s\n", ui.ColorGreen, ui.ColorReset)
+			fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GCORE_PLUGIN_INSTALLED"), ui.ColorReset)
 		} else {
 			fmt.Printf("%sGcore plugin already available.%s\n", ui.ColorGreen, ui.ColorReset)
 		}
@@ -188,7 +198,13 @@ func GetCertificates(domainName, certMethod, letsencryptEmail string) error {
 		return fmt.Errorf("invalid cert method")
 	}
 
-	if _, err := os.Stat(filepath.Join(letsencryptLive, domainName)); err != nil {
+	// A wildcard certificate lives under its base domain, whatever name the
+	// caller passed; the HTTP-01 certificate lives under the name itself.
+	lineage := domainName
+	if certMethod == "1" || certMethod == "3" {
+		lineage = baseDomain
+	}
+	if _, err := os.Stat(filepath.Join(letsencryptLive, lineage)); err != nil {
 		fmt.Printf("%s%s %s%s\n", ui.ColorRed, i18n.T("CERT_GENERATION_FAILED"), domainName, ui.ColorReset)
 		return fmt.Errorf("certificate not found after issuance")
 	}

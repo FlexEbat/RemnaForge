@@ -74,3 +74,19 @@ func readFile(t *testing.T, path string) string {
 	}
 	return string(data)
 }
+
+func TestRequestWithoutTokenSendsNoAuthorizationHeader(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Authorization")
+	}))
+	defer srv.Close()
+	MakeAPIRequest("GET", srv.URL, "", "")
+	if got != "" {
+		t.Errorf("Authorization = %q, want no header", got)
+	}
+	MakeAPIRequest("GET", srv.URL, "tok-123456", "")
+	if got != "Bearer tok-123456" {
+		t.Errorf("Authorization = %q, want the bearer token", got)
+	}
+}

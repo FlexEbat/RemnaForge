@@ -13,6 +13,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/certs"
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile/cfgfiletest"
 	"github.com/FlexEbat/RemnaForge/internal/fakepanel"
+	"github.com/FlexEbat/RemnaForge/internal/ui"
 )
 
 func TestMain(m *testing.M) {
@@ -315,5 +316,15 @@ func TestTheProfileInboundIsWhatTheOthersUse(t *testing.T) {
 	_ = json.Unmarshal([]byte(squadBody), &squad)
 	if len(squad.Inbounds) != 2 || squad.Inbounds[0] != fakepanel.OldInboundUUID {
 		t.Errorf("the squad keeps its old inbound and gains the new one: %v", squad.Inbounds)
+	}
+}
+
+func TestRunMasksThePasswordTheFlowsPrint(t *testing.T) {
+	ui.ForgetSecrets()
+	o := baseOptions()
+	o.Password = "Zq!8&vLm2#xT9pRw4Yk7"
+	runWith(t, o, func(*fakepanel.Panel) {})
+	if got := ui.Redact("Password: " + o.Password); strings.Contains(got, "vLm2") || strings.Contains(got, o.Password) {
+		t.Errorf("the superadmin password reaches the log: %q", got)
 	}
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/api"
 	"github.com/FlexEbat/RemnaForge/internal/certs"
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
-	"github.com/FlexEbat/RemnaForge/internal/dockercheck"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
@@ -23,6 +22,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/provision"
 	"github.com/FlexEbat/RemnaForge/internal/proxy"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
+	"github.com/FlexEbat/RemnaForge/internal/stack"
 	"github.com/FlexEbat/RemnaForge/internal/txn"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
 	"github.com/FlexEbat/RemnaForge/internal/validate"
@@ -248,7 +248,7 @@ func installPanelNginx() (*panelState, error) {
 		cookiesRandom1:  cfgfile.StableOr("remnawave.cookie1", genutil.GenerateUser),
 		cookiesRandom2:  cfgfile.StableOr("remnawave.cookie2", genutil.GenerateUser),
 		metricsUser:     cfgfile.StableOr("remnawave.metrics_user", genutil.GenerateUser),
-		metricsPass:     cfgfile.StableOr("remnawave.metrics_pass", genutil.GenerateUser),
+		metricsPass:     cfgfile.StableOr("remnawave.metrics_pass", func() string { return genutil.GenerateAlnumSecret(32) }),
 		appSecret:       cfgfile.StableOr("remnawave.app_secret", func() string { return genutil.GenerateAlnumSecret(64) }),
 	}
 
@@ -258,9 +258,8 @@ func installPanelNginx() (*panelState, error) {
 		state.metricsUser, state.metricsPass,
 	)
 	dotEnv = genutil.HardenEnv(dotEnv)
-	if dockercheck.VolumeExists("remnawave-db-data") {
-		fmt.Printf("%s"+i18n.T("DB_VOLUME_EXISTS")+"%s\n", ui.ColorRed, "remnawave-db-data", ui.ColorReset)
-		return nil, fmt.Errorf("existing database volume")
+	if err := stack.ResolveExistingDBVolume(ui.Reading); err != nil {
+		return nil, err
 	}
 	if _, err := cfgfile.Write(filepath.Join(panelDir, ".env"), dotEnv, cfgfile.Opts{Kind: cfgfile.KindEnv}); err != nil {
 		return nil, err

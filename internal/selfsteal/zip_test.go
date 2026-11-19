@@ -65,3 +65,24 @@ func TestExtractZipWritesNestedFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestExtractZipRefusesTooManyEntries(t *testing.T) {
+	old := maxZipEntries
+	maxZipEntries = 2
+	defer func() { maxZipEntries = old }()
+	zr := buildZip(t, map[string]string{"a": "1", "b": "2", "c": "3"})
+	if err := extractZip(zr, t.TempDir()); err == nil {
+		t.Error("an archive over the entry limit was unpacked")
+	}
+}
+
+func TestExtractZipRefusesAnArchiveThatUnpacksTooLarge(t *testing.T) {
+	old := maxExtractedSize
+	maxExtractedSize = 10
+	defer func() { maxExtractedSize = old }()
+	zr := buildZip(t, map[string]string{"big.txt": "0123456789abcdefghij"})
+	dest := t.TempDir()
+	if err := extractZip(zr, dest); err == nil {
+		t.Error("an archive over the size limit was unpacked")
+	}
+}

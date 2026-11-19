@@ -105,7 +105,7 @@ func findRealityTag(byTag map[string]map[string]any) string {
 }
 
 // inboundsByTag pulls each inbound out of an existing config's
-// "inbounds" array into a map keyed by tag, so api.BuildProfileConfig
+// "inbounds" array into a map keyed by tag, so the config builder
 // can reuse an inbound's already-issued secrets instead of generating
 // new ones just because the selection changed.
 func inboundsByTag(config map[string]any) map[string]map[string]any {
@@ -208,13 +208,19 @@ func ManageNodeProfile() {
 	privateKey := existingPrivateKey(byTag, realityTag)
 	if privateKey == "" && selection.Raw {
 		privateKey = api.GenerateXrayKeys(domainURL, token)
+		if privateKey == "" {
+			// The panel did not give a key (GenerateXrayKeys printed why). A
+			// profile pushed with an empty Reality key would break the node, as
+			// the install flows already refuse.
+			return
+		}
 	}
 
 	var certFullchain, certPrivkey string
 	if _, hysteria2AlreadyActive := byTag["HYSTERIA-BBR"]; selection.Hysteria2 && !hysteria2AlreadyActive {
 		// Only newly enabling Hysteria2 needs a cert path: an
 		// already-active Hysteria2 inbound is reused verbatim by
-		// api.BuildProfileConfig, so asking here would be a pointless
+		// the config builder, so asking here would be a pointless
 		// prompt whose answer gets thrown away.
 		//
 		// This flow doesn't provision the node's files itself, so it
@@ -231,7 +237,7 @@ func ManageNodeProfile() {
 
 	newConfig := api.MergeProfileConfig(config, selection, domainName, privateKey, rawTag, certFullchain, certPrivkey, byTag)
 	if err := api.UpdateConfigProfile(domainURL, token, profileUUID, newConfig); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NODE_PROFILE_UPDATE_FAILED"), ui.ColorReset)
+		fmt.Printf("%s%s: %v%s\n", ui.ColorRed, i18n.T("NODE_PROFILE_UPDATE_FAILED"), err, ui.ColorReset)
 		return
 	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("NODE_PROFILE_UPDATE_SUCCESS"), ui.ColorReset)

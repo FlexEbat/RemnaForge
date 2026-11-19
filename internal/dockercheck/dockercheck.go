@@ -12,12 +12,14 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/journal"
 	"github.com/FlexEbat/RemnaForge/internal/ui"
@@ -32,7 +34,8 @@ var ToolProjects = []string{"remnawave", "remnanode"}
 // from. A reachable registry answers 200 or 401 here.
 const RegistryURL = "https://registry-1.docker.io/v2/"
 
-// installScriptURL is Docker's convenience install script.
+// installScriptURL is Docker's convenience install script, the fallback for
+// systems the apt repository path does not cover.
 const installScriptURL = "https://get.docker.com"
 
 // Env holds every way to reach the host. DefaultEnv uses the real one.
@@ -43,6 +46,13 @@ type Env struct {
 	Fetch      func(url string) ([]byte, error)                  // downloads a script
 	RunScript  func(script []byte) error                         // runs a script with sh
 	HTTPStatus func(url string) (int, error)                     // status code of a GET
+	// ReadFile and WriteFile serve the apt install. Without them Ensure uses
+	// Docker's script. WriteFile creates the parent directory.
+	ReadFile  func(path string) ([]byte, error)
+	WriteFile func(path string, data []byte, mode os.FileMode) error
+	// Apt runs apt-get without questions and with a timeout long enough for
+	// an install. Without it Ensure uses Exec.
+	Apt func(args ...string) error
 }
 
 // DefaultEnv returns the Env of the running host.
@@ -73,6 +83,20 @@ func DefaultEnv() Env {
 		RunScript: func(script []byte) error {
 			cmd := execx.CommandTimeout(execx.AptTimeout, "sh")
 			cmd.Stdin = strings.NewReader(string(script))
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
+		},
+		ReadFile: os.ReadFile,
+		WriteFile: func(path string, data []byte, mode os.FileMode) error {
+			if err := fsx.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				return err
+			}
+			return fsx.WriteFile(path, data, mode)
+		},
+		Apt: func(args ...string) error {
+			cmd := execx.CommandTimeout(execx.AptTimeout, "apt-get", args...)
+			cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			return cmd.Run()
@@ -326,20 +350,134 @@ func toolObjects(all []Object) []Object {
 	return out
 }
 
-// Ensure makes Docker work: it installs the engine with Docker's script when
+// dockerPackages are the packages of Docker's own apt repository.
+var dockerPackages = []string{"docker-ce", "docker-ce-cli", "containerd.io", "docker-buildx-plugin", "docker-compose-plugin"}
+
+// parseOSRelease returns the Docker repository name ("debian" or "ubuntu") and
+// the suite for an /etc/os-release. Ubuntu and its derivatives use
+// UBUNTU_CODENAME; Debian itself uses VERSION_CODENAME. A Debian derivative
+// has suites Docker does not publish, so it gets neither.
+func parseOSRelease(content string) (distro, codename string, ok bool) {
+	kv := map[string]string{}
+	for _, line := range strings.Split(content, "\n") {
+		k, v, found := strings.Cut(strings.TrimSpace(line), "=")
+		if found {
+			kv[k] = strings.Trim(v, `"'`)
+		}
+	}
+	ubuntu := kv["ID"] == "ubuntu"
+	for _, like := range strings.Fields(kv["ID_LIKE"]) {
+		if like == "ubuntu" {
+			ubuntu = true
+		}
+	}
+	switch {
+	case ubuntu:
+		codename = kv["UBUNTU_CODENAME"]
+		if codename == "" {
+			codename = kv["VERSION_CODENAME"]
+		}
+		distro = "ubuntu"
+	case kv["ID"] == "debian":
+		codename, distro = kv["VERSION_CODENAME"], "debian"
+	}
+	if distro == "" || codename == "" {
+		return "", "", false
+	}
+	return distro, codename, true
+}
+
+// dockerSources is the deb822 file of Docker's apt repository.
+func dockerSources(distro, codename, arch string) string {
+	return "Types: deb\n" +
+		"URIs: https://download.docker.com/linux/" + distro + "\n" +
+		"Suites: " + codename + "\n" +
+		"Components: stable\n" +
+		"Architectures: " + arch + "\n" +
+		"Signed-By: /etc/apt/keyrings/docker.asc\n"
+}
+
+const (
+	dockerKeyPath     = "/etc/apt/keyrings/docker.asc"
+	dockerSourcesPath = "/etc/apt/sources.list.d/docker.sources"
+)
+
+func (e Env) apt(args ...string) error {
+	if e.Apt != nil {
+		return e.Apt(args...)
+	}
+	return e.Exec("apt-get", args...)
+}
+
+// installDocker installs the engine and Compose v2. On Debian, Ubuntu and
+// Ubuntu derivatives it uses Docker's apt repository, so the packages are
+// signed and apt keeps them updated. Another system falls back to Docker's
+// convenience script.
+func installDocker(env Env) error {
+	if env.ReadFile != nil && env.WriteFile != nil {
+		if osRelease, err := env.ReadFile("/etc/os-release"); err == nil {
+			if distro, codename, ok := parseOSRelease(string(osRelease)); ok {
+				return installFromAptRepo(env, distro, codename)
+			}
+		}
+	}
+	script, err := env.Fetch(installScriptURL)
+	if err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOWNLOAD_DOCKER_SCRIPT"), ui.ColorReset)
+		return fmt.Errorf("failed to download get-docker.sh: %w", err)
+	}
+	if err := env.RunScript(script); err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_INSTALL_DOCKER"), ui.ColorReset)
+		return err
+	}
+	return nil
+}
+
+func installFromAptRepo(env Env, distro, codename string) error {
+	archOut, err := env.Run("dpkg", "--print-architecture")
+	arch := strings.TrimSpace(string(archOut))
+	if err != nil || arch == "" {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_INSTALL_DOCKER"), ui.ColorReset)
+		return fmt.Errorf("cannot read the package architecture: %v", err)
+	}
+	if err := env.apt("update"); err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_INSTALL_DOCKER"), ui.ColorReset)
+		return err
+	}
+	if err := env.apt("install", "-y", "ca-certificates", "curl"); err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_INSTALL_DOCKER"), ui.ColorReset)
+		return err
+	}
+	key, err := env.Fetch("https://download.docker.com/linux/" + distro + "/gpg")
+	if err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOWNLOAD_DOCKER_KEY"), ui.ColorReset)
+		return fmt.Errorf("failed to download the Docker key: %w", err)
+	}
+	if err := env.WriteFile(dockerKeyPath, key, 0o644); err != nil {
+		return err
+	}
+	if err := env.WriteFile(dockerSourcesPath, []byte(dockerSources(distro, codename, arch)), 0o644); err != nil {
+		return err
+	}
+	if err := env.apt("update"); err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_INSTALL_DOCKER"), ui.ColorReset)
+		return err
+	}
+	if err := env.apt(append([]string{"install", "-y"}, dockerPackages...)...); err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_INSTALL_DOCKER"), ui.ColorReset)
+		return err
+	}
+	return nil
+}
+
+// Ensure makes Docker work: it installs the engine (see installDocker) when
 // the engine or Compose v2 is missing, starts and enables the service, and
 // checks the result.
 func Ensure(env Env) error {
 	if !Working(env) {
-		fmt.Printf("%sInstalling Docker via get.docker.com...%s\n", ui.ColorYellow, ui.ColorReset)
+		fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("INSTALLING_DOCKER"), ui.ColorReset)
 		journal.Add("docker", i18n.T("JOURNAL_DOCKER"))
-		script, err := env.Fetch(installScriptURL)
-		if err != nil {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_DOWNLOAD_DOCKER_KEY"), ui.ColorReset)
-			return fmt.Errorf("failed to download get-docker.sh: %w", err)
-		}
-		if err := env.RunScript(script); err != nil {
-			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("ERROR_INSTALL_DOCKER"), ui.ColorReset)
+		if err := installDocker(env); err != nil {
 			return err
 		}
 	}

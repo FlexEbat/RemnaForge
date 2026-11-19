@@ -17,7 +17,13 @@ const minSecretLen = 6
 var (
 	// keyValueRE finds KEY=value, KEY: value and "key": "value" where the key
 	// names a secret. The value is a quoted string or a run without spaces.
-	keyValueRE = regexp.MustCompile(`(?i)([A-Za-z0-9_.\-]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API[_\-]?KEY)[A-Za-z0-9_.\-]*)(["']?\s*[=:]\s*)("[^"\n]*"|'[^'\n]*'|[^\s"',;&]+)`)
+	//
+	// An unquoted value runs to the next space, quote, comma or semicolon. It
+	// may contain "&": generated passwords do, and stopping there left the
+	// rest of the password in the log. A URL query such as "token=a&x=1" is
+	// masked up to its next space, which hides more than needed and nothing
+	// less. The Russian label of the generated password is a key as well.
+	keyValueRE = regexp.MustCompile(`(?i)([A-Za-z0-9_.\-]*(?:PASSWORD|PASSWD|ПАРОЛ[ЬЯ]|SECRET|TOKEN|COOKIE|API[_\-]?KEY)[A-Za-z0-9_.\-]*)(["']?\s*[=:]\s*)("[^"\n]*"|'[^'\n]*'|[^\s"',;]+)`)
 	// authHeaderRE finds "Authorization: Bearer xxx" and the Basic form.
 	authHeaderRE = regexp.MustCompile(`(?i)(Authorization:\s*(?:Bearer|Basic|Token)\s+)\S+`)
 	// urlCredRE finds user:password@ in a URL.
@@ -48,7 +54,7 @@ func RegisterSecretsFromText(text string) {
 	}
 }
 
-// ForgetSecrets clears the registry. Tests use it.
+// ForgetSecrets clears the registry. Tests in several packages use it.
 func ForgetSecrets() {
 	secretMu.Lock()
 	secrets = map[string]bool{}

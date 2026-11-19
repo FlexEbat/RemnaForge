@@ -1,6 +1,6 @@
 // Package reinstall wipes any existing panel or node install, then
 // hands off to the same install flows internal/menu uses for a fresh
-// install, for both Nginx and Caddy.
+// install, for Nginx, Caddy and HAProxy.
 package reinstall
 
 import (
@@ -38,6 +38,7 @@ func showWebserverSelect() string {
 	fmt.Println()
 	fmt.Printf("%s1. Nginx%s\n", ui.ColorYellow, ui.ColorReset)
 	fmt.Printf("%s2. Caddy%s\n", ui.ColorYellow, ui.ColorReset)
+	fmt.Printf("%s3. HAProxy%s\n", ui.ColorYellow, ui.ColorReset)
 	fmt.Println()
 	fmt.Printf("%s0. %s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
 	fmt.Println()
@@ -71,6 +72,8 @@ func ChooseReinstallType() {
 			runInstall(option)
 		case "2":
 			runInstallCaddy(option)
+		case "3":
+			runInstallHAProxy(option)
 		case "0":
 			fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("EXIT"), ui.ColorReset)
 		default:
@@ -118,6 +121,33 @@ func runInstallCaddy(reinstallOption string) {
 		err = caddynode.InstallationNode()
 	}
 	if err != nil {
+		fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
+	}
+}
+
+// installHAProxy maps the reinstall type (1=panel+node, 2=panel only,
+// 3=node only) to its HAProxy install flow.
+func installHAProxy(reinstallOption string) func() error {
+	switch reinstallOption {
+	case "1":
+		return panelfull.InstallationPanelNodeHAProxy
+	case "2":
+		return panelonly.InstallationPanelOnlyHAProxy
+	case "3":
+		return nginxnode.InstallationNodeHAProxy
+	}
+	return nil
+}
+
+// runInstallHAProxy is the HAProxy leg of the reinstall type/webserver
+// choice. The fresh-install menu offers HAProxy, and a reinstall that did
+// not would force an operator to uninstall and install by hand.
+func runInstallHAProxy(reinstallOption string) {
+	install := installHAProxy(reinstallOption)
+	if install == nil {
+		return
+	}
+	if err := install(); err != nil {
 		fmt.Printf("%s%s%s\n", ui.ColorRed, err.Error(), ui.ColorReset)
 	}
 }

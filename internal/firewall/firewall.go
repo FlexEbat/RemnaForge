@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/runctx"
@@ -149,7 +150,7 @@ func DefaultEnv() Env {
 					return err
 				}
 			}
-			return fsx.WriteFile(path, []byte(content), mode)
+			return cfgfile.Replace(path, content, cfgfile.Opts{Mode: mode})
 		},
 		AppendConsent: func(line string) error {
 			if runctx.DryRun() {
