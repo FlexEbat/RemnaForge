@@ -4,12 +4,9 @@
 package nginxnode
 
 import (
-	"bufio"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/FlexEbat/RemnaForge/internal/certs"
@@ -133,21 +130,7 @@ func isValidIPv4(s string) bool {
 // a blank line following non-blank content, joining lines with real
 // newlines.
 func readCertificate() string {
-	fmt.Print(ui.Question(i18n.T("CERT_PROMPT")))
-	scanner := bufio.NewScanner(os.Stdin)
-
-	var lines []string
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			if len(lines) > 0 {
-				break
-			}
-			continue
-		}
-		lines = append(lines, line)
-	}
-	return strings.Join(lines, "\n")
+	return ui.ReadSecretBlock(i18n.T("CERT_PROMPT"))
 }
 
 // nginxTail finishes the nginx service: the shared directories and the command.
