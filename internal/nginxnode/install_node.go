@@ -68,10 +68,9 @@ const dockerComposeHead = composeBase + nginxService
 // nodeState carries the values gathered while prompting the user
 // through to where the docker-compose.yml/Caddyfile are written.
 type nodeState struct {
-	selfstealDomain     string
-	selfstealBaseDomain string
-	panelIP             string
-	certificate         string // joined with real newlines, see readCertificate()
+	selfstealDomain string
+	panelIP         string
+	certificate     string // joined with real newlines, see readCertificate()
 }
 
 func installNodeNginx() (*nodeState, error) {
@@ -105,13 +104,10 @@ func installNodeNginx() (*nodeState, error) {
 		return nil, fmt.Errorf("aborted")
 	}
 
-	selfstealBaseDomain := domain.ExtractDomain(selfstealDomain)
-
 	return &nodeState{
-		selfstealDomain:     selfstealDomain,
-		selfstealBaseDomain: selfstealBaseDomain,
-		panelIP:             panelIP,
-		certificate:         certificate,
+		selfstealDomain: selfstealDomain,
+		panelIP:         panelIP,
+		certificate:     certificate,
 	}, nil
 }
 
@@ -229,14 +225,7 @@ func installationNode(kind proxy.Kind) error {
 	if certErr != nil {
 		return certErr
 	}
-	certMethod := certResult.Method
-
-	var nodeCertDomain string
-	if certMethod == "1" {
-		nodeCertDomain = state.selfstealBaseDomain
-	} else {
-		nodeCertDomain = state.selfstealDomain
-	}
+	nodeCertDomain := certResult.CertName(state.selfstealDomain)
 	certFullchain, certPrivkey := certs.NginxCertPaths(nodeCertDomain)
 
 	composeText := buildCompose(kind, certResult.ComposeMounts, state.certificate, certFullchain, certPrivkey)

@@ -185,3 +185,33 @@ func TestCloudflareCredentialKind(t *testing.T) {
 		}
 	}
 }
+
+// The flows compared the method with "1" alone: a Gcore wildcard certificate
+// (method 3) is issued under the base domain as well, and the proxy
+// configuration pointed at a directory that does not exist.
+func TestResultCertNameFollowsTheMethod(t *testing.T) {
+	const sub, base = "panel.example.com", "example.com"
+	cases := []struct {
+		name string
+		r    Result
+		want string
+	}{
+		{"Cloudflare wildcard", Result{Method: "1"}, base},
+		{"Gcore wildcard", Result{Method: "3"}, base},
+		{"HTTP-01 per domain", Result{Method: "2"}, sub},
+	}
+	for _, c := range cases {
+		if got := c.r.CertName(sub); got != c.want {
+			t.Errorf("%s: CertName = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// With certificates already in place the answer comes from the disk. A host
+// without a wildcard certificate under the base domain gets the domain itself.
+func TestResultCertNameForExistingCertificatesWithoutAWildcard(t *testing.T) {
+	r := Result{Method: "1", Skipped: true}
+	if got := r.CertName("panel.example.com"); got != "panel.example.com" {
+		t.Errorf("CertName = %q, want the domain itself", got)
+	}
+}
