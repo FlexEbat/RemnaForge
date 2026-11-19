@@ -93,23 +93,8 @@ func AddNodeToPanel() {
 	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("GENERATE_KEYS_SUCCESS"), ui.ColorReset)
 
-	// Create the config profile.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
-	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, entityName, selfstealDomain, privateKey, entityName, "", "", api.ConfigProfileInbounds{Raw: true})
-	if configProfileUUID == "" || inboundUUID == "" {
-		return
-	}
-	fmt.Printf("%s%s: %s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), entityName, ui.ColorReset)
-
-	// Create the node.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, fmt.Sprintf(i18n.T("CREATE_NEW_NODE"), selfstealDomain), ui.ColorReset)
-	if err := api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, selfstealDomain, entityName); err != nil {
-		return
-	}
-
-	// Create the host.
-	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_HOST"), ui.ColorReset)
-	if err := api.CreateHost(domainURL, token, inboundUUID, selfstealDomain, configProfileUUID, entityName); err != nil {
+	inboundUUID, ok := createNodeObjects(domainURL, token, entityName, selfstealDomain, privateKey)
+	if !ok {
 		return
 	}
 
@@ -137,6 +122,31 @@ func AddNodeToPanel() {
 	fmt.Printf("%s-------------------------------------------------%s\n", ui.ColorRed, ui.ColorReset)
 	fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("POST_PANEL_INSTRUCTION"), ui.ColorReset)
 	fmt.Printf("%s-------------------------------------------------%s\n", ui.ColorRed, ui.ColorReset)
+}
+
+// createNodeObjects creates the config profile, the node and the host, and
+// returns the inbound the squads need. When the node cannot be created the
+// profile it was meant for is deleted again: left behind, it keeps its name
+// taken, so a second try with the same name was refused.
+func createNodeObjects(domainURL, token, entityName, selfstealDomain, privateKey string) (inboundUUID string, ok bool) {
+	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATING_CONFIG_PROFILE"), ui.ColorReset)
+	configProfileUUID, inboundUUID := api.CreateConfigProfile(domainURL, token, entityName, selfstealDomain, privateKey, entityName, "", "", api.ConfigProfileInbounds{Raw: true})
+	if configProfileUUID == "" || inboundUUID == "" {
+		return "", false
+	}
+	fmt.Printf("%s%s: %s%s\n", ui.ColorGreen, i18n.T("CONFIG_PROFILE_CREATED"), entityName, ui.ColorReset)
+
+	fmt.Printf("%s%s%s\n", ui.ColorYellow, fmt.Sprintf(i18n.T("CREATE_NEW_NODE"), selfstealDomain), ui.ColorReset)
+	if err := api.CreateNode(domainURL, token, configProfileUUID, inboundUUID, selfstealDomain, entityName); err != nil {
+		_ = api.DeleteConfigProfile(domainURL, token, configProfileUUID)
+		return "", false
+	}
+
+	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CREATE_HOST"), ui.ColorReset)
+	if err := api.CreateHost(domainURL, token, inboundUUID, selfstealDomain, configProfileUUID, entityName); err != nil {
+		return "", false
+	}
+	return inboundUUID, true
 }
 
 // configProfileNameExists reports whether a config profile with the

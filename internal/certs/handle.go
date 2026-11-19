@@ -39,6 +39,33 @@ type Result struct {
 	// nginx service, so the file is written once and whole. It is empty for
 	// HAProxy, whose container mounts the bundle directory.
 	ComposeMounts string
+	// Skipped is true when the certificates already existed and none were
+	// issued; Method is then not the method of any certificate on disk.
+	Skipped bool
+}
+
+// CertName returns the certificate name that serves domain d: the name of
+// the directory under /etc/letsencrypt/live that the proxy configuration and
+// the compose mounts must use. A wildcard certificate (Cloudflare or Gcore)
+// lives under the base domain, an HTTP-01 certificate under the domain
+// itself. When the run found its certificates already issued, the answer
+// comes from what is on disk, as it does when the mounts are written. The
+// flows used to compare the method with "1" alone, which sent a Gcore
+// wildcard and an existing per-domain certificate to the wrong directory.
+func (r Result) CertName(d string) string {
+	base := domain.ExtractDomain(d)
+	if !r.Skipped {
+		switch r.Method {
+		case "1", "3":
+			return base
+		case "2":
+			return d
+		}
+	}
+	if _, err := os.Stat(filepath.Join(letsencryptLive, base)); err == nil && domain.IsWildcardCert(base) {
+		return base
+	}
+	return d
 }
 
 // HandleCertificatesFor obtains the certificates and wires them to the
@@ -198,7 +225,7 @@ func HandleCertificatesFor(kind proxy.Kind, domainsToCheck []string, certMethod,
 		}
 	}
 
-	return Result{Method: certMethod, ComposeMounts: mounts.String()}, nil
+	return Result{Method: certMethod, ComposeMounts: mounts.String(), Skipped: !needCertificates}, nil
 }
 
 // fixRenewHook makes sure each domain's renewal.conf has the

@@ -37,8 +37,6 @@ type panelState struct {
 	panelDomain     string
 	subDomain       string
 	selfstealDomain string
-	panelBaseDomain string
-	subBaseDomain   string
 	superadminUser  string
 	superadminPass  string
 	cookiesRandom1  string
@@ -241,8 +239,6 @@ func installPanelNginx() (*panelState, error) {
 		panelDomain:     panelDomain,
 		subDomain:       subDomain,
 		selfstealDomain: selfstealDomain,
-		panelBaseDomain: domain.ExtractDomain(panelDomain),
-		subBaseDomain:   domain.ExtractDomain(subDomain),
 		superadminUser:  genutil.GenerateUser(),
 		superadminPass:  genutil.GeneratePassword(),
 		cookiesRandom1:  cfgfile.StableOr("remnawave.cookie1", genutil.GenerateUser),
@@ -351,16 +347,8 @@ func installationPanelOnly(kind proxy.Kind) error {
 	if certErr != nil {
 		return certErr
 	}
-	certMethod := certResult.Method
-
-	var panelCertDomain, subCertDomain string
-	if certMethod == "1" {
-		panelCertDomain = state.panelBaseDomain
-		subCertDomain = state.subBaseDomain
-	} else {
-		panelCertDomain = state.panelDomain
-		subCertDomain = state.subDomain
-	}
+	panelCertDomain := certResult.CertName(state.panelDomain)
+	subCertDomain := certResult.CertName(state.subDomain)
 
 	composeText := buildCompose(kind, certResult.ComposeMounts)
 	composePath := filepath.Join(panelDir, "docker-compose.yml")

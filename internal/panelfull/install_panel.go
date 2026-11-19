@@ -34,19 +34,16 @@ const panelDir = "/opt/remnawave"
 // state carries the values gathered while prompting the user through
 // to where docker-compose.yml/.env/nginx.conf are written.
 type state struct {
-	panelDomain         string
-	subDomain           string
-	selfstealDomain     string
-	panelBaseDomain     string
-	subBaseDomain       string
-	selfstealBaseDomain string
-	superadminUser      string
-	superadminPass      string
-	cookiesRandom1      string
-	cookiesRandom2      string
-	metricsUser         string
-	metricsPass         string
-	appSecret           string
+	panelDomain     string
+	subDomain       string
+	selfstealDomain string
+	superadminUser  string
+	superadminPass  string
+	cookiesRandom1  string
+	cookiesRandom2  string
+	metricsUser     string
+	metricsPass     string
+	appSecret       string
 }
 
 // dockerComposeHead is the first half of docker-compose.yml, everything
@@ -247,19 +244,16 @@ func installPanelNodeNginx() (*state, error) {
 	}
 
 	st := &state{
-		panelDomain:         panelDomain,
-		subDomain:           subDomain,
-		selfstealDomain:     selfstealDomain,
-		panelBaseDomain:     domain.ExtractDomain(panelDomain),
-		subBaseDomain:       domain.ExtractDomain(subDomain),
-		selfstealBaseDomain: domain.ExtractDomain(selfstealDomain),
-		superadminUser:      genutil.GenerateUser(),
-		superadminPass:      genutil.GeneratePassword(),
-		cookiesRandom1:      cfgfile.StableOr("remnawave.cookie1", genutil.GenerateUser),
-		cookiesRandom2:      cfgfile.StableOr("remnawave.cookie2", genutil.GenerateUser),
-		metricsUser:         cfgfile.StableOr("remnawave.metrics_user", genutil.GenerateUser),
-		metricsPass:         cfgfile.StableOr("remnawave.metrics_pass", func() string { return genutil.GenerateAlnumSecret(32) }),
-		appSecret:           cfgfile.StableOr("remnawave.app_secret", func() string { return genutil.GenerateAlnumSecret(64) }),
+		panelDomain:     panelDomain,
+		subDomain:       subDomain,
+		selfstealDomain: selfstealDomain,
+		superadminUser:  genutil.GenerateUser(),
+		superadminPass:  genutil.GeneratePassword(),
+		cookiesRandom1:  cfgfile.StableOr("remnawave.cookie1", genutil.GenerateUser),
+		cookiesRandom2:  cfgfile.StableOr("remnawave.cookie2", genutil.GenerateUser),
+		metricsUser:     cfgfile.StableOr("remnawave.metrics_user", genutil.GenerateUser),
+		metricsPass:     cfgfile.StableOr("remnawave.metrics_pass", func() string { return genutil.GenerateAlnumSecret(32) }),
+		appSecret:       cfgfile.StableOr("remnawave.app_secret", func() string { return genutil.GenerateAlnumSecret(64) }),
 	}
 
 	dotEnv := fmt.Sprintf(dotEnvTemplate,
@@ -389,18 +383,9 @@ func installationPanelNode(kind proxy.Kind) error {
 	if certErr != nil {
 		return certErr
 	}
-	certMethod := certResult.Method
-
-	var panelCertDomain, subCertDomain, nodeCertDomain string
-	if certMethod == "1" {
-		panelCertDomain = st.panelBaseDomain
-		subCertDomain = st.subBaseDomain
-		nodeCertDomain = st.selfstealBaseDomain
-	} else {
-		panelCertDomain = st.panelDomain
-		subCertDomain = st.subDomain
-		nodeCertDomain = st.selfstealDomain
-	}
+	panelCertDomain := certResult.CertName(st.panelDomain)
+	subCertDomain := certResult.CertName(st.subDomain)
+	nodeCertDomain := certResult.CertName(st.selfstealDomain)
 
 	certFullchain, certPrivkey := certs.NginxCertPaths(nodeCertDomain)
 
