@@ -213,3 +213,29 @@ func TestEveryRecreatedProxyIsChecked(t *testing.T) {
 		t.Error("HAProxy reloads in place and needs no container check")
 	}
 }
+
+func TestFindTopLevelBlocksIgnoresCommentedOutBlocks(t *testing.T) {
+	conf := "# server {\n#     listen 80;\n# }\nserver {\n    listen 443;\n}\n"
+	blocks := findTopLevelBlocks(conf, "server")
+	if len(blocks) != 1 {
+		t.Fatalf("found %d blocks, want 1", len(blocks))
+	}
+	if body := blocks[0].Body(conf); !strings.Contains(body, "listen 443") || strings.Contains(body, "listen 80") {
+		t.Errorf("the block is %q", body)
+	}
+}
+
+func TestFindTopLevelBlocksIsNotConfusedByBracesInComments(t *testing.T) {
+	conf := "server {\n    listen 443; # closes with } soon\n    location / { return 200; }\n}\nserver {\n    listen 8443;\n}\n"
+	if blocks := findTopLevelBlocks(conf, "server"); len(blocks) != 2 {
+		t.Fatalf("found %d blocks, want 2", len(blocks))
+	}
+}
+
+func TestFindTopLevelBlocksKeepsAHashInsideQuotes(t *testing.T) {
+	conf := "server {\n    add_header X-Tag \"a#b\"; location / { }\n}\n"
+	blocks := findTopLevelBlocks(conf, "server")
+	if len(blocks) != 1 || !strings.Contains(blocks[0].Body(conf), "location / { }") {
+		t.Fatalf("blocks = %+v", blocks)
+	}
+}
