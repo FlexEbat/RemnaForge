@@ -208,6 +208,12 @@ func ManageNodeProfile() {
 	privateKey := existingPrivateKey(byTag, realityTag)
 	if privateKey == "" && selection.Raw {
 		privateKey = api.GenerateXrayKeys(domainURL, token)
+		if privateKey == "" {
+			// The panel did not give a key (GenerateXrayKeys printed why). A
+			// profile pushed with an empty Reality key would break the node, as
+			// the install flows already refuse.
+			return
+		}
 	}
 
 	var certFullchain, certPrivkey string
@@ -231,7 +237,7 @@ func ManageNodeProfile() {
 
 	newConfig := api.MergeProfileConfig(config, selection, domainName, privateKey, rawTag, certFullchain, certPrivkey, byTag)
 	if err := api.UpdateConfigProfile(domainURL, token, profileUUID, newConfig); err != nil {
-		fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("NODE_PROFILE_UPDATE_FAILED"), ui.ColorReset)
+		fmt.Printf("%s%s: %v%s\n", ui.ColorRed, i18n.T("NODE_PROFILE_UPDATE_FAILED"), err, ui.ColorReset)
 		return
 	}
 	fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("NODE_PROFILE_UPDATE_SUCCESS"), ui.ColorReset)

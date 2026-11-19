@@ -3,6 +3,7 @@ package verify
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 )
 
 type composeContainer struct {
@@ -199,6 +201,14 @@ func ProxyRoutes(env Env, domain string) Result {
 	name := "reverse proxy routes " + domain
 	resp, err := env.HTTP.Get("https://" + domain + "/")
 	if err != nil {
+		// The proxy answers a request without the secret cookie by closing the
+		// connection (nginx 444, Caddy abort, HAProxy silent-drop), so a
+		// healthy panel domain ends here in EOF or a reset. The TLS check
+		// that follows proves the handshake works. A refused or timed-out
+		// connection is still a failure.
+		if closedWithoutAnswer(err) {
+			return pass(name, "the proxy closed the connection without an answer, as it does without the secret cookie")
+		}
 		return fail(name, unwrap(err), "check that "+domain+" points at this server and that port 443 is open")
 	}
 	defer resp.Body.Close()
@@ -207,6 +217,12 @@ func ProxyRoutes(env Env, domain string) Result {
 		return fail(name, resp.Status, "the proxy has no working upstream for this name: check its logs")
 	}
 	return pass(name, resp.Status)
+}
+
+// closedWithoutAnswer reports whether err is the other side closing an
+// established connection before it sent a response.
+func closedWithoutAnswer(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET)
 }
 
 // TLSValid completes a verified TLS handshake with domain:443: chain, host

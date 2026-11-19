@@ -175,6 +175,25 @@ func TestProxyRoutes(t *testing.T) {
 	}
 }
 
+// The panel domain is behind the secret-cookie gate, which closes the
+// connection of a request without the cookie. That is a working proxy, not a
+// failure.
+func TestProxyRoutesAcceptsTheClosedConnectionOfTheCookieGate(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err == nil {
+			conn.Close()
+		}
+	}))
+	defer srv.Close()
+	e := DefaultEnv()
+	e.HTTP = srv.Client()
+	host := strings.TrimPrefix(srv.URL, "https://")
+	if r := ProxyRoutes(e, host); !r.OK {
+		t.Errorf("a closed connection after the handshake must pass: %+v", r)
+	}
+}
+
 func TestTLSValid(t *testing.T) {
 	e := envWith(nil)
 	e.TLSDial = func(string) (time.Time, error) { return e.Now().Add(30 * 24 * time.Hour), nil }
