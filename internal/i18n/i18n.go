@@ -542,6 +542,19 @@ var english = map[string]string{
 	"PORT_8443_NO_UFW":           "ufw is not active, so the tool does not touch the firewall. Open or close TCP port 8443 in your firewall yourself.",
 	"PORT_8443_UFW_FAILED":       "ufw could not open port 8443. Open it yourself.",
 	"PORT_8443_UFW_CLOSE_FAILED": "ufw could not remove the rule for port 8443, so the port may still be open. Check it with ufw status and close it yourself.",
+	// Added by v1.23.14: install flows and the update ask before they change the firewall or remove images.
+	"FIREWALL_RULES_TITLE":     "This step needs these ufw rules:",
+	"FIREWALL_RULE_HTTP":       "port 80: the proxy answers Let's Encrypt and redirects HTTP to HTTPS",
+	"FIREWALL_RULE_NODE_PANEL": "the panel at %s reaches the node API on port 2222",
+	"FIREWALL_RULE_NODE_LOCAL": "the node of this server reaches its API on port 2222 from the Docker network",
+	"FIREWALL_RULES_INACTIVE":  "ufw is installed but not active. The rules are stored and apply once ufw is turned on.",
+	"FIREWALL_RULES_NO_UFW":    "ufw is not installed, so nothing is added. If you use another firewall, allow the same access yourself.",
+	"FIREWALL_RULES_CONSENT":   "Add these rules to ufw now? (y/N):",
+	"FIREWALL_RULES_DECLINED":  "No ufw rules were added.",
+	"FIREWALL_RULES_MANUAL":    "If the connection is blocked, add them yourself:",
+	"FIREWALL_RULES_DONE":      "The ufw rules are added.",
+	"CERT_PORT80_NOTICE":       "If ufw is active and port 80 is closed, it is opened for the certificate check and closed again afterwards. A rule that was already there stays.",
+	"PRUNE_IMAGES_NOTICE":      "Removing Docker images that no container uses any more (docker image prune -f).",
 	// Added by the review fixes (v1.23.7): backup script verification.
 	"BACKUP_SCRIPT_REPLACED": "The existing backup-restore.sh is not the pinned version. Downloading the pinned one over it.",
 	// Added by the review fixes (v1.23.7): Docker install messages.
@@ -1084,6 +1097,19 @@ var russian = map[string]string{
 	"PORT_8443_NO_UFW":           "ufw не активен, поэтому инструмент не меняет файрвол. Откройте или закройте TCP-порт 8443 в вашем файрволе самостоятельно.",
 	"PORT_8443_UFW_FAILED":       "ufw не смог открыть порт 8443. Откройте его самостоятельно.",
 	"PORT_8443_UFW_CLOSE_FAILED": "ufw не смог удалить правило для порта 8443, поэтому порт может оставаться открытым. Проверьте через ufw status и закройте его самостоятельно.",
+	// Added by v1.23.14: install flows and the update ask before they change the firewall or remove images.
+	"FIREWALL_RULES_TITLE":     "Для этого шага нужны такие правила ufw:",
+	"FIREWALL_RULE_HTTP":       "порт 80: прокси отвечает Let's Encrypt и перенаправляет HTTP на HTTPS",
+	"FIREWALL_RULE_NODE_PANEL": "панель %s подключается к API ноды на порту 2222",
+	"FIREWALL_RULE_NODE_LOCAL": "нода этого сервера подключается к своему API на порту 2222 из сети Docker",
+	"FIREWALL_RULES_INACTIVE":  "ufw установлен, но не активен. Правила сохранятся и начнут действовать после включения ufw.",
+	"FIREWALL_RULES_NO_UFW":    "ufw не установлен, поэтому ничего не добавляется. Если вы используете другой файрвол, разрешите тот же доступ самостоятельно.",
+	"FIREWALL_RULES_CONSENT":   "Добавить эти правила в ufw сейчас? (y/N):",
+	"FIREWALL_RULES_DECLINED":  "Правила ufw не добавлены.",
+	"FIREWALL_RULES_MANUAL":    "Если соединение блокируется, добавьте их сами:",
+	"FIREWALL_RULES_DONE":      "Правила ufw добавлены.",
+	"CERT_PORT80_NOTICE":       "Если ufw активен и порт 80 закрыт, он откроется на время проверки сертификата и затем закроется снова. Правило, которое уже было, останется.",
+	"PRUNE_IMAGES_NOTICE":      "Удаляю образы Docker, которые больше не использует ни один контейнер (docker image prune -f).",
 	// Added by the review fixes (v1.23.7): backup script verification.
 	"BACKUP_SCRIPT_REPLACED": "Существующий backup-restore.sh не совпадает с закреплённой версией. Скачиваю закреплённую поверх него.",
 	// Added by the review fixes (v1.23.7): Docker install messages.

@@ -144,3 +144,29 @@ func TestClosingThePortDoesNotReportSuccessWhenUFWCannotDeleteTheRule(t *testing
 		t.Errorf("ufw was reloaded after a failed delete:\n%s", calls)
 	}
 }
+
+// The update removes unused Docker images host-wide. The operator is told
+// before the prune runs, not after.
+func TestUpdateAnnouncesTheImagePruneBeforeRunningIt(t *testing.T) {
+	bin := t.TempDir()
+	log := filepath.Join(bin, "calls")
+	script := "#!/bin/sh\necho \"$@\" >> " + log + "\n" +
+		"case \"$*\" in \"compose pull\"*) echo 'Pull complete';; \"image prune\"*) echo PRUNE_RAN;; esac\n" +
+		"case \"$1\" in inspect) exit 1;; esac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	old := installDirs
+	installDirs = []string{t.TempDir()}
+	t.Cleanup(func() { installDirs = old })
+
+	out := captureStdout(t, updatePanelNode)
+	calls, _ := os.ReadFile(log)
+	if !strings.Contains(string(calls), "image prune -f") {
+		t.Fatalf("the prune did not run, so the test checks nothing:\n%s\n%s", calls, out)
+	}
+	if !strings.Contains(out, i18n.T("PRUNE_IMAGES_NOTICE")) {
+		t.Errorf("the prune was not announced:\n%s", out)
+	}
+}

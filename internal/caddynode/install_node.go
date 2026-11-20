@@ -17,6 +17,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/firewall"
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
@@ -211,11 +212,10 @@ func installationNode() error {
 		return err
 	}
 
-	// Ufw (best-effort: this is a nice-to-have hardening step, not worth
-	// failing the whole install over).
-	_ = execx.Command("ufw", "allow", "80/tcp", "comment", "HTTP").Run()
-	_ = execx.Command("ufw", "allow", "from", state.panelIP, "to", "any", "port", "2222").Run()
-	_ = execx.Command("ufw", "reload").Run()
+	// Port 80 for Caddy's certificates and the panel's access to the node API.
+	// The operator confirms the rules; a refusal or a failure does not stop
+	// the install.
+	firewall.AllowRules(firewall.DefaultEnv(), ui.Reading, []firewall.Rule{firewall.HTTPRule(), firewall.NodePanelRule(state.panelIP)})
 
 	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_NODE"), ui.ColorReset)

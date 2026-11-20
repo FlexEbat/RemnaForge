@@ -17,6 +17,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/firewall"
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
@@ -358,7 +359,9 @@ func installationPanelOnly() error {
 	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
-	_ = execx.Command("ufw", "allow", "80/tcp", "comment", "HTTP").Run()
+	// Port 80 for Caddy's certificates. The operator confirms the rule; a
+	// refusal or a failure does not stop the install.
+	firewall.AllowRules(firewall.DefaultEnv(), ui.Reading, []firewall.Rule{firewall.HTTPRule()})
 	if runctx.DryRun() {
 		runctx.Say("stop here: the stack is not started in a dry run, so the steps that need the running services (account, keys, profile, node, host, subscription token, checks) are skipped")
 		return nil
