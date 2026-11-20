@@ -379,7 +379,7 @@ func installationPanelNode(kind proxy.Kind) error {
 	// domain - using that returned value directly instead of
 	// re-deriving it from scratch avoids the two ever disagreeing.
 	certResult, certErr := certs.HandleCertificatesFor(kind,
-		[]string{st.panelDomain, st.subDomain, st.selfstealDomain}, "", "", panelDir)
+		[]string{st.panelDomain, st.subDomain, st.selfstealDomain}, panelDir)
 	if certErr != nil {
 		return certErr
 	}

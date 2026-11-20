@@ -75,7 +75,11 @@ func GenerateAlnumSecret(length int) string {
 	var sb strings.Builder
 	for sb.Len() < length {
 		buf := make([]byte, 48)
-		_, _ = rand.Read(buf)
+		// A failed read leaves the buffer zeroed, which would turn into a
+		// predictable secret. Stopping is the only safe answer.
+		if _, err := rand.Read(buf); err != nil {
+			panic("genutil: crypto/rand failed: " + err.Error())
+		}
 		encoded := base64.StdEncoding.EncodeToString(buf)
 		for _, r := range encoded {
 			if alnumFilter(r) {

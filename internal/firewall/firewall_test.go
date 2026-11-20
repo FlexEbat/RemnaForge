@@ -270,8 +270,14 @@ func TestDetectEverything(t *testing.T) {
 	if failed != 1 {
 		t.Errorf("failed = %d", failed)
 	}
-	if got := st.ActiveKinds(); len(got) != 4 {
-		t.Errorf("active = %v", got)
+	active := 0
+	for _, tool := range st.Tools {
+		if tool.Active {
+			active++
+		}
+	}
+	if active != 4 {
+		t.Errorf("active tools = %d", active)
 	}
 }
 
@@ -298,8 +304,10 @@ func TestDetectInactiveToolsAndOpenIPTables(t *testing.T) {
 	h.out["iptables -t nat -S"] = natNone
 	h.out["nft list ruleset"] = nftDockerOnly
 	st := Detect(h.env(), false)
-	if len(st.ActiveKinds()) != 0 {
-		t.Errorf("active = %v", st.ActiveKinds())
+	for _, tool := range st.Tools {
+		if tool.Active {
+			t.Errorf("active tool %+v", tool)
+		}
 	}
 	if !st.Tool(UFW).Installed || st.Tool(IPTables).Backend != "legacy" {
 		t.Errorf("%+v", st.Tools)

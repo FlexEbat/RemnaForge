@@ -204,7 +204,7 @@ func installationNode(kind proxy.Kind) error {
 	// domain - using that returned value directly avoids re-deriving it
 	// from scratch (e.g. from whether a wildcard cert happens to already
 	// be on disk) and ever disagreeing with it.
-	certResult, certErr := certs.HandleCertificatesFor(kind, []string{state.selfstealDomain}, "", "", nodeDir)
+	certResult, certErr := certs.HandleCertificatesFor(kind, []string{state.selfstealDomain}, nodeDir)
 	if certErr != nil {
 		return certErr
 	}

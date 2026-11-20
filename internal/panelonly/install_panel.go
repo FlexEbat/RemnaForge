@@ -343,7 +343,7 @@ func installationPanelOnly(kind proxy.Kind) error {
 	// re-deriving it from scratch avoids the two ever disagreeing (see
 	// internal/nginxnode for a fuller walkthrough of the same pattern).
 	certResult, certErr := certs.HandleCertificatesFor(kind,
-		[]string{state.panelDomain, state.subDomain}, "", "", panelDir)
+		[]string{state.panelDomain, state.subDomain}, panelDir)
 	if certErr != nil {
 		return certErr
 	}

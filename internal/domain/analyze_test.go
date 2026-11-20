@@ -50,19 +50,6 @@ func TestEveryNameErrorHasAMessage(t *testing.T) {
 	}
 }
 
-func cidrs(t *testing.T, list ...string) []*net.IPNet {
-	t.Helper()
-	var out []*net.IPNet
-	for _, c := range list {
-		_, n, err := net.ParseCIDR(c)
-		if err != nil {
-			t.Fatal(err)
-		}
-		out = append(out, n)
-	}
-	return out
-}
-
 // fakeDNS builds an Env over fixed records and fixed server addresses.
 func fakeDNS(records map[string][]string, v4, v6 string) Env {
 	return Env{
@@ -93,8 +80,6 @@ func mustCIDRNet(s string) *net.IPNet {
 	}
 	return n
 }
-
-func issues(r Report) []Issue { return r.Issues }
 
 func TestAnalyzeAligned(t *testing.T) {
 	env := fakeDNS(map[string][]string{"example.com": {"203.0.113.10", "2001:db8::10"}}, "203.0.113.10", "2001:db8::10")

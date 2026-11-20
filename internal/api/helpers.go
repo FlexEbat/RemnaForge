@@ -22,7 +22,11 @@ func BaseURL(host string) string {
 // randHex generates n random bytes and returns them hex-encoded.
 func randHex(n int) string {
 	buf := make([]byte, n)
-	_, _ = rand.Read(buf)
+	// A failed read leaves zeros, which would make a predictable Reality
+	// short ID or Hysteria password. Stopping is the only safe answer.
+	if _, err := rand.Read(buf); err != nil {
+		panic("api: crypto/rand failed: " + err.Error())
+	}
 	return hex.EncodeToString(buf)
 }
 

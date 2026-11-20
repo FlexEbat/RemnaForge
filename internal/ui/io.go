@@ -76,15 +76,6 @@ func ReadSecretBlock(prompt string) string {
 	return strings.Join(lines, "\n")
 }
 
-// ReadLine reads one line from the shared scanner without a prompt. ok is
-// false at the end of input.
-func ReadLine() (line string, ok bool) {
-	if !stdinScanner.Scan() {
-		return "", false
-	}
-	return stdinScanner.Text(), true
-}
-
 // ErrorExit prints msg in red and exits with status 1.
 func ErrorExit(msg string) {
 	fmt.Printf("%s%s%s\n", ColorRed, msg, ColorReset)

@@ -109,3 +109,38 @@ func TestLastLines(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// fakeUFW puts a ufw script first in PATH. It reports an active firewall
+// with port 8443 allowed, fails "delete" and logs every call.
+func fakeUFW(t *testing.T) string {
+	t.Helper()
+	bin := t.TempDir()
+	log := filepath.Join(bin, "calls")
+	script := "#!/bin/sh\necho \"$@\" >> " + log + "\n" +
+		"case \"$1\" in\n" +
+		"status) echo 'Status: active'; echo '8443/tcp ALLOW Anywhere';;\n" +
+		"delete) echo 'Could not delete non-existent rule' >&2; exit 1;;\n" +
+		"esac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "ufw"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	return log
+}
+
+// A rule added by hand ("ufw allow 8443/tcp") does not match the delete
+// command. Reporting "closed" then told the operator the port was shut
+// while it stayed open.
+func TestClosingThePortDoesNotReportSuccessWhenUFWCannotDeleteTheRule(t *testing.T) {
+	log := fakeUFW(t)
+	out := captureStdout(t, closePort8443UFW)
+	if strings.Contains(out, i18n.T("PORT_8443_CLOSED")) {
+		t.Errorf("the port was reported closed although ufw refused the delete:\n%s", out)
+	}
+	if !strings.Contains(out, i18n.T("PORT_8443_UFW_CLOSE_FAILED")) {
+		t.Errorf("the failure was not shown:\n%s", out)
+	}
+	if calls, _ := os.ReadFile(log); strings.Contains(string(calls), "reload") {
+		t.Errorf("ufw was reloaded after a failed delete:\n%s", calls)
+	}
+}
