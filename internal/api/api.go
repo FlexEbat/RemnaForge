@@ -543,10 +543,12 @@ func buildInboundConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, c
 					"network":  "tcp",
 					"security": "reality",
 					"realitySettings": map[string]any{
-						"show":        false,
-						"xver":        1,
-						"dest":        "/dev/shm/nginx.sock",
-						"spiderX":     "",
+						"show": false,
+						"xver": 1,
+						// "target" is the current name of "dest" in the Xray documentation
+						// (RealityObject). "spiderX" is an outbound (client) field and has
+						// no place in an inbound.
+						"target":      "/dev/shm/nginx.sock",
 						"shortIds":    []string{shortID},
 						"privateKey":  privateKey,
 						"serverNames": []string{domain},
@@ -558,7 +560,7 @@ func buildInboundConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, c
 
 	if sel.Hysteria2 {
 		if existing, ok := existingByTag["HYSTERIA-BBR"]; ok {
-			inbounds = append(inbounds, existing)
+			inbounds = append(inbounds, normalizeHysteriaInbound(existing))
 		} else {
 			salamanderPassword := randHex(8)
 			inbounds = append(inbounds, map[string]any{
@@ -566,7 +568,7 @@ func buildInboundConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, c
 				"port":     443,
 				"listen":   "0.0.0.0",
 				"protocol": "hysteria",
-				"settings": map[string]any{"clients": []any{}, "version": 2},
+				"settings": map[string]any{"users": []any{}, "version": 2},
 				"sniffing": map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
 				"streamSettings": map[string]any{
 					"network":  "hysteria",
@@ -591,15 +593,13 @@ func buildInboundConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, c
 					},
 					"hysteriaSettings": map[string]any{
 						"version": 2,
+						// MasqObject is flat: url and rewriteHost sit next to type.
 						"masquerade": map[string]any{
-							"type": "proxy",
-							"proxy": map[string]any{
-								"url":         "https://" + domain,
-								"rewriteHost": true,
-							},
+							"type":        "proxy",
+							"url":         "https://" + domain,
+							"rewriteHost": true,
 						},
-						"udpIdleTimeout":        90,
-						"ignoreClientBandwidth": true,
+						"udpIdleTimeout": 90,
 					},
 				},
 			})
@@ -630,6 +630,38 @@ func buildInboundConfig(sel ConfigProfileInbounds, domain, privateKey, rawTag, c
 	}
 
 	return inbounds
+}
+
+// normalizeHysteriaInbound brings a Hysteria inbound that an earlier version
+// of this tool wrote into the shape the Xray documentation describes. The
+// masquerade of type "proxy" used to carry its url in a nested "proxy"
+// object, which Xray does not read: the masquerade then had no target. The
+// settings key for the users is "users". Everything else, including values
+// the operator changed, stays as it is.
+func normalizeHysteriaInbound(in map[string]any) map[string]any {
+	if stream, ok := in["streamSettings"].(map[string]any); ok {
+		if hy, ok := stream["hysteriaSettings"].(map[string]any); ok {
+			if masq, ok := hy["masquerade"].(map[string]any); ok {
+				if nested, ok := masq["proxy"].(map[string]any); ok {
+					for k, v := range nested {
+						if _, set := masq[k]; !set {
+							masq[k] = v
+						}
+					}
+					delete(masq, "proxy")
+				}
+			}
+		}
+	}
+	if settings, ok := in["settings"].(map[string]any); ok {
+		if clients, ok := settings["clients"]; ok {
+			if _, has := settings["users"]; !has {
+				settings["users"] = clients
+			}
+			delete(settings, "clients")
+		}
+	}
+	return in
 }
 
 func buildProfileConfig(inbounds []map[string]any) map[string]any {

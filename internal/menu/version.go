@@ -4,6 +4,6 @@ package menu
 // AppVersion is bumped with every change to this codebase.
 const (
 	AppName    = "RemnaForge"
-	AppVersion = "1.23.11"
+	AppVersion = "1.23.12"
 	WikiURL    = "https://github.com/FlexEbat/RemnaForge"
 )

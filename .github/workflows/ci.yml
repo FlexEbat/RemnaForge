@@ -9,14 +9,21 @@ on:
 
 jobs:
   build-and-test:
-    name: Build, vet, fmt, unit tests
+    # The module promises Go 1.22 (go.mod, README), so that version stays in
+    # the matrix; "stable" is the compiler of the release and the one with
+    # the current standard library fixes.
+    name: Build, vet, fmt, unit tests (Go ${{ matrix.go }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.22", "stable"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: ${{ matrix.go }}
 
       - name: go build
         run: go build ./...
@@ -41,7 +48,10 @@ jobs:
       - name: go test (unit, race detector)
         run: go test -race ./...
 
+      # Go 1.22 has known standard library vulnerabilities by now, so the
+      # scan means something only on the current compiler.
       - name: govulncheck
+        if: matrix.go == 'stable'
         continue-on-error: true
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
@@ -58,7 +68,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: stable
 
       - name: Confirm docker is already usable on this runner
         run: docker info
@@ -82,7 +92,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: stable
 
       - name: Run oscheck integration test
         run: go test -tags=integration -v ./internal/oscheck/...
