@@ -40,10 +40,12 @@ jobs:
             exit 1
           fi
 
-      # The proxy tests run `haproxy -c` on the generated configs and skip
-      # without the binary, so CI installs it to make them count.
-      - name: install haproxy
-        run: sudo apt-get update && sudo apt-get install -y haproxy
+      # The proxy tests run `haproxy -c` and `nginx -t` on the generated
+      # configs and skip without the binaries, so CI installs them to make the
+      # tests count. The runner's nginx is older than the stack's nginx 1.28,
+      # so the test leaves out the "http2 on;" line it cannot know.
+      - name: install haproxy and nginx
+        run: sudo apt-get update && sudo apt-get install -y haproxy nginx-light
 
       - name: go test (unit, race detector)
         run: go test -race ./...
