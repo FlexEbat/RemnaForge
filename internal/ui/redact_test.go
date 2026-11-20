@@ -168,7 +168,7 @@ func TestReadSecretBlockReadsThroughTheSharedScannerAndMasksTheLines(t *testing.
 	}
 	// The next prompt reads what came after the blank line: nothing was
 	// swallowed by a second scanner.
-	if next, ok := ReadLine(); !ok || next != "y" {
+	if ok, next := stdinScanner.Scan(), stdinScanner.Text(); !ok || next != "y" {
 		t.Errorf("the line after the block = %q, %v", next, ok)
 	}
 	if out := Redact("compose: AAAA-first-line-of-the-key"); strings.Contains(out, "first-line") {

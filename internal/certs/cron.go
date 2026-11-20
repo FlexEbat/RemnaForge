@@ -75,6 +75,7 @@ func renewCronCommand(method string) string {
 // openPort80 opens port 80 for a challenge and returns the function that
 // closes it. It closes only what it opened.
 func openPort80() (closeFn func(), err error) {
+	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("CERT_PORT80_NOTICE"), ui.ColorReset)
 	if err := InstallHTTP01Hook(); err != nil {
 		return func() {}, err
 	}

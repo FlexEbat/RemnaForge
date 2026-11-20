@@ -21,6 +21,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/firewall"
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
@@ -394,7 +395,10 @@ func installationPanelNode() error {
 	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_PANEL_NODE"), ui.ColorReset)
 	time.Sleep(1 * time.Second)
-	_ = execx.Command("ufw", "allow", "80/tcp", "comment", "HTTP").Run()
+	// Port 80 for Caddy's certificates and the co-located node's access to its
+	// own API. The operator confirms the rules; a refusal or a failure does
+	// not stop the install.
+	firewall.AllowRules(firewall.DefaultEnv(), ui.Reading, []firewall.Rule{firewall.HTTPRule(), firewall.NodeLocalRule()})
 	if runctx.DryRun() {
 		runctx.Say("stop here: the stack is not started in a dry run, so the steps that need the running services (account, keys, profile, node, host, subscription token, checks) are skipped")
 		return nil
@@ -409,10 +413,6 @@ func installationPanelNode() error {
 		fmt.Printf("%sdocker compose up: %v%s\n", ui.ColorRed, err, ui.ColorReset)
 		return err
 	}
-
-	// Allow the co-located node's docker subnet to reach itself on 2222
-	// (best-effort, same as internal/panelfull).
-	_ = execx.Command("ufw", "allow", "from", "172.30.0.0/16", "to", "any", "port", "2222", "proto", "tcp").Run()
 
 	domainURL := "127.0.0.1:3000"
 	targetDir := panelDir

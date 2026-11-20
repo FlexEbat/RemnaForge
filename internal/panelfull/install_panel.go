@@ -14,6 +14,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/firewall"
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/genutil"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
@@ -379,7 +380,7 @@ func installationPanelNode(kind proxy.Kind) error {
 	// domain - using that returned value directly instead of
 	// re-deriving it from scratch avoids the two ever disagreeing.
 	certResult, certErr := certs.HandleCertificatesFor(kind,
-		[]string{st.panelDomain, st.subDomain, st.selfstealDomain}, "", "", panelDir)
+		[]string{st.panelDomain, st.subDomain, st.selfstealDomain}, panelDir)
 	if certErr != nil {
 		return certErr
 	}
@@ -441,10 +442,10 @@ func installationPanelNode(kind proxy.Kind) error {
 		return err
 	}
 
-	// Allow the co-located node's docker subnet to reach itself on 2222
-	// (best-effort: nice-to-have hardening, not worth failing the whole
-	// install over).
-	_ = execx.Command("ufw", "allow", "from", "172.30.0.0/16", "to", "any", "port", "2222", "proto", "tcp").Run()
+	// The co-located node reaches its own API on port 2222 from the Docker
+	// network. The operator confirms the rule; a refusal or a failure does
+	// not stop the install.
+	firewall.AllowRules(firewall.DefaultEnv(), ui.Reading, []firewall.Rule{firewall.NodeLocalRule()})
 
 	domainURL := "127.0.0.1:3000"
 	targetDir := panelDir

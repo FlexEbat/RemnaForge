@@ -93,17 +93,6 @@ func (s State) Tool(k Kind) Tool {
 	return Tool{Kind: k}
 }
 
-// ActiveKinds lists the tools that filter traffic now.
-func (s State) ActiveKinds() []Kind {
-	var out []Kind
-	for _, t := range s.Tools {
-		if t.Active {
-			out = append(out, t.Kind)
-		}
-	}
-	return out
-}
-
 // Env holds every way the package reaches the host. DefaultEnv uses the
 // real one; tests use recorded outputs.
 type Env struct {

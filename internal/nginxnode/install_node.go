@@ -13,6 +13,7 @@ import (
 	"github.com/FlexEbat/RemnaForge/internal/cfgfile"
 	"github.com/FlexEbat/RemnaForge/internal/domain"
 	"github.com/FlexEbat/RemnaForge/internal/execx"
+	"github.com/FlexEbat/RemnaForge/internal/firewall"
 	"github.com/FlexEbat/RemnaForge/internal/fsx"
 	"github.com/FlexEbat/RemnaForge/internal/i18n"
 	"github.com/FlexEbat/RemnaForge/internal/preflight"
@@ -204,7 +205,7 @@ func installationNode(kind proxy.Kind) error {
 	// domain - using that returned value directly avoids re-deriving it
 	// from scratch (e.g. from whether a wildcard cert happens to already
 	// be on disk) and ever disagreeing with it.
-	certResult, certErr := certs.HandleCertificatesFor(kind, []string{state.selfstealDomain}, "", "", nodeDir)
+	certResult, certErr := certs.HandleCertificatesFor(kind, []string{state.selfstealDomain}, nodeDir)
 	if certErr != nil {
 		return certErr
 	}
@@ -238,10 +239,9 @@ func installationNode(kind proxy.Kind) error {
 		}
 	}
 
-	// Ufw (best-effort: this is a nice-to-have hardening step, not worth
-	// failing the whole install over).
-	_ = execx.Command("ufw", "allow", "from", state.panelIP, "to", "any", "port", "2222").Run()
-	_ = execx.Command("ufw", "reload").Run()
+	// The panel reaches the node API on port 2222. The operator confirms the
+	// rule; a refusal or a failure does not stop the install.
+	firewall.AllowRules(firewall.DefaultEnv(), ui.Reading, []firewall.Rule{firewall.NodePanelRule(state.panelIP)})
 
 	// Bring the stack up.
 	fmt.Printf("%s%s%s\n", ui.ColorYellow, i18n.T("STARTING_NODE"), ui.ColorReset)

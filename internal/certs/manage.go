@@ -135,9 +135,18 @@ func updateCurrentCertificates() {
 		}
 
 		if daysLeft <= renewThreshold {
+			// The hook opens port 80 only when ufw is active and has no rule for
+			// it, and closes only a rule it opened: port 80 is a base port of
+			// the firewall plan, and deleting that rule would shut the proxy's
+			// HTTP redirect and every later renewal.
+			closePort80 := func() {}
 			if certMethod == "2" {
-				_ = execx.Command("ufw", "allow", "80/tcp").Run()
-				_ = execx.Command("ufw", "reload").Run()
+				cf, hookErr := openPort80()
+				if hookErr != nil {
+					fmt.Printf("%s%v%s\n", ui.ColorRed, hookErr, ui.ColorReset)
+				} else {
+					closePort80 = cf
+				}
 			}
 
 			fmt.Printf("%s%s...%s\n", ui.ColorGray, i18n.T("WAITING"), ui.ColorReset)
@@ -155,10 +164,7 @@ func updateCurrentCertificates() {
 				logFile.Close()
 			}
 
-			if certMethod == "2" {
-				_ = execx.Command("ufw", "delete", "allow", "80/tcp").Run()
-				_ = execx.Command("ufw", "reload").Run()
-			}
+			closePort80()
 
 			if renewErr != nil {
 				certStatus[certDomain] = i18n.T("ERROR_UPDATE") + ": " + i18n.T("RATE_LIMIT_EXCEEDED")

@@ -30,11 +30,11 @@ func TestTimeoutKillsChildren(t *testing.T) {
 }
 
 func TestOutputAndExitError(t *testing.T) {
-	out, err := Output("echo", "hello")
+	out, err := Command("echo", "hello").Output()
 	if err != nil || strings.TrimSpace(string(out)) != "hello" {
 		t.Fatalf("got %q, %v", out, err)
 	}
-	if err := Run("false"); err == nil || errors.Is(err, ErrTimeout) {
+	if err := Command("false").Run(); err == nil || errors.Is(err, ErrTimeout) {
 		t.Fatalf("want a plain exit error, got %v", err)
 	}
 }

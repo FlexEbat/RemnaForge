@@ -194,17 +194,6 @@ func (c *Cmd) CombinedOutput() ([]byte, error) {
 	return b.Bytes(), err
 }
 
-// Run runs a command with the timeout of its class and discards its output.
-func Run(name string, args ...string) error {
-	return Command(name, args...).Run()
-}
-
-// Output runs a command with the timeout of its class and returns its
-// standard output.
-func Output(name string, args ...string) ([]byte, error) {
-	return Command(name, args...).Output()
-}
-
 // String returns the command line for messages.
 func (c *Cmd) String() string {
 	return strings.Join(c.Args, " ")

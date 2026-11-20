@@ -285,6 +285,7 @@ func updatePanelNode() {
 			fmt.Printf("%s%v%s\n", ui.ColorRed, err, ui.ColorReset)
 			return
 		}
+		fmt.Printf("%s%s%s\n", ui.ColorGray, i18n.T("PRUNE_IMAGES_NOTICE"), ui.ColorReset)
 		_ = execx.Command("docker", "image", "prune", "-f").Run()
 		fmt.Printf("%s%s%s\n", ui.ColorGreen, i18n.T("UPDATE_SUCCESS1"), ui.ColorReset)
 	} else {

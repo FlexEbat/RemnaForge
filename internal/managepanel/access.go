@@ -235,7 +235,12 @@ func closePort8443UFW() {
 	}
 	ufwStatus, _ := execx.Command("ufw", "status").Output()
 	if strings.Contains(string(ufwStatus), "8443") && strings.Contains(string(ufwStatus), "ALLOW") {
-		_ = execx.Command("ufw", "delete", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run()
+		if err := execx.Command("ufw", "delete", "allow", "from", "0.0.0.0/0", "to", "any", "port", "8443", "proto", "tcp").Run(); err != nil {
+			// The rule may have been added another way (for example
+			// "ufw allow 8443/tcp"). Saying "closed" here would be false.
+			printErr("PORT_8443_UFW_CLOSE_FAILED")
+			return
+		}
 		if err := execx.Command("ufw", "reload").Run(); err != nil {
 			fmt.Printf("%s%s%s\n", ui.ColorRed, i18n.T("UFW_RELOAD_FAILED"), ui.ColorReset)
 			return

@@ -109,3 +109,64 @@ func TestLastLines(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// fakeUFW puts a ufw script first in PATH. It reports an active firewall
+// with port 8443 allowed, fails "delete" and logs every call.
+func fakeUFW(t *testing.T) string {
+	t.Helper()
+	bin := t.TempDir()
+	log := filepath.Join(bin, "calls")
+	script := "#!/bin/sh\necho \"$@\" >> " + log + "\n" +
+		"case \"$1\" in\n" +
+		"status) echo 'Status: active'; echo '8443/tcp ALLOW Anywhere';;\n" +
+		"delete) echo 'Could not delete non-existent rule' >&2; exit 1;;\n" +
+		"esac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "ufw"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	return log
+}
+
+// A rule added by hand ("ufw allow 8443/tcp") does not match the delete
+// command. Reporting "closed" then told the operator the port was shut
+// while it stayed open.
+func TestClosingThePortDoesNotReportSuccessWhenUFWCannotDeleteTheRule(t *testing.T) {
+	log := fakeUFW(t)
+	out := captureStdout(t, closePort8443UFW)
+	if strings.Contains(out, i18n.T("PORT_8443_CLOSED")) {
+		t.Errorf("the port was reported closed although ufw refused the delete:\n%s", out)
+	}
+	if !strings.Contains(out, i18n.T("PORT_8443_UFW_CLOSE_FAILED")) {
+		t.Errorf("the failure was not shown:\n%s", out)
+	}
+	if calls, _ := os.ReadFile(log); strings.Contains(string(calls), "reload") {
+		t.Errorf("ufw was reloaded after a failed delete:\n%s", calls)
+	}
+}
+
+// The update removes unused Docker images host-wide. The operator is told
+// before the prune runs, not after.
+func TestUpdateAnnouncesTheImagePruneBeforeRunningIt(t *testing.T) {
+	bin := t.TempDir()
+	log := filepath.Join(bin, "calls")
+	script := "#!/bin/sh\necho \"$@\" >> " + log + "\n" +
+		"case \"$*\" in \"compose pull\"*) echo 'Pull complete';; \"image prune\"*) echo PRUNE_RAN;; esac\n" +
+		"case \"$1\" in inspect) exit 1;; esac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	old := installDirs
+	installDirs = []string{t.TempDir()}
+	t.Cleanup(func() { installDirs = old })
+
+	out := captureStdout(t, updatePanelNode)
+	calls, _ := os.ReadFile(log)
+	if !strings.Contains(string(calls), "image prune -f") {
+		t.Fatalf("the prune did not run, so the test checks nothing:\n%s\n%s", calls, out)
+	}
+	if !strings.Contains(out, i18n.T("PRUNE_IMAGES_NOTICE")) {
+		t.Errorf("the prune was not announced:\n%s", out)
+	}
+}

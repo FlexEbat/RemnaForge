@@ -73,7 +73,8 @@ func (r Result) CertName(d string) string {
 // its compose file. HAProxy gets one PEM bundle per name, the renew script
 // that rebuilds the bundles and reloads it, and no compose edit, because
 // its container mounts the bundle directory.
-func HandleCertificatesFor(kind proxy.Kind, domainsToCheck []string, certMethod, letsencryptEmail, targetDir string) (Result, error) {
+func HandleCertificatesFor(kind proxy.Kind, domainsToCheck []string, targetDir string) (Result, error) {
+	var certMethod, letsencryptEmail string
 	needCertificates := false
 	minDaysLeft := 9999
 
